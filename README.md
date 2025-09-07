@@ -4,6 +4,25 @@
 
 Pure Mania is a simple, lightweight, and fast web-based file manager written in Go. It provides a clean and intuitive interface for managing your files and directories remotely.  
   
+# Why did I make this?
+
+Because the self-hosted online storage applications I tried were far too slow for local communication.  
+“Too slow” might not be the best wording, but they simply didn’t meet my needs.  
+I have a directory with 300,000 image files, a music directory over 100 GiB, and I burn through storage space due to maintaining local mirrors of websites.
+
+In this situation, since there was nothing simple enough that fit my requirements, I had no choice but to make one myself.
+
+I also chose Go because I think it’s the best fit for quickly creating an API server and calling system calls.  
+In other words, goroutines are very powerful.  
+On top of that, even if I generate code with AI, I can at least read and understand it to some extent if it’s written in Go.
+
+Basically, in my environment I use `scp` for file transfers, but checking images and videos in the terminal still feels inconvenient.  
+That’s why I wanted a frontend accessible via the web.
+
+For my use case, since access is limited to a WireGuard network and my local environment, I don’t need authentication at all, nor do I have any files that require encrypted communication to prevent eavesdropping.
+
+That’s enough of my rambling.
+
 ## Features  
   
 - **File and Directory Management:** List, create, delete, and move files and directories.  
