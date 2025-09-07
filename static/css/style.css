@@ -1230,6 +1230,7 @@ body {
         width: 100%; /* 横幅いっぱいに */
         margin-bottom: 5px;
     }
+
     .image-viewer .modal {
         max-width: 100vw;
         max-height: 100vh;

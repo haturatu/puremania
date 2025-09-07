@@ -59,3 +59,9 @@
   color: var(--text-secondary);
 }
 
+@media (max-width: 768px) {
+  .masonry-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+  }
+}
