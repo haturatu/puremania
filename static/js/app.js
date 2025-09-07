@@ -97,6 +97,141 @@ class ProgressManager {
     }
 }
 
+class FileEditor {
+    constructor() {
+        this.currentFile = null;
+        this.init();
+    }
+    
+    init() {
+        this.createEditorElement();
+    }
+    
+    createEditorElement() {
+        const editor = document.createElement('div');
+        editor.className = 'modal-overlay editor-modal';
+        editor.style.display = 'none';
+        
+        editor.innerHTML = `
+            <div class="modal">
+                <div class="modal-header">
+                    <div class="editor-header">
+                        <div class="editor-filename"></div>
+                        <div class="editor-actions">
+                            <button class="btn" id="editor-cancel">Cancel</button>
+                            <button class="btn btn-primary" id="editor-save">Save</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <div class="editor-container">
+                        <textarea class="editor-textarea" placeholder="File content..."></textarea>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(editor);
+        this.editorElement = editor;
+        this.textarea = editor.querySelector('.editor-textarea');
+        this.filenameElement = editor.querySelector('.editor-filename');
+        
+        this.bindEvents();
+    }
+
+    bindEvents() {
+        this.editorElement.querySelector('#editor-cancel').addEventListener('click', () => {
+            this.close();
+        });
+        
+        this.editorElement.querySelector('#editor-save').addEventListener('click', () => {
+            this.save();
+        });
+        
+        this.textarea.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 's') {
+                e.preventDefault();
+                this.save();
+            } else if (e.key === 'Escape') {
+                this.close();
+            }
+        });
+    }
+    
+    open(filePath, content) {
+        this.currentFile = filePath;
+        this.filenameElement.textContent = filePath.split('/').pop();
+        this.textarea.value = content;
+        this.editorElement.style.display = 'flex';
+        this.textarea.focus();
+        
+        document.body.style.overflow = 'hidden';
+    }
+    
+    close() {
+        this.editorElement.style.display = 'none';
+        this.currentFile = null;
+        document.body.style.overflow = '';
+    }
+    
+    async save() {
+        if (!this.currentFile) return;
+        
+        const content = this.textarea.value;
+        
+        try {
+            const response = await fetch('/api/files/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    path: this.currentFile,
+                    content: content
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showToast('Success', 'File saved successfully', 'success');
+                this.close();
+            } else {
+                this.showToast('Error', result.message, 'error');
+            }
+        } catch (error) {
+            this.showToast('Error', 'Failed to save file', 'error');
+            console.error('Error saving file:', error);
+        }
+    }
+    
+    showToast(title, message, type) {
+        // Use the parent FileManagerApp's showToast if available
+        if (window.fileManager && window.fileManager.showToast) {
+            window.fileManager.showToast(title, message, type);
+            return;
+        }
+        
+        // Fallback toast implementation
+        const toast = document.createElement('div');
+        toast.style.position = 'fixed';
+        toast.style.top = '20px';
+        toast.style.right = '20px';
+        toast.style.padding = '10px 15px';
+        toast.style.background = type === 'success' ? 'var(--success)' : 'var(--error)';
+        toast.style.color = 'white';
+        toast.style.borderRadius = '4px';
+        toast.style.zIndex = '1000';
+        toast.textContent = `${title}: ${message}`;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.remove();
+        }, 3000);
+    }
+}
+
 class FileManagerApp {
     constructor() {
         this.currentPath = '/';
@@ -115,7 +250,8 @@ class FileManagerApp {
         this.router = new Router();
         this.searchHandler = new SearchHandler();
         this.editor = new FileEditor();
-	this.progressManager = new ProgressManager();
+        this.progressManager = new ProgressManager();
+        this.currentContextMenu = null;
         
         this.init();
     }
@@ -136,94 +272,155 @@ class FileManagerApp {
     }
 
     bindEvents() {
-        document.addEventListener('click', (e) => {
-            if (e.target.matches('.nav-item')) {
-                e.preventDefault();
-                const path = e.target.dataset.path;
-                if (path) {
-			this.navigateToPath(path);
-                }
-            }
-            
-            if (e.target.matches('.breadcrumb-item')) {
-                e.preventDefault();
-                const path = e.target.dataset.path;
-                if (path) {
-                    this.navigateToPath(path);
-                }
-            }
-            
-            if (e.target.matches('.file-item, .masonry-item') || e.target.closest('.file-item, .masonry-item')) {
-                const fileItem = e.target.closest('.file-item, .masonry-item');
-                if (fileItem) {
-                    this.handleFileClick(fileItem);
-                }
-            }
-            
-            if (e.target.matches('.view-toggle-btn')) {
-                this.setViewMode(e.target.dataset.view);
-            }
-            
-            if (e.target.matches('.file-action-btn')) {
-                const fileItem = e.target.closest('.file-item, .masonry-item');
-                if (fileItem) {
-                    const action = e.target.textContent;
-                    if (action === '↓') {
-                        this.downloadFile(fileItem.dataset.path);
-                    } else if (action === '×') {
-                        this.deleteFile(fileItem.dataset.path);
-                    } else if (action === '✎') {
-                        this.editFile(fileItem.dataset.path);
-                    }
-                }
-            }
-            
-            if (e.target.matches('.toolbar-btn')) {
-                const action = e.target.dataset.action;
-                if (action === 'upload') {
-                    this.showUploadDialog();
-                } else if (action === 'new-folder') {
-                    this.createNewFolder();
-                } else if (action === 'new-file') {
-                    this.createNewFile();
-                } else if (action === 'download') {
-                    this.downloadSelected();
-                } else if (action === 'delete') {
-                    this.deleteSelectedFiles();
-                }
-            }
-        });
-
-        document.addEventListener('dblclick', (e) => {
-            if (e.target.matches('.file-item, .masonry-item') || e.target.closest('.file-item, .masonry-item')) {
-                const fileItem = e.target.closest('.file-item, .masonry-item');
-                if (fileItem) {
-                    this.handleFileDoubleClick(fileItem);
-                }
-            }
-        });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Delete' && this.selectedFiles.size > 0) {
-                this.deleteSelectedFiles();
-            } else if (e.key === 'ArrowLeft' && e.altKey) {
-                this.navigateToParent();
-            } else if (e.key === 'f' && e.ctrlKey) {
-                e.preventDefault();
-                document.querySelector('.search-input').focus();
-            } else if (e.key === 'n' && e.ctrlKey && e.shiftKey) {
-                e.preventDefault();
-                this.createNewFolder();
-            } else if (e.key === 'n' && e.ctrlKey) {
-                e.preventDefault();
-                this.createNewFile();
-            } else if (e.key === 'u' && e.ctrlKey) {
-                e.preventDefault();
-                this.showUploadDialog();
-            }
-        });
+        document.addEventListener('click', (e) => this.handleClick(e));
+        document.addEventListener('dblclick', (e) => this.handleDoubleClick(e));
+        document.addEventListener('keydown', (e) => this.handleKeydown(e));
+        document.addEventListener('contextmenu', (e) => this.handleContextMenu(e));
+        document.addEventListener('click', () => this.hideContextMenu());
 
         const fileBrowser = document.querySelector('.file-browser');
+        if (fileBrowser) {
+            this.bindDragDropEvents(fileBrowser);
+        }
+    }
+
+    handleClick(e) {
+        // Navigation clicks
+        if (e.target.matches('.nav-item')) {
+            e.preventDefault();
+            const path = e.target.dataset.path;
+            if (path) {
+                this.navigateToPath(path);
+            }
+            return;
+        }
+        
+        // Breadcrumb clicks
+        if (e.target.matches('.breadcrumb-item')) {
+            e.preventDefault();
+            const path = e.target.dataset.path;
+            if (path) {
+                this.navigateToPath(path);
+            }
+            return;
+        }
+        
+        // File item clicks
+        if (e.target.matches('.file-item, .masonry-item') || e.target.closest('.file-item, .masonry-item')) {
+            const fileItem = e.target.closest('.file-item, .masonry-item');
+            if (fileItem) {
+                this.handleFileClick(fileItem);
+            }
+            return;
+        }
+        
+        // View toggle buttons
+        if (e.target.matches('.view-toggle-btn')) {
+            this.setViewMode(e.target.dataset.view);
+            return;
+        }
+        
+        // File action buttons
+        if (e.target.matches('.file-action-btn')) {
+            const fileItem = e.target.closest('.file-item, .masonry-item');
+            if (fileItem) {
+                this.handleFileActionClick(e.target, fileItem);
+            }
+            return;
+        }
+        
+        // Toolbar buttons
+        if (e.target.matches('.toolbar-btn')) {
+            this.handleToolbarClick(e.target);
+            return;
+        }
+    }
+
+    handleFileActionClick(button, fileItem) {
+        const action = button.textContent.trim();
+        const path = fileItem.dataset.path;
+        
+        switch (action) {
+            case '↓':
+                this.downloadFile(path);
+                break;
+            case '×':
+                this.deleteFile(path);
+                break;
+            case '✎':
+                this.editFile(path);
+                break;
+        }
+    }
+
+    handleToolbarClick(button) {
+        const action = button.dataset.action;
+        
+        switch (action) {
+            case 'upload':
+                this.showUploadDialog();
+                break;
+            case 'new-folder':
+                this.createNewFolder();
+                break;
+            case 'new-file':
+                this.createNewFile();
+                break;
+            case 'download':
+                this.downloadSelected();
+                break;
+            case 'move':
+                this.moveSelected();
+                break;
+            case 'delete':
+                this.deleteSelectedFiles();
+                break;
+        }
+    }
+
+    handleDoubleClick(e) {
+        if (e.target.matches('.file-item, .masonry-item') || e.target.closest('.file-item, .masonry-item')) {
+            const fileItem = e.target.closest('.file-item, .masonry-item');
+            if (fileItem) {
+                this.handleFileDoubleClick(fileItem);
+            }
+        }
+    }
+
+    handleKeydown(e) {
+        const keyActions = {
+            'Delete': () => this.selectedFiles.size > 0 && this.deleteSelectedFiles(),
+            'ArrowLeft': () => e.altKey && this.navigateToParent(),
+            'f': () => e.ctrlKey && (e.preventDefault(), document.querySelector('.search-input')?.focus()),
+            'n': () => {
+                if (e.ctrlKey) {
+                    e.preventDefault();
+                    e.shiftKey ? this.createNewFolder() : this.createNewFile();
+                }
+            },
+            'u': () => e.ctrlKey && (e.preventDefault(), this.showUploadDialog())
+        };
+
+        const action = keyActions[e.key];
+        if (action) {
+            action();
+        }
+    }
+
+    handleContextMenu(e) {
+        if (e.target.matches('.file-item, .masonry-item') || e.target.closest('.file-item, .masonry-item')) {
+            e.preventDefault();
+            const fileItem = e.target.closest('.file-item, .masonry-item');
+            if (fileItem) {
+                this.showContextMenu(e, fileItem);
+            }
+        } else if (e.target.matches('.file-browser')) {
+            e.preventDefault();
+            this.showBrowserContextMenu(e);
+        }
+    }
+
+    bindDragDropEvents(fileBrowser) {
         fileBrowser.addEventListener('dragover', (e) => {
             e.preventDefault();
             fileBrowser.classList.add('dragover');
@@ -238,23 +435,6 @@ class FileManagerApp {
             e.preventDefault();
             fileBrowser.classList.remove('dragover');
             this.handleFileDrop(e);
-        });
-
-        document.addEventListener('contextmenu', (e) => {
-            if (e.target.matches('.file-item, .masonry-item') || e.target.closest('.file-item, .masonry-item')) {
-                e.preventDefault();
-                const fileItem = e.target.closest('.file-item, .masonry-item');
-                if (fileItem) {
-                    this.showContextMenu(e, fileItem);
-                }
-            } else if (e.target.matches('.file-browser')) {
-                e.preventDefault();
-                this.showBrowserContextMenu(e);
-            }
-        });
-
-        document.addEventListener('click', () => {
-            this.hideContextMenu();
         });
     }
 
@@ -273,13 +453,11 @@ class FileManagerApp {
                 this.updateToolbar();
             } else {
                 this.showToast('Error', result.message, 'error');
-                // エラー時も空のファイルリストを表示
                 this.displayFiles([]);
             }
         } catch (error) {
             this.showToast('Error', 'Failed to load files', 'error');
             console.error('Error loading files:', error);
-            // エラー時も空のファイルリストを表示
             this.displayFiles([]);
         } finally {
             this.hideLoading();
@@ -292,50 +470,15 @@ class FileManagerApp {
         
         container.innerHTML = '';
         
-        // filesがnullやundefinedの場合の処理
         if (!files) {
             files = [];
         }
         
-        const toolbar = document.createElement('div');
-        toolbar.className = 'toolbar';
-        toolbar.innerHTML = `
-            <button class="toolbar-btn" data-action="upload" title="Upload (Ctrl+U)">📤 Upload</button>
-            <button class="toolbar-btn" data-action="new-folder" title="New Folder (Ctrl+Shift+N)">📁 New Folder</button>
-            <button class="toolbar-btn" data-action="new-file" title="New File (Ctrl+N)">📄 New File</button>
-            <button class="toolbar-btn" data-action="download" title="Download Selected" ${this.selectedFiles.size === 0 ? 'disabled' : ''}>📥 Download</button>
-            <button class="toolbar-btn" data-action="delete" title="Delete Selected (Delete)" ${this.selectedFiles.size === 0 ? 'disabled' : ''}>🗑 Delete</button>
-        `;
-        container.appendChild(toolbar);
-        
-        const uploadArea = document.createElement('div');
-        uploadArea.className = 'upload-area';
-        uploadArea.innerHTML = `
-            <div class="upload-text">📁 Drop files here to upload</div>
-            <div class="upload-text">or click to select files</div>
-            <input type="file" class="upload-input" multiple>
-        `;
-        container.appendChild(uploadArea);
-        
-        uploadArea.querySelector('.upload-input').addEventListener('change', (e) => {
-            this.handleFileUpload(e.target.files);
-        });
-        
-        uploadArea.addEventListener('click', () => {
-            uploadArea.querySelector('.upload-input').click();
-        });
+        this.renderToolbar(container);
+        this.renderUploadArea(container);
     
         if (files.length === 0) {
-            const noFiles = document.createElement('div');
-            noFiles.className = 'no-files';
-            noFiles.innerHTML = `
-                <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
-                    <div style="font-size: 3rem; margin-bottom: 20px; opacity: 0.5;">📁</div>
-                    <div style="font-size: 1.2rem; margin-bottom: 10px;">No files found</div>
-                    <div style="font-size: 0.9rem; opacity: 0.8;">Upload files or create new ones to get started</div>
-                </div>
-            `;
-            container.appendChild(noFiles);
+            this.renderEmptyState(container);
             return;
         }
         
@@ -345,15 +488,60 @@ class FileManagerApp {
         
         if (imageCount >= 10 && this.viewMode !== 'list') {
             this.viewMode = 'masonry';
-            this.renderMasonryView(files);
+            this.renderMasonryView(files, container);
         } else {
-            this.renderStandardView(files);
+            this.renderStandardView(files, container);
         }
     }
 
-    renderStandardView(files) {
-        const container = document.querySelector('.file-browser');
+    renderToolbar(container) {
+        const toolbar = document.createElement('div');
+        toolbar.className = 'toolbar';
+        toolbar.innerHTML = `
+            <button class="toolbar-btn" data-action="upload" title="Upload (Ctrl+U)">📤 Upload</button>
+            <button class="toolbar-btn" data-action="new-folder" title="New Folder (Ctrl+Shift+N)">📁 New Folder</button>
+            <button class="toolbar-btn" data-action="new-file" title="New File (Ctrl+N)">📄 New File</button>
+            <button class="toolbar-btn" data-action="download" title="Download Selected" ${this.selectedFiles.size === 0 ? 'disabled' : ''}>📥 Download</button>
+            <button class="toolbar-btn" data-action="move" title="Move Selected" ${this.selectedFiles.size === 0 ? 'disabled' : ''}>↗️ Move</button>
+            <button class="toolbar-btn" data-action="delete" title="Delete Selected (Delete)" ${this.selectedFiles.size === 0 ? 'disabled' : ''}>🗑️ Delete</button>
+        `;
+        container.appendChild(toolbar);
+    }
+
+    renderUploadArea(container) {
+        const uploadArea = document.createElement('div');
+        uploadArea.className = 'upload-area';
+        uploadArea.innerHTML = `
+            <div class="upload-text">📁 Drop files here to upload</div>
+            <div class="upload-text">or click to select files</div>
+            <input type="file" class="upload-input" multiple>
+        `;
+        container.appendChild(uploadArea);
         
+        const uploadInput = uploadArea.querySelector('.upload-input');
+        uploadInput.addEventListener('change', (e) => {
+            this.handleFileUpload(e.target.files);
+        });
+        
+        uploadArea.addEventListener('click', () => {
+            uploadInput.click();
+        });
+    }
+
+    renderEmptyState(container) {
+        const noFiles = document.createElement('div');
+        noFiles.className = 'no-files';
+        noFiles.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+                <div style="font-size: 3rem; margin-bottom: 20px; opacity: 0.5;">📁</div>
+                <div style="font-size: 1.2rem; margin-bottom: 10px;">No files found</div>
+                <div style="font-size: 0.9rem; opacity: 0.8;">Upload files or create new ones to get started</div>
+            </div>
+        `;
+        container.appendChild(noFiles);
+    }
+
+    renderStandardView(files, container) {
         const viewToggle = document.createElement('div');
         viewToggle.className = 'view-toggle';
         viewToggle.innerHTML = `
@@ -399,29 +587,7 @@ class FileManagerApp {
         
         const tbody = document.createElement('tbody');
         files.forEach(file => {
-            const tr = document.createElement('tr');
-            tr.className = 'file-item';
-            tr.dataset.path = file.path;
-            tr.dataset.isDir = file.is_dir;
-            tr.dataset.mimeType = file.mime_type || '';
-            
-            tr.innerHTML = `
-                <td>
-                    <div class="file-icon ${this.getFileIconClass(file)}"></div>
-                    <span class="file-name">${file.name}</span>
-                </td>
-                <td>${file.is_dir ? '-' : this.formatFileSize(file.size)}</td>
-                <td>${new Date(file.mod_time).toLocaleString()}</td>
-                <td>${file.is_dir ? 'Folder' : (file.mime_type || 'Unknown')}</td>
-                <td>
-                    ${!file.is_dir ? `
-                        <button class="file-action-btn" title="Download">↓</button>
-                        ${file.is_editable ? '<button class="file-action-btn" title="Edit">✎</button>' : ''}
-                        <button class="file-action-btn" title="Delete">×</button>
-                    ` : ''}
-                </td>
-            `;
-            
+            const tr = this.createTableRow(file);
             tbody.appendChild(tr);
         });
         
@@ -429,9 +595,34 @@ class FileManagerApp {
         container.appendChild(table);
     }
 
-    renderMasonryView(files) {
-        const container = document.querySelector('.file-browser');
+    createTableRow(file) {
+        const tr = document.createElement('tr');
+        tr.className = 'file-item';
+        tr.dataset.path = file.path;
+        tr.dataset.isDir = file.is_dir;
+        tr.dataset.mimeType = file.mime_type || '';
         
+        tr.innerHTML = `
+            <td>
+                <div class="file-icon ${this.getFileIconClass(file)}"></div>
+                <span class="file-name">${file.name}</span>
+            </td>
+            <td>${file.is_dir ? '-' : this.formatFileSize(file.size)}</td>
+            <td>${new Date(file.mod_time).toLocaleString()}</td>
+            <td>${file.is_dir ? 'Folder' : (file.mime_type || 'Unknown')}</td>
+            <td>
+                ${!file.is_dir ? `
+                    <button class="file-action-btn" title="Download">↓</button>
+                    ${file.is_editable ? '<button class="file-action-btn" title="Edit">✎</button>' : ''}
+                    <button class="file-action-btn" title="Delete">×</button>
+                ` : ''}
+            </td>
+        `;
+        
+        return tr;
+    }
+
+    renderMasonryView(files, container) {
         const imageFiles = files.filter(file => 
             file.mime_type && file.mime_type.startsWith('image/')
         );
@@ -450,50 +641,54 @@ class FileManagerApp {
         container.appendChild(viewToggle);
         
         if (imageFiles.length > 0) {
-            const masonryTitle = document.createElement('h3');
-            masonryTitle.textContent = 'Images';
-            masonryTitle.style.margin = '20px 0 10px';
-            masonryTitle.style.color = 'var(--accent-primary)';
-            container.appendChild(masonryTitle);
-            
-            const masonryGrid = document.createElement('div');
-            masonryGrid.className = 'masonry-grid';
-            
-            imageFiles.forEach(file => {
-                const masonryItem = this.createMasonryItem(file);
-                masonryGrid.appendChild(masonryItem);
-            });
-            
-            container.appendChild(masonryGrid);
+            this.renderImageSection(imageFiles, container);
         }
         
         if (otherFiles.length > 0) {
-            const otherTitle = document.createElement('h3');
-            otherTitle.textContent = 'Other Files';
-            otherTitle.style.margin = '30px 0 10px';
-            otherTitle.style.color = 'var(--accent-primary)';
-            container.appendChild(otherTitle);
-            
-            const fileGrid = document.createElement('div');
-            fileGrid.className = 'file-grid';
-            
-            otherFiles.forEach(file => {
-                const fileItem = this.createFileItem(file);
-                fileGrid.appendChild(fileItem);
-            });
-            
-            container.appendChild(fileGrid);
+            this.renderOtherFilesSection(otherFiles, container);
         }
+    }
+
+    renderImageSection(imageFiles, container) {
+        const masonryTitle = document.createElement('h3');
+        masonryTitle.textContent = 'Images';
+        masonryTitle.style.margin = '20px 0 10px';
+        masonryTitle.style.color = 'var(--accent-primary)';
+        container.appendChild(masonryTitle);
+        
+        const masonryGrid = document.createElement('div');
+        masonryGrid.className = 'masonry-grid';
+        
+        imageFiles.forEach(file => {
+            const masonryItem = this.createMasonryItem(file);
+            masonryGrid.appendChild(masonryItem);
+        });
+        
+        container.appendChild(masonryGrid);
+    }
+
+    renderOtherFilesSection(otherFiles, container) {
+        const otherTitle = document.createElement('h3');
+        otherTitle.textContent = 'Other Files';
+        otherTitle.style.margin = '30px 0 10px';
+        otherTitle.style.color = 'var(--accent-primary)';
+        container.appendChild(otherTitle);
+        
+        const fileGrid = document.createElement('div');
+        fileGrid.className = 'file-grid';
+        
+        otherFiles.forEach(file => {
+            const fileItem = this.createFileItem(file);
+            fileGrid.appendChild(fileItem);
+        });
+        
+        container.appendChild(fileGrid);
     }
 
     createFileItem(file) {
         const fileItem = document.createElement('div');
         fileItem.className = 'file-item';
-        fileItem.dataset.path = file.path;
-        fileItem.dataset.isDir = file.is_dir;
-        fileItem.dataset.mimeType = file.mime_type || '';
-        fileItem.dataset.isEditable = file.is_editable || false;
-        fileItem.dataset.isMount = file.is_mount || false;
+        this.setFileItemData(fileItem, file);
         
         const iconClass = this.getFileIconClass(file);
         
@@ -518,9 +713,7 @@ class FileManagerApp {
     createMasonryItem(file) {
         const item = document.createElement('div');
         item.className = 'masonry-item';
-        item.dataset.path = file.path;
-        item.dataset.isDir = file.is_dir;
-        item.dataset.mimeType = file.mime_type || '';
+        this.setFileItemData(item, file);
         
         item.style.gridRowEnd = 'span 20';
         
@@ -543,25 +736,12 @@ class FileManagerApp {
         return item;
     }
 
-    getFileIconClass(file) {
-        if (file.is_dir) return 'folder';
-        if (file.is_mount) return 'mount';
-        
-        const mime = file.mime_type || '';
-        
-        if (mime.startsWith('image/')) return 'image';
-        if (mime.startsWith('video/')) return 'video';
-        if (mime.startsWith('audio/')) return 'audio';
-        if (mime.startsWith('text/') || file.is_editable) return 'document';
-        
-        const ext = (file.name.split('.').pop() || '').toLowerCase();
-        const archiveExts = ['zip', 'rar', '7z', 'tar', 'gz'];
-        const codeExts = ['js', 'py', 'java', 'c', 'cpp', 'html', 'css', 'php', 'rb', 'go'];
-        
-        if (archiveExts.includes(ext)) return 'archive';
-        if (codeExts.includes(ext)) return 'code';
-        
-        return 'file';
+    setFileItemData(element, file) {
+        element.dataset.path = file.path;
+        element.dataset.isDir = file.is_dir;
+        element.dataset.mimeType = file.mime_type || '';
+        element.dataset.isEditable = file.is_editable || false;
+        element.dataset.isMount = file.is_mount || false;
     }
 
     getFileIconClass(file) {
@@ -570,38 +750,51 @@ class FileManagerApp {
         
         const mime = file.mime_type || '';
         const name = file.name || '';
-        const ext = name.split('.').pop().toLowerCase();
+        const ext = name.split('.').pop()?.toLowerCase() || '';
         
-        // MIMEタイプに基づく判定
-        if (mime.startsWith('image/')) return 'image';
-        if (mime.startsWith('video/')) return 'video';
-        if (mime.startsWith('audio/')) return 'audio';
-        if (mime.startsWith('text/') || file.is_editable) return 'document';
+        // MIME type based detection
+        const mimeMap = {
+            'image/': 'image',
+            'video/': 'video',
+            'audio/': 'audio',
+            'text/': 'document',
+            'javascript': 'code',
+            'python': 'code',
+            'java': 'code',
+            'c+': 'code',
+            'html': 'code',
+            'css': 'code',
+            'php': 'code',
+            'zip': 'archive',
+            'rar': 'archive',
+            '7z': 'archive',
+            'tar': 'archive',
+            'gz': 'archive'
+        };
         
-        // 特定のMIMEタイプ
-        if (mime.includes('javascript')) return 'code';
-        if (mime.includes('python')) return 'code';
-        if (mime.includes('java')) return 'code';
-        if (mime.includes('c+')) return 'code';
-        if (mime.includes('html')) return 'code';
-        if (mime.includes('css')) return 'code';
-        if (mime.includes('php')) return 'code';
-        if (mime.includes('zip') || mime.includes('rar') || mime.includes('7z') || mime.includes('tar') || mime.includes('gz')) return 'archive';
+        for (const [key, value] of Object.entries(mimeMap)) {
+            if (mime.includes(key) || (key.length > 10 && mime.startsWith(key))) {
+                return value;
+            }
+        }
         
-        // 拡張子に基づくフォールバック
-        const archiveExts = ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'];
-        const codeExts = ['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'html', 'htm', 'css', 'scss', 'less', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'sql', 'sh', 'bash', 'zsh', 'ps1', 'bat', 'cmd'];
-        const textExts = ['txt', 'md', 'markdown', 'json', 'xml', 'yml', 'yaml', 'ini', 'conf', 'cfg', 'log'];
-        const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'];
-        const videoExts = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'];
-        const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'];
+        if (file.is_editable) return 'document';
         
-        if (archiveExts.includes(ext)) return 'archive';
-        if (codeExts.includes(ext)) return 'code';
-        if (textExts.includes(ext)) return 'document';
-        if (imageExts.includes(ext)) return 'image';
-        if (videoExts.includes(ext)) return 'video';
-        if (audioExts.includes(ext)) return 'audio';
+        // Extension based fallback
+        const extMap = {
+            archive: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'],
+            code: ['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'html', 'htm', 'css', 'scss', 'less', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'sql', 'sh', 'bash', 'zsh', 'ps1', 'bat', 'cmd'],
+            document: ['txt', 'md', 'markdown', 'json', 'xml', 'yml', 'yaml', 'ini', 'conf', 'cfg', 'log'],
+            image: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'],
+            video: ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'],
+            audio: ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a']
+        };
+        
+        for (const [type, extensions] of Object.entries(extMap)) {
+            if (extensions.includes(ext)) {
+                return type;
+            }
+        }
         
         return 'file';
     }
@@ -709,6 +902,8 @@ class FileManagerApp {
 
     updateBreadcrumb(path) {
         const breadcrumb = document.querySelector('.breadcrumb');
+        if (!breadcrumb) return;
+        
         breadcrumb.innerHTML = '';
         
         const parts = path.split('/').filter(part => part !== '');
@@ -720,7 +915,7 @@ class FileManagerApp {
         rootItem.dataset.path = '/';
         breadcrumb.appendChild(rootItem);
         
-        parts.forEach((part, index) => {
+        parts.forEach((part) => {
             const separator = document.createElement('span');
             separator.className = 'breadcrumb-separator';
             separator.textContent = '/';
@@ -738,11 +933,14 @@ class FileManagerApp {
 
     updateToolbar() {
         const downloadBtn = document.querySelector('[data-action="download"]');
+        const moveBtn = document.querySelector('[data-action="move"]');
         const deleteBtn = document.querySelector('[data-action="delete"]');
         
-        if (downloadBtn && deleteBtn) {
-            downloadBtn.disabled = this.selectedFiles.size === 0;
-            deleteBtn.disabled = this.selectedFiles.size === 0;
+        if (downloadBtn && moveBtn && deleteBtn) {
+            const hasSelection = this.selectedFiles.size > 0;
+            downloadBtn.disabled = !hasSelection;
+            moveBtn.disabled = !hasSelection;
+            deleteBtn.disabled = !hasSelection;
         }
     }
 
@@ -769,7 +967,6 @@ class FileManagerApp {
         
         const path = fileItem.dataset.path;
         const isDir = fileItem.dataset.isDir === 'true';
-        const mimeType = fileItem.dataset.mimeType || '';
         
         contextMenu.innerHTML = `
             <div class="context-menu-item" data-action="download">
@@ -784,11 +981,11 @@ class FileManagerApp {
                 <span>📝 Rename</span>
             </div>
             <div class="context-menu-item" data-action="move">
-                <span>↗️ Move</span>
+                <span>↗ Move</span>
             </div>
             <div class="context-menu-divider"></div>
             <div class="context-menu-item" data-action="delete">
-                <span>🗑️ Delete</span>
+                <span>🗑 Delete</span>
             </div>
         `;
         
@@ -797,7 +994,7 @@ class FileManagerApp {
         contextMenu.querySelectorAll('.context-menu-item').forEach(item => {
             item.addEventListener('click', () => {
                 const action = item.dataset.action;
-                this.handleContextMenuAction(action, path, isDir, mimeType);
+                this.handleContextMenuAction(action, path, isDir);
                 this.hideContextMenu();
             });
         });
@@ -849,7 +1046,7 @@ class FileManagerApp {
         }
     }
 
-    handleContextMenuAction(action, path, isDir, mimeType) {
+    handleContextMenuAction(action, path, isDir) {
         switch (action) {
             case 'download':
                 this.downloadFile(path);
@@ -886,13 +1083,33 @@ class FileManagerApp {
         }
     }
 
+    // Utility methods
+    isValidPath(path) {
+        return path && path.length > 0 && !path.includes('..');
+    }
+    
+    suggestMoveTarget(sourcePath) {
+        const parentPath = this.getParentPath(sourcePath);
+        return this.currentPath !== '/' ? this.currentPath : parentPath;
+    }
+
+    getParentPath(path) {
+        const parts = path.split('/').filter(part => part !== '');
+        if (parts.length <= 1) return '/';
+        parts.pop();
+        return '/' + parts.join('/');
+    }
+
+    // File operations
     async renameFile(path) {
         const newName = prompt('Enter new name:', path.split('/').pop());
         if (!newName) return;
         
-        const newPath = path.split('/').slice(0, -1).join('/') + '/' + newName;
+        const newPath = this.getParentPath(path) + '/' + newName;
         
         try {
+            this.showLoading();
+            
             const response = await fetch('/api/files/move', {
                 method: 'POST',
                 headers: {
@@ -915,31 +1132,50 @@ class FileManagerApp {
         } catch (error) {
             this.showToast('Error', 'Failed to rename file', 'error');
             console.error('Error renaming file:', error);
+        } finally {
+            this.hideLoading();
         }
     }
 
-    async moveFile(path) {
-        const targetPath = prompt('Enter target path:', this.currentPath);
-        if (!targetPath) return;
+    async moveFile(sourcePath) {
+        const fileName = sourcePath.split('/').pop();
+        const suggestedPath = this.suggestMoveTarget(sourcePath);
         
-        const newPath = targetPath + '/' + path.split('/').pop();
+        const targetDir = prompt(`Move "${fileName}" to directory:`, suggestedPath);
+        if (!targetDir) return;
+        
+        if (!this.isValidPath(targetDir)) {
+            this.showToast('Error', 'Invalid target path', 'error');
+            return;
+        }
+        
+        const targetPath = targetDir.endsWith('/') ? 
+            targetDir + fileName : 
+            targetDir + '/' + fileName;
+        
+        if (sourcePath === targetPath) {
+            this.showToast('Info', 'Source and target are the same', 'info');
+            return;
+        }
         
         try {
+            this.showLoading();
+            
             const response = await fetch('/api/files/move', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    sourcePath: path,
-                    targetPath: newPath
+                    sourcePath: sourcePath,
+                    targetPath: targetPath
                 })
             });
             
             const result = await response.json();
             
             if (result.success) {
-                this.showToast('Success', 'File moved successfully', 'success');
+                this.showToast('Success', `Moved "${fileName}" successfully`, 'success');
                 this.loadFiles(this.currentPath);
             } else {
                 this.showToast('Error', result.message, 'error');
@@ -947,6 +1183,91 @@ class FileManagerApp {
         } catch (error) {
             this.showToast('Error', 'Failed to move file', 'error');
             console.error('Error moving file:', error);
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    async moveSelected() {
+        if (this.selectedFiles.size === 0) return;
+        
+        if (this.selectedFiles.size === 1) {
+            const path = Array.from(this.selectedFiles)[0];
+            this.moveFile(path);
+        } else {
+            await this.moveMultipleFiles();
+        }
+    }
+
+    async moveMultipleFiles() {
+        const firstFile = Array.from(this.selectedFiles)[0];
+        const suggestedPath = this.suggestMoveTarget(firstFile);
+        
+        const targetDir = prompt(`Move ${this.selectedFiles.size} items to directory:`, suggestedPath);
+        if (!targetDir) return;
+        
+        if (!this.isValidPath(targetDir)) {
+            this.showToast('Error', 'Invalid target path', 'error');
+            return;
+        }
+        
+        try {
+            this.showLoading();
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (const sourcePath of this.selectedFiles) {
+                const fileName = sourcePath.split('/').pop();
+                const targetPath = targetDir.endsWith('/') ? 
+                    targetDir + fileName : 
+                    targetDir + '/' + fileName;
+                
+                if (sourcePath === targetPath) {
+                    failCount++;
+                    continue;
+                }
+                
+                try {
+                    const response = await fetch('/api/files/move', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            sourcePath: sourcePath,
+                            targetPath: targetPath
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                } catch (error) {
+                    failCount++;
+                }
+            }
+            
+            if (successCount > 0) {
+                const message = `Moved ${successCount} item(s) successfully`;
+                if (failCount > 0) {
+                    this.showToast('Move Complete', `${message}, ${failCount} failed`, 'warning');
+                } else {
+                    this.showToast('Success', message, 'success');
+                }
+                this.loadFiles(this.currentPath);
+                this.clearSelection();
+            } else {
+                this.showToast('Error', 'All items failed to move', 'error');
+            }
+        } catch (error) {
+            this.showToast('Error', 'Failed to move items', 'error');
+            console.error('Error moving items:', error);
+        } finally {
+            this.hideLoading();
         }
     }
 
@@ -1022,7 +1343,6 @@ class FileManagerApp {
         input.multiple = true;
         input.addEventListener('change', (e) => {
             this.handleFileUpload(e.target.files);
-            // 入力欄をリセット
             e.target.value = '';
         });
         input.click();
@@ -1032,7 +1352,6 @@ class FileManagerApp {
         if (!files || files.length === 0) return;
         
         try {
-            // プログレスバーを表示
             this.progressManager.show('Uploading Files');
             this.progressManager.updateProgress({
                 currentFile: 'Preparing upload...',
@@ -1042,7 +1361,6 @@ class FileManagerApp {
                 status: `0/${files.length} files`
             });
             
-            // アップロードエリアを無効化
             const uploadArea = document.querySelector('.upload-area');
             if (uploadArea) {
                 uploadArea.classList.add('uploading');
@@ -1055,10 +1373,8 @@ class FileManagerApp {
                 formData.append('file', files[i]);
             }
             
-            // XMLHttpRequest を使用して進捗を追跡
             const xhr = new XMLHttpRequest();
             
-            // 進捗イベントの監視
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
                     const percentage = (e.loaded / e.total) * 100;
@@ -1087,7 +1403,6 @@ class FileManagerApp {
                         }
                         this.loadFiles(this.currentPath);
                         
-                        // 完了状態を表示
                         this.progressManager.updateProgress({
                             currentFile: 'Upload complete!',
                             percentage: 100,
@@ -1113,11 +1428,8 @@ class FileManagerApp {
             });
             
             xhr.open('POST', '/api/files/upload');
-            
-            // 進行中のアップロードを追跡
             this.progressManager.setCurrentUpload(xhr);
             
-            // アップロード開始
             this.progressManager.updateProgress({
                 currentFile: 'Starting upload...',
                 percentage: 0,
@@ -1128,7 +1440,6 @@ class FileManagerApp {
             
             xhr.send(formData);
             
-            // アップロードが完了するまで待機
             await new Promise((resolve, reject) => {
                 xhr.addEventListener('load', resolve);
                 xhr.addEventListener('error', reject);
@@ -1149,31 +1460,6 @@ class FileManagerApp {
         }
     }
 
-    async uploadSingleFile(formData, progressContainer, index, total) {
-        return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/api/files/upload', true);
-    
-            xhr.upload.onprogress = (e) => {
-                if (e.lengthComputable) {
-                    const percent = Math.round((e.loaded / e.total) * 100);
-                    const overall = Math.round(((index + percent / 100) / total) * 100);
-    
-                    progressContainer.querySelector('.upload-progress-bar').style.width = overall + '%';
-                    progressContainer.querySelector('.upload-progress-text').textContent = overall + '%';
-                }
-            };
-    
-            xhr.onload = () => {
-                if (xhr.status === 200) resolve();
-                else reject(new Error(xhr.statusText));
-            };
-    
-            xhr.onerror = () => reject(new Error('Upload failed'));
-            xhr.send(formData);
-        });
-    }
-
     handleFileDrop(e) {
         e.preventDefault();
         const uploadArea = document.querySelector('.upload-area');
@@ -1186,100 +1472,97 @@ class FileManagerApp {
             this.handleFileUpload(files);
         }
     }
-
+    
     async downloadSelected() {
         if (this.selectedFiles.size === 0) return;
         
         if (this.selectedFiles.size === 1) {
-            // 単一ファイルのダウンロード
             const path = Array.from(this.selectedFiles)[0];
             this.downloadFile(path);
         } else {
-            // 複数ファイルのZIPダウンロード
-            try {
-                this.progressManager.show('Preparing Download');
-                this.progressManager.updateProgress({
-                    currentFile: 'Creating archive...',
-                    percentage: 0,
-                    processed: 0,
-                    total: this.selectedFiles.size,
-                    status: 'Initializing'
-                });
+            await this.downloadMultipleFiles();
+        }
+    }
+
+    async downloadMultipleFiles() {
+        try {
+            this.progressManager.show('Preparing Download');
+            this.progressManager.updateProgress({
+                currentFile: 'Creating archive...',
+                percentage: 0,
+                processed: 0,
+                total: this.selectedFiles.size,
+                status: 'Initializing'
+            });
+            
+            const response = await fetch('/api/files/download-zip', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    paths: Array.from(this.selectedFiles)
+                })
+            });
+            
+            if (response.ok) {
+                const contentLength = response.headers.get('content-length');
+                const reader = response.body.getReader();
+                const chunks = [];
+                let receivedLength = 0;
                 
-                const response = await fetch('/api/files/download-zip', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        paths: Array.from(this.selectedFiles)
-                    })
-                });
-                
-                if (response.ok) {
-                    const contentLength = response.headers.get('content-length');
-                    let loaded = 0;
+                while (true) {
+                    const { done, value } = await reader.read();
                     
-                    // ストリーミングでダウンロード進捗を追跡
-                    const reader = response.body.getReader();
-                    const chunks = [];
-                    let receivedLength = 0;
-                    
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        
-                        if (done) {
-                            break;
-                        }
-                        
-                        chunks.push(value);
-                        receivedLength += value.length;
-                        
-                        // 進捗更新
-                        if (contentLength) {
-                            const percentage = (receivedLength / parseInt(contentLength)) * 100;
-                            this.progressManager.updateProgress({
-                                currentFile: 'Downloading archive...',
-                                percentage: percentage,
-                                processed: Math.floor((percentage / 100) * this.selectedFiles.size),
-                                total: this.selectedFiles.size,
-                                status: `${Math.round(percentage)}% downloaded`
-                            });
-                        }
+                    if (done) {
+                        break;
                     }
                     
-                    // すべてのチャンクを結合
-                    const blob = new Blob(chunks);
+                    chunks.push(value);
+                    receivedLength += value.length;
                     
-                    this.progressManager.updateProgress({
-                        currentFile: 'Saving files...',
-                        percentage: 100,
-                        processed: this.selectedFiles.size,
-                        total: this.selectedFiles.size,
-                        status: 'Complete'
-                    });
-                    
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'files.zip';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    window.URL.revokeObjectURL(url);
-                    
-                    this.showToast('Success', `Downloaded ${this.selectedFiles.size} files successfully`, 'success');
-                } else {
-                    this.showToast('Error', 'Failed to download files', 'error');
+                    if (contentLength) {
+                        const percentage = (receivedLength / parseInt(contentLength)) * 100;
+                        this.progressManager.updateProgress({
+                            currentFile: 'Downloading archive...',
+                            percentage: percentage,
+                            processed: Math.floor((percentage / 100) * this.selectedFiles.size),
+                            total: this.selectedFiles.size,
+                            status: `${Math.round(percentage)}% downloaded`
+                        });
+                    }
                 }
-            } catch (error) {
+                
+                const blob = new Blob(chunks);
+                
+                this.progressManager.updateProgress({
+                    currentFile: 'Saving files...',
+                    percentage: 100,
+                    processed: this.selectedFiles.size,
+                    total: this.selectedFiles.size,
+                    status: 'Complete'
+                });
+                
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'files.zip';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                this.showToast('Success', `Downloaded ${this.selectedFiles.size} files successfully`, 'success');
+            } else {
                 this.showToast('Error', 'Failed to download files', 'error');
-                console.error('Error downloading files:', error);
-            } finally {
-                setTimeout(() => {
-                    this.progressManager.hide();
-                }, 1000);
             }
+        } catch (error) {
+            this.showToast('Error', 'Failed to download files', 'error');
+            console.error('Error downloading files:', error);
+        } finally {
+            setTimeout(() => {
+                this.progressManager.hide();
+            }, 1000);
         }
     }
     
@@ -1356,20 +1639,26 @@ class FileManagerApp {
             const result = await response.json();
             
             if (result.success) {
-                const total = result.data.total;
-                const used = result.data.used;
-                const percent = result.data.usage_percent;
+                const storageTextElement = document.querySelector('.storage-text');
+                const storageProgressElement = document.querySelector('.storage-progress-inner');
                 
-                document.querySelector('.storage-text').textContent = 
-                    `Used: ${this.formatFileSize(used)} / ${this.formatFileSize(total)}`;
-                
-                document.querySelector('.storage-progress-inner').style.width = `${percent}%`;
+                if (storageTextElement && storageProgressElement) {
+                    const total = result.data.total;
+                    const used = result.data.used;
+                    const percent = result.data.usage_percent;
+                    
+                    storageTextElement.textContent = 
+                        `Used: ${this.formatFileSize(used)} / ${this.formatFileSize(total)}`;
+                    
+                    storageProgressElement.style.width = `${percent}%`;
+                }
             }
         } catch (error) {
             console.error('Error fetching storage info:', error);
         }
     }
 
+    // UI Helper methods
     showLoading() {
         const overlay = document.querySelector('.loading-overlay');
         if (overlay) {
@@ -1386,6 +1675,8 @@ class FileManagerApp {
 
     showToast(title, message, type = 'info') {
         const toastContainer = document.querySelector('.toast-container');
+        if (!toastContainer) return;
+        
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         toast.innerHTML = `
@@ -1410,130 +1701,7 @@ class FileManagerApp {
     }
 }
 
-class FileEditor {
-    constructor() {
-        this.currentFile = null;
-        this.init();
-    }
-    
-    init() {
-        this.createEditorElement();
-    }
-    
-    createEditorElement() {
-        const editor = document.createElement('div');
-        editor.className = 'modal-overlay editor-modal';
-        editor.style.display = 'none';
-        
-        editor.innerHTML = `
-            <div class="modal">
-                <div class="modal-header">
-                    <div class="editor-header">
-                        <div class="editor-filename"></div>
-                        <div class="editor-actions">
-                            <button class="btn" id="editor-cancel">Cancel</button>
-                            <button class="btn btn-primary" id="editor-save">Save</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-body">
-                    <div class="editor-container">
-                        <textarea class="editor-textarea" placeholder="File content..."></textarea>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(editor);
-        this.editorElement = editor;
-        this.textarea = editor.querySelector('.editor-textarea');
-        this.filenameElement = editor.querySelector('.editor-filename');
-        
-        editor.querySelector('#editor-cancel').addEventListener('click', () => {
-            this.close();
-        });
-        
-        editor.querySelector('#editor-save').addEventListener('click', () => {
-            this.save();
-        });
-        
-        this.textarea.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 's') {
-                e.preventDefault();
-                this.save();
-            } else if (e.key === 'Escape') {
-                this.close();
-            }
-        });
-    }
-    
-    open(filePath, content) {
-        this.currentFile = filePath;
-        this.filenameElement.textContent = filePath.split('/').pop();
-        this.textarea.value = content;
-        this.editorElement.style.display = 'flex';
-        this.textarea.focus();
-        
-        document.body.style.overflow = 'hidden';
-    }
-    
-    close() {
-        this.editorElement.style.display = 'none';
-        this.currentFile = null;
-        document.body.style.overflow = '';
-    }
-    
-    async save() {
-        if (!this.currentFile) return;
-        
-        const content = this.textarea.value;
-        
-        try {
-            const response = await fetch('/api/files/save', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    path: this.currentFile,
-                    content: content
-                })
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                this.showToast('Success', 'File saved successfully', 'success');
-                this.close();
-            } else {
-                this.showToast('Error', result.message, 'error');
-            }
-        } catch (error) {
-            this.showToast('Error', 'Failed to save file', 'error');
-            console.error('Error saving file:', error);
-        }
-    }
-    
-    showToast(title, message, type) {
-        const toast = document.createElement('div');
-        toast.style.position = 'fixed';
-        toast.style.top = '20px';
-        toast.style.right = '20px';
-        toast.style.padding = '10px 15px';
-        toast.style.background = type === 'success' ? 'var(--success)' : 'var(--error)';
-        toast.style.color = 'white';
-        toast.style.borderRadius = '4px';
-        toast.style.zIndex = '1000';
-        toast.textContent = `${title}: ${message}`;
-        
-        document.body.appendChild(toast);
-        
-        setTimeout(() => {
-            toast.remove();
-        }, 3000);
-    }
-}
-
+// Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.fileManager = new FileManagerApp();
     window.fileEditor = new FileEditor();
