@@ -55,7 +55,7 @@ In general, as long as proper user and permission management is in place, any fi
   
 ### Prerequisites  
   
-- [Go](https://golang.org/doc/install) (version 1.18 or later)  
+- [Go](https://golang.org/doc/install) (version 1.20 or later)  
   
 ### Installation & Building  
   
