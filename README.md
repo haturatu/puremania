@@ -48,7 +48,7 @@ Follow these instructions to get a copy of the project up and running on your lo
     ```  
   
 2.  **Edit the `.env` file:**  
-    Open the `.env` file and customize the settings to match your environment. See the [Configuration](#configuration) section for more details.  
+    Open the `.env` file and customize the settings to match your environment. See the [Configuration](#Configuration) section for more details.  
   
 ### Running the Application  
   
@@ -57,7 +57,34 @@ After building and configuring, you can run the application:
 ```bash  
 ./puremania  
 ```  
-  
+We place static assets in the static directory, but as long as you can call the API implemented on the Go side, anything will work. The frontend is only there for my own convenience.  
+
+### Supervisor (Optional)
+To run Pure Mania as a background service, you can use a process manager like `supervisord`. Here’s an example configuration:  
+ 
+```ini
+[program:puremania]
+command=/home/tux/git/puremania/puremania
+user=tux
+directory=/home/tux/git/puremania
+autostart=true
+autorestart=true
+stderr_logfile=/home/tux/git/puremania/puremania.log
+stderr_logfile_maxbytes=1MB
+stdout_logfile=/home/tux/git/puremania/puremania.out.log
+stdout_logfile_maxbytes=1MB
+stdout_logfile_backups=0
+stderr_logfile_backups=0
+environment=PATH="/home/tux/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/home/tux/.tux/bin:/home/tux/.cargo/bin:/home/tux/.npm-global/bin",PYTHONPATH="/home/tux/.local/lib/python3.11/site-packages",HOME="/home/tux"
+```
+you can save this configuration in a file like `/etc/supervisor/conf.d/puremania.conf` and then update `supervisord` to apply the changes:  
+ 
+```bash
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start puremania
+```
+
 ## Usage  
   
 Once the server is running, open your web browser and navigate to:  
