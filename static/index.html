@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pure Mania</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/masonry.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo">
+                <h1>Pure Mania</h1>
+            </div>
+            
+            <div class="nav-item active" data-path="/">
+                <i>📁</i>
+                <span>Home</span>
+            </div>
+            
+            <div class="nav-item" data-path="/documents">
+                <i>📄</i>
+                <span>Documents</span>
+            </div>
+            
+            <div class="nav-item" data-path="/images">
+                <i>🖼️</i>
+                <span>Images</span>
+            </div>
+            
+            <div class="nav-item" data-path="/music">
+                <i>🎵</i>
+                <span>Music</span>
+            </div>
+            
+            <div class="nav-item" data-path="/videos">
+                <i>🎬</i>
+                <span>Videos</span>
+            </div>
+            
+            <div class="nav-item" data-path="/downloads">
+                <i>📥</i>
+                <span>Downloads</span>
+            </div>
+            
+            <div class="storage-info">
+                <div class="storage-text">Loading storage info...</div>
+                <div class="storage-progress">
+                    <div class="storage-progress-inner" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="header">
+                <div class="breadcrumb">
+                    <span class="breadcrumb-item" data-path="/">Root</span>
+                </div>
+                
+                <div class="search-container">
+                    <input type="text" class="search-input" placeholder="Search...">
+                    <div class="search-options" title="Search options">⚙️</div>
+                </div>
+            </div>
+            
+            <div class="file-browser">
+                <!-- Files will be loaded here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Media Player -->
+    <!-- Will be created by JavaScript -->
+    
+    <!-- Toast Container -->
+    <div class="toast-container"></div>
+    
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="/static/js/router.js"></script>
+    <script src="/static/js/media-player.js"></script>
+    <script src="/static/js/gallery.js"></script>
+    <script src="/static/js/search.js"></script>
+    <script src="/static/js/progress.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
