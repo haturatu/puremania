@@ -395,16 +395,64 @@ body {
 }
 
 .modal-header {
-  padding: 15px 20px;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    background-color: var(--bg-primary, #222);
+    color: white;
 }
 
 .modal-title {
-  font-size: 1.2rem;
-  color: var(--accent-primary);
+    font-size: 1rem;
+    font-weight: bold;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 8px; /* ボタン間のスペース */
+}
+
+.modal-actions > button {
+    background-color: rgba(0,0,0,0.6);
+    border: none;
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.modal-actions > button:hover {
+    background-color: rgba(255,255,255,0.2);
+    transform: scale(1.1);
+}
+
+/* フルスクリーン時のズームコントロールだけ右下に固定 */
+.modal-overlay.fullscreen .image-container > .image-zoom-controls {
+    position: absolute;
+    bottom: 70px;   /* 下からの距離 */
+    right: 20px;    /* 右からの距離 */
+    z-index: 10000; /* ナビボタンより前面 */
+    display: flex;
+    gap: 10px;      /* ボタン間の間隔 */
+    background-color: rgba(0,0,0,0.5); /* 背景がほしい場合 */
+    padding: 5px 10px;
+    border-radius: 8px;
+}
+
+/* ボタン自体のサイズや見た目を微調整 */
+.modal-overlay.fullscreen .image-container > .image-zoom-controls .zoom-btn {
+    font-size: 18px;
+    color: #fff;
+    background: none;
+    border: none;
+    cursor: pointer;
 }
 
 .modal-close {
@@ -1133,6 +1181,30 @@ body {
     left: 0;
     right: 0;
     z-index: 100;
+}
+
+.modal-header .modal-actions .zoom-btn {
+    display: none;
+}
+
+.fullscreen-btn {
+    background-color: rgba(0, 0, 0, 0.7);
+    border: none;
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.fullscreen-btn:hover {
+    background-color: rgba(0, 255, 65, 0.7);
+    transform: scale(1.1);
 }
 
 @keyframes slideIn {
