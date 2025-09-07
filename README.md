@@ -27,7 +27,12 @@ If you are running Pure Mania on a server, ensure that your firewall allows inco
 sudo ufw allow from 192.168.1.0/24 to any port 8844 proto tcp
 sudo ufw reload
 ```
-Make sure that the IP range matches your local network configuration.It is dangerous if it is exposed as a public IP, so please set authentication restrictions yourself.  
+Make sure that the IP range matches your local network configuration. It is dangerous if it is exposed as a public IP, so please set authentication restrictions yourself.
+
+Also, please note that if the API endpoint `/api/` is publicly accessible, it will allow file operations. Therefore, make sure to run Pure Mania under a proper dedicated Linux user, or if possible, in an isolated environment, and enforce correct permission and security management.  
+In general, as long as proper user and permission management is in place, any file operations will be restricted within the Linux permissions, which should prevent worst-case scenarios.  
+
+** PLEASE ** do not run this application as the root user.
   
 ### Prerequisites  
   
