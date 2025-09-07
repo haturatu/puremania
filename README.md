@@ -57,7 +57,8 @@ After building and configuring, you can run the application:
 ```bash  
 ./puremania  
 ```  
- 
+We place static assets in the static directory, but as long as you can call the API implemented on the Go side, anything will work. The frontend is only there for my own convenience.  
+
 ### Supervisor (Optional)
 To run Pure Mania as a background service, you can use a process manager like `supervisord`. Here’s an example configuration:  
  
