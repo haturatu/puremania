@@ -1220,6 +1220,16 @@ body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
+    .header {
+        flex-direction: column; /* 縦並びにする */
+        align-items: stretch;   /* 横幅いっぱいに */
+    }
+
+    .header .search-input,
+    .header .file-path {
+        width: 100%; /* 横幅いっぱいに */
+        margin-bottom: 5px;
+    }
     .image-viewer .modal {
         max-width: 100vw;
         max-height: 100vh;
