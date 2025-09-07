@@ -1,5 +1,7 @@
 # Pure Mania  
   
+<img width="1366" height="621" alt="image" src="https://github.com/user-attachments/assets/b4b24f9f-c5eb-40fc-b512-3f5d4341afbc" />  
+
 Pure Mania is a simple, lightweight, and fast web-based file manager written in Go. It provides a clean and intuitive interface for managing your files and directories remotely.  
   
 ## Features  
