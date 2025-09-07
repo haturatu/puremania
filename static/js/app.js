@@ -305,6 +305,17 @@ class FileManagerApp {
             return;
         }
         
+        // File action button clicks (修正)
+        if (e.target.matches('.file-action-btn, .file-action-btn *')) {
+            const button = e.target.closest('.file-action-btn');
+            const fileItem = e.target.closest('.file-item, .masonry-item');
+            if (button && fileItem) {
+                e.stopPropagation(); // 親要素へのイベント伝播を防止
+                this.handleFileActionClick(button, fileItem);
+                return;
+            }
+        }
+        
         // File item clicks
         if (e.target.matches('.file-item, .masonry-item') || e.target.closest('.file-item, .masonry-item')) {
             const fileItem = e.target.closest('.file-item, .masonry-item');
@@ -320,15 +331,6 @@ class FileManagerApp {
             return;
         }
         
-        // File action buttons
-        if (e.target.matches('.file-action-btn')) {
-            const fileItem = e.target.closest('.file-item, .masonry-item');
-            if (fileItem) {
-                this.handleFileActionClick(e.target, fileItem);
-            }
-            return;
-        }
-        
         // Toolbar buttons
         if (e.target.matches('.toolbar-btn')) {
             this.handleToolbarClick(e.target);
@@ -337,19 +339,39 @@ class FileManagerApp {
     }
 
     handleFileActionClick(button, fileItem) {
-        const action = button.textContent.trim();
         const path = fileItem.dataset.path;
+        const isDir = fileItem.dataset.isDir === 'true';
         
-        switch (action) {
-            case '↓':
-                this.downloadFile(path);
-                break;
-            case '×':
-                this.deleteFile(path);
-                break;
-            case '✎':
-                this.editFile(path);
-                break;
+        // クリックされたボタンの特定のアクションを判定
+        if (button.classList.contains('file-action-btn')) {
+            // data-action属性からアクションを取得
+            const action = button.dataset.action;
+            
+            switch (action) {
+                case 'download':
+                    this.downloadFile(path);
+                    break;
+                case 'delete':
+                    this.deleteFile(path);
+                    break;
+                case 'edit':
+                    this.editFile(path);
+                    break;
+                default:
+                    // 互換性のため、従来のテキストベースの判定も残す
+                    const textAction = button.textContent.trim();
+                    switch (textAction) {
+                        case '↓':
+                            this.downloadFile(path);
+                            break;
+                        case '×':
+                            this.deleteFile(path);
+                            break;
+                        case '✎':
+                            this.editFile(path);
+                            break;
+                    }
+            }
         }
     }
 
@@ -624,9 +646,9 @@ class FileManagerApp {
             <td>${file.is_dir ? 'Folder' : (file.mime_type || 'Unknown')}</td>
             <td>
                 ${!file.is_dir ? `
-                    <button class="file-action-btn" title="Download">↓</button>
-                    ${file.is_editable ? '<button class="file-action-btn" title="Edit">✎</button>' : ''}
-                    <button class="file-action-btn" title="Delete">×</button>
+                    <button class="file-action-btn download-btn" data-action="download" title="Download">↓</button>
+                    ${file.is_editable ? '<button class="file-action-btn edit-btn" data-action="edit" title="Edit">✎</button>' : ''}
+                    <button class="file-action-btn delete-btn" data-action="delete" title="Delete">×</button>
                 ` : ''}
             </td>
         `;
@@ -634,31 +656,30 @@ class FileManagerApp {
         return tr;
     }
 
-    renderMasonryView(files, container) {
-        const imageFiles = files.filter(file => 
-            file.mime_type && file.mime_type.startsWith('image/')
-        );
+    createMasonryItem(file) {
+        const item = document.createElement('div');
+        item.className = 'masonry-item';
+        this.setFileItemData(item, file);
         
-        const otherFiles = files.filter(file => 
-            !file.mime_type || !file.mime_type.startsWith('image/')
-        );
+        item.style.gridRowEnd = 'span 20';
         
-        const viewToggle = document.createElement('div');
-        viewToggle.className = 'view-toggle';
-        viewToggle.innerHTML = `
-            <button class="view-toggle-btn" data-view="grid">Grid</button>
-            <button class="view-toggle-btn" data-view="list">List</button>
-            <button class="view-toggle-btn active" data-view="masonry">Masonry</button>
+        item.innerHTML = `
+            <img src="/api/files/content?path=${encodeURIComponent(file.path)}" 
+                 alt="${file.name}" 
+                 class="masonry-image"
+                 onload="this.closest('.masonry-item').style.gridRowEnd = 'span ' + Math.round((this.naturalHeight / this.naturalWidth) * 20)"
+                 onerror="this.style.display='none'">
+            <div class="masonry-info">
+                <div class="masonry-name">${file.name}</div>
+                <div class="masonry-size">${this.formatFileSize(file.size)}</div>
+            </div>
+            <div class="file-actions">
+                <button class="file-action-btn download-btn" data-action="download" title="Download">↓</button>
+                <button class="file-action-btn delete-btn" data-action="delete" title="Delete">×</button>
+            </div>
         `;
-        container.appendChild(viewToggle);
         
-        if (imageFiles.length > 0) {
-            this.renderImageSection(imageFiles, container);
-        }
-        
-        if (otherFiles.length > 0) {
-            this.renderOtherFilesSection(otherFiles, container);
-        }
+        return item;
     }
 
     renderImageSection(imageFiles, container) {
@@ -712,9 +733,9 @@ class FileManagerApp {
             </div>
             <div class="file-actions">
                 ${!file.is_dir ? `
-                    <button class="file-action-btn" title="Download">↓</button>
-                    ${file.is_editable ? '<button class="file-action-btn" title="Edit">✎</button>' : ''}
-                    <button class="file-action-btn" title="Delete">×</button>
+                    <button class="file-action-btn download-btn" data-action="download" title="Download">↓</button>
+                    ${file.is_editable ? '<button class="file-action-btn edit-btn" data-action="edit" title="Edit">✎</button>' : ''}
+                    <button class="file-action-btn delete-btn" data-action="delete" title="Delete">×</button>
                 ` : ''}
             </div>
         `;
