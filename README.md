@@ -12,6 +12,10 @@ Pure Mania is a simple, lightweight, and fast web-based file manager written in 
 - **Search:** Quickly find files on your storage.  
 - **Storage Information:** View details about your storage capacity and usage.  
 - **Simple Configuration:** Easy to set up using a `.env` file.  
+- **ls --collor like output**: Color-coded file listings for better readability.
+- **No Database Required:** Pure Mania uses the filesystem directly, eliminating the need for a database.
+- **Media Preview**: Preview images and play audio/video files directly in the browser.
+- **Web Editor**: Edit text files directly within the web interface.
   
 ## Getting Started  
   
