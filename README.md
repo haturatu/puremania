@@ -20,6 +20,14 @@ Pure Mania is a simple, lightweight, and fast web-based file manager written in 
 ## Getting Started  
   
 Follow these instructions to get a copy of the project up and running on your local machine.  
+### IP Address Firewall Configuration
+If you are running Pure Mania on a server, ensure that your firewall allows incoming connections on the port you configure (default is 8844). For example, if you are using `ufw`, you can allow traffic on port 8844 with the following command:
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 8844 proto tcp
+sudo ufw reload
+```
+Make sure that the IP range matches your local network configuration.It is dangerous if it is exposed as a public IP, so please set authentication restrictions yourself.  
   
 ### Prerequisites  
   
