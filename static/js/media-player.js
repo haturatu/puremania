@@ -10,7 +10,7 @@ class MediaPlayer {
         this.isMinimized = false;
         this.isVideoModalOpen = false;
         this.videoModal = null;
-        this.modalVideoElement = null; // モーダル内のvideo要素を追跡
+        this.modalVideoElement = null;
         
         this.init();
     }
@@ -36,9 +36,24 @@ class MediaPlayer {
             
             <div class="media-controls">
                 <div class="control-buttons">
-                    <button class="control-btn prev">⏮</button>
-                    <button class="control-btn play-pause">⏯</button>
-                    <button class="control-btn next">⏭</button>
+                    <button class="control-btn prev" title="Previous">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.588a.7.7 0 0 1-1.05.606L4 8.149V13.3a.7.7 0 0 1-1.4 0V1.7a.7.7 0 0 1 .7-.7z"/>
+                        </svg>
+                    </button>
+                    <button class="control-btn play-pause main-play" title="Play/Pause">
+                        <svg class="play-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="m7.05 3.606 13.49 7.788a.7.7 0 0 1 0 1.212L7.05 20.394A.7.7 0 0 1 6 19.788V4.212a.7.7 0 0 1 1.05-.606z"/>
+                        </svg>
+                        <svg class="pause-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+                            <path d="M5.7 3a.7.7 0 0 0-.7.7v16.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm10 0a.7.7 0 0 0-.7.7v16.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-2.6z"/>
+                        </svg>
+                    </button>
+                    <button class="control-btn next" title="Next">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.588a.7.7 0 0 0 1.05.606L12 8.149V13.3a.7.7 0 0 0 1.4 0V1.7a.7.7 0 0 0-.7-.7z"/>
+                        </svg>
+                    </button>
                 </div>
                 
                 <div class="progress-container">
@@ -52,21 +67,61 @@ class MediaPlayer {
             </div>
             
             <div class="media-volume">
-                <button class="volume-btn">🔊</button>
+                <button class="volume-btn" title="Mute/Unmute">
+                    <svg class="volume-high" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M9.741.85a.8.8 0 0 1 .375.65v13a.8.8 0 0 1-1.125.73L6.295 14.03H4.09a1.1 1.1 0 0 1-1.1-1.1V3.07a1.1 1.1 0 0 1 1.1-1.1h2.205L9.001.77a.8.8 0 0 1 .74.08z"/>
+                        <path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"/>
+                        <path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.48 5.48 0 0 1 11.025 8a5.48 5.48 0 0 1-1.61 3.89l.706.706z"/>
+                    </svg>
+                    <svg class="volume-medium" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: none;">
+                        <path d="M9.741.85a.8.8 0 0 1 .375.65v13a.8.8 0 0 1-1.125.73L6.295 14.03H4.09a1.1 1.1 0 0 1-1.1-1.1V3.07a1.1 1.1 0 0 1 1.1-1.1h2.205L9.001.77a.8.8 0 0 1 .74.08z"/>
+                        <path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.48 5.48 0 0 1 11.025 8a5.48 5.48 0 0 1-1.61 3.89l.706.706z"/>
+                    </svg>
+                    <svg class="volume-low" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: none;">
+                        <path d="M9.741.85a.8.8 0 0 1 .375.65v13a.8.8 0 0 1-1.125.73L6.295 14.03H4.09a1.1 1.1 0 0 1-1.1-1.1V3.07a1.1 1.1 0 0 1 1.1-1.1h2.205L9.001.77a.8.8 0 0 1 .74.08z"/>
+                    </svg>
+                    <svg class="volume-mute" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: none;">
+                        <path d="M6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06z"/>
+                        <path d="m9 4 6 6-6 6V4z"/>
+                    </svg>
+                </button>
                 <div class="volume-slider">
                     <div class="volume-filled"></div>
                     <div class="volume-handle"></div>
                 </div>
-                <button class="minimize-btn" title="Minimize">➖</button>
-                <button class="close-btn" title="Close">✕</button>
+                <button class="minimize-btn" title="Minimize">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M4 8a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7A.5.5 0 0 1 4 8z"/>
+                    </svg>
+                </button>
+                <button class="close-btn" title="Close">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                    </svg>
+                </button>
             </div>
             
             <div class="media-minimized-info">
                 <div class="minimized-title"></div>
                 <div class="minimized-controls">
-                    <button class="control-btn play-pause">⏯</button>
-                    <button class="minimize-btn" title="Maximize">➕</button>
-                    <button class="close-btn" title="Close">✕</button>
+                    <button class="control-btn play-pause" title="Play/Pause">
+                        <svg class="play-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="m7.05 3.606 13.49 7.788a.7.7 0 0 1 0 1.212L7.05 20.394A.7.7 0 0 1 6 19.788V4.212a.7.7 0 0 1 1.05-.606z"/>
+                        </svg>
+                        <svg class="pause-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+                            <path d="M5.7 3a.7.7 0 0 0-.7.7v16.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7H5.7zm10 0a.7.7 0 0 0-.7.7v16.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V3.7a.7.7 0 0 0-.7-.7h-2.6z"/>
+                        </svg>
+                    </button>
+                    <button class="minimize-btn" title="Maximize">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                        </svg>
+                    </button>
+                    <button class="close-btn" title="Close">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                        </svg>
+                    </button>
                 </div>
             </div>
             
@@ -125,7 +180,6 @@ class MediaPlayer {
             });
         });
         
-        // オーディオ要素のイベント
         this.audioElement.addEventListener('timeupdate', () => {
             if (this.currentMedia && this.currentMedia.type === 'audio') {
                 this.updateProgress();
@@ -136,9 +190,7 @@ class MediaPlayer {
             this.playNext();
         });
         
-        // メインのビデオ要素のイベント（使用されない）
         this.videoElement.addEventListener('timeupdate', () => {
-            // モーダルが開いていない場合のみ進捗を更新
             if (this.currentMedia && this.currentMedia.type === 'video' && !this.isVideoModalOpen) {
                 this.updateProgress();
             }
@@ -150,7 +202,6 @@ class MediaPlayer {
     }
     
     playAudio(path) {
-        // 既に再生中の場合は停止
         this.stop();
         
         this.currentMedia = { type: 'audio', path };
@@ -167,19 +218,16 @@ class MediaPlayer {
     }
     
     playVideo(path) {
-        // 既に再生中の場合は停止
         this.stop();
         
         this.currentMedia = { type: 'video', path };
         
-        // メインのビデオ要素は使用せず、モーダル内のビデオ要素のみを使用
         this.isPlaying = true;
         
         this.updateMediaInfo(path);
         this.updatePlayButton();
         this.show();
         
-        // ビデオの場合はモーダルで表示
         this.showVideoModal();
     }
     
@@ -204,14 +252,12 @@ class MediaPlayer {
         video.src = `/api/files/download?path=${encodeURIComponent(this.currentMedia.path)}`;
         video.volume = this.volume;
         
-        // モーダル内のビデオ要素を追跡
         this.modalVideoElement = video;
         
         modal.querySelector('.modal-close').addEventListener('click', () => {
             this.closeVideoModal();
         });
         
-        // モーダル外をクリックで閉じる
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
                 this.closeVideoModal();
@@ -222,7 +268,6 @@ class MediaPlayer {
         this.videoModal = modal;
         this.isVideoModalOpen = true;
         
-        // ビデオモーダル内のビデオ要素にイベントを設定
         video.addEventListener('play', () => {
             this.isPlaying = true;
             this.updatePlayButton();
@@ -234,7 +279,6 @@ class MediaPlayer {
         });
         
         video.addEventListener('timeupdate', () => {
-            // モーダルが開いている場合のみ進捗を更新
             if (this.isVideoModalOpen) {
                 this.updateProgress();
             }
@@ -247,7 +291,6 @@ class MediaPlayer {
     
     closeVideoModal() {
         if (this.videoModal) {
-            // モーダル内のビデオを停止
             if (this.modalVideoElement) {
                 this.modalVideoElement.pause();
                 this.modalVideoElement.src = '';
@@ -279,13 +322,11 @@ class MediaPlayer {
                 console.error('Audio play error:', error);
             });
         } else if (this.currentMedia.type === 'video') {
-            // モーダルが開いている場合のみモーダル内のビデオを再生
             if (this.isVideoModalOpen && this.modalVideoElement) {
                 this.modalVideoElement.play().catch(error => {
                     console.error('Video play error:', error);
                 });
             } else {
-                // モーダルが閉じている場合は再度モーダルを開く
                 this.showVideoModal();
             }
         }
@@ -300,7 +341,6 @@ class MediaPlayer {
         if (this.currentMedia.type === 'audio') {
             this.audioElement.pause();
         } else if (this.currentMedia.type === 'video') {
-            // モーダルが開いている場合のみモーダル内のビデオを停止
             if (this.isVideoModalOpen && this.modalVideoElement) {
                 this.modalVideoElement.pause();
             }
@@ -311,19 +351,16 @@ class MediaPlayer {
     }
     
     stop() {
-        // オーディオ停止
         if (this.audioElement) {
             this.audioElement.pause();
             this.audioElement.src = '';
         }
         
-        // メインのビデオ要素停止（念のため）
         if (this.videoElement) {
             this.videoElement.pause();
             this.videoElement.src = '';
         }
         
-        // ビデオモーダルも閉じる
         this.closeVideoModal();
         
         this.currentMedia = null;
@@ -341,7 +378,7 @@ class MediaPlayer {
             if (this.isVideoModalOpen && this.modalVideoElement) {
                 mediaElement = this.modalVideoElement;
             } else {
-                return; // モーダルが開いていない場合はシークできない
+                return;
             }
         }
         
@@ -361,7 +398,6 @@ class MediaPlayer {
             this.videoElement.volume = this.volume;
         }
         
-        // モーダル内のビデオ要素の音量も更新
         if (this.isVideoModalOpen && this.modalVideoElement) {
             this.modalVideoElement.volume = this.volume;
         }
@@ -451,10 +487,16 @@ class MediaPlayer {
     }
     
     updatePlayButton() {
-        const buttons = this.playerElement.querySelectorAll('.play-pause');
-        buttons.forEach(button => {
-            button.textContent = this.isPlaying ? '⏸' : '⏯';
-        });
+        const playIcons = this.playerElement.querySelectorAll('.play-icon');
+        const pauseIcons = this.playerElement.querySelectorAll('.pause-icon');
+        
+        if (this.isPlaying) {
+            playIcons.forEach(icon => icon.style.display = 'none');
+            pauseIcons.forEach(icon => icon.style.display = 'block');
+        } else {
+            playIcons.forEach(icon => icon.style.display = 'block');
+            pauseIcons.forEach(icon => icon.style.display = 'none');
+        }
     }
     
     updateVolumeUI() {
@@ -463,17 +505,24 @@ class MediaPlayer {
             volumeFilled.style.width = `${this.volume * 100}%`;
         }
         
-        const volumeBtn = this.playerElement.querySelector('.volume-btn');
-        if (volumeBtn) {
-            if (this.volume === 0) {
-                volumeBtn.textContent = '🔇';
-            } else if (this.volume < 0.3) {
-                volumeBtn.textContent = '🔈';
-            } else if (this.volume < 0.7) {
-                volumeBtn.textContent = '🔉';
-            } else {
-                volumeBtn.textContent = '🔊';
-            }
+        const volumeHigh = this.playerElement.querySelector('.volume-high');
+        const volumeMedium = this.playerElement.querySelector('.volume-medium');
+        const volumeLow = this.playerElement.querySelector('.volume-low');
+        const volumeMute = this.playerElement.querySelector('.volume-mute');
+        
+        volumeHigh.style.display = 'none';
+        volumeMedium.style.display = 'none';
+        volumeLow.style.display = 'none';
+        volumeMute.style.display = 'none';
+        
+        if (this.volume === 0) {
+            volumeMute.style.display = 'block';
+        } else if (this.volume < 0.3) {
+            volumeLow.style.display = 'block';
+        } else if (this.volume < 0.7) {
+            volumeMedium.style.display = 'block';
+        } else {
+            volumeHigh.style.display = 'block';
         }
     }
     
