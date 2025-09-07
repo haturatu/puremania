@@ -442,6 +442,8 @@ class FileManagerApp {
         try {
             this.showLoading();
             
+            console.log('Loading files for path:', path);
+            
             const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
             const result = await response.json();
             
@@ -449,16 +451,26 @@ class FileManagerApp {
                 this.currentPath = path;
                 this.displayFiles(result.data);
                 this.updateBreadcrumb(path);
+                
+                // ルーターのパスを更新（履歴には追加しない）
                 this.router.updatePath(path);
                 this.updateToolbar();
+                
+                console.log('Files loaded successfully for path:', path);
             } else {
                 this.showToast('Error', result.message, 'error');
                 this.displayFiles([]);
+                
+                // エラーの場合もパスを更新
+                this.router.updatePath(path);
             }
         } catch (error) {
             this.showToast('Error', 'Failed to load files', 'error');
             console.error('Error loading files:', error);
             this.displayFiles([]);
+            
+            // エラーの場合もパスを更新
+            this.router.updatePath(path);
         } finally {
             this.hideLoading();
         }
