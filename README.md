@@ -32,7 +32,7 @@ Make sure that the IP range matches your local network configuration. It is dang
 Also, please note that if the API endpoint `/api/` is publicly accessible, it will allow file operations. Therefore, make sure to run Pure Mania under a proper dedicated Linux user, or if possible, in an isolated environment, and enforce correct permission and security management.  
 In general, as long as proper user and permission management is in place, any file operations will be restricted within the Linux permissions, which should prevent worst-case scenarios.  
 
-** PLEASE ** do not run this application as the root user.
+**PLEASE** do not run this application as the root user.
   
 ### Prerequisites  
   
