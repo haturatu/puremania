@@ -661,41 +661,70 @@ body {
   height: 100%;
 }
 
+.image-viewer .modal {
+    max-width: 95vw;
+    max-height: 95vh;
+    width: auto;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.image-viewer .modal-header {
+    flex-shrink: 0;
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+}
+
+.image-viewer .modal-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+}
+
 .image-container {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background-color: var(--bg-primary);
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    background-color: var(--bg-primary);
+    position: relative;
+    min-height: 300px;
 }
 
 .image-container img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
 }
 
 .image-nav {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  background-color: rgba(0, 0, 0, 0.5);
-  border: none;
-  color: white;
-  font-size: 2rem;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.3s ease;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    z-index: 10;
 }
 
 .image-nav:hover {
-  background-color: rgba(0, 255, 65, 0.7);
+    background-color: rgba(0, 255, 65, 0.7);
+    transform: translateY(-50%) scale(1.1);
 }
 
 .image-nav.prev {
@@ -707,9 +736,27 @@ body {
 }
 
 .image-info {
-  padding: 15px 20px;
-  background-color: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+    padding: 15px 20px;
+    background-color: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.image-name {
+    font-weight: bold;
+    color: var(--accent-primary);
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.image-size {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
 }
 
 /* Loading Animation */
@@ -1010,6 +1057,84 @@ body {
   color: var(--accent-primary);
 }
 
+.image-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.image-container::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+.image-container::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.image-container::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-primary);
+}
+
+/* ズーム機能のためのスタイル */
+.image-zoom-controls {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    gap: 10px;
+    z-index: 10;
+}
+
+.zoom-btn {
+    background-color: rgba(0, 0, 0, 0.7);
+    border: none;
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    transition: all 0.3s ease;
+}
+
+.zoom-btn:hover {
+    background-color: rgba(0, 255, 65, 0.7);
+    transform: scale(1.1);
+}
+
+/* フルスクリーンモード */
+.image-viewer.fullscreen .modal {
+    max-width: 100vw;
+    max-height: 100vh;
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    border-radius: 0;
+}
+
+.image-viewer.fullscreen .modal-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+}
+
+.image-viewer.fullscreen .modal-body {
+    padding-top: 60px; /* ヘッダーの高さ分 */
+}
+
+.image-viewer.fullscreen .image-info {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+}
+
 @keyframes slideIn {
   from {
     transform: translateX(100%);
@@ -1023,6 +1148,37 @@ body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
+    .image-viewer .modal {
+        max-width: 100vw;
+        max-height: 100vh;
+        margin: 0;
+        border-radius: 0;
+    }
+    
+    .image-nav {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
+    
+    .image-nav.prev {
+        left: 10px;
+    }
+    
+    .image-nav.next {
+        right: 10px;
+    }
+    
+    .image-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .image-name {
+        max-width: 100%;
+    }
+
   .app-container {
     flex-direction: column;
   }
