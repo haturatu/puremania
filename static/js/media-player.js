@@ -9,6 +9,8 @@ class MediaPlayer {
         this.currentIndex = 0;
         this.isMinimized = false;
         this.isVideoModalOpen = false;
+        this.videoModal = null;
+        this.modalVideoElement = null; // モーダル内のvideo要素を追跡
         
         this.init();
     }
@@ -123,16 +125,23 @@ class MediaPlayer {
             });
         });
         
+        // オーディオ要素のイベント
         this.audioElement.addEventListener('timeupdate', () => {
-            this.updateProgress();
+            if (this.currentMedia && this.currentMedia.type === 'audio') {
+                this.updateProgress();
+            }
         });
         
         this.audioElement.addEventListener('ended', () => {
             this.playNext();
         });
         
+        // メインのビデオ要素のイベント（使用されない）
         this.videoElement.addEventListener('timeupdate', () => {
-            this.updateProgress();
+            // モーダルが開いていない場合のみ進捗を更新
+            if (this.currentMedia && this.currentMedia.type === 'video' && !this.isVideoModalOpen) {
+                this.updateProgress();
+            }
         });
         
         this.videoElement.addEventListener('ended', () => {
@@ -163,15 +172,7 @@ class MediaPlayer {
         
         this.currentMedia = { type: 'video', path };
         
-        // ビデオモーダルが既に開いている場合は閉じる
-        if (this.isVideoModalOpen) {
-            this.closeVideoModal();
-        }
-        
-        this.videoElement.src = `/api/files/download?path=${encodeURIComponent(path)}`;
-        this.videoElement.play().catch(error => {
-            console.error('Video play error:', error);
-        });
+        // メインのビデオ要素は使用せず、モーダル内のビデオ要素のみを使用
         this.isPlaying = true;
         
         this.updateMediaInfo(path);
@@ -200,8 +201,11 @@ class MediaPlayer {
         `;
         
         const video = modal.querySelector('video');
-        video.src = this.videoElement.src;
+        video.src = `/api/files/download?path=${encodeURIComponent(this.currentMedia.path)}`;
         video.volume = this.volume;
+        
+        // モーダル内のビデオ要素を追跡
+        this.modalVideoElement = video;
         
         modal.querySelector('.modal-close').addEventListener('click', () => {
             this.closeVideoModal();
@@ -218,7 +222,7 @@ class MediaPlayer {
         this.videoModal = modal;
         this.isVideoModalOpen = true;
         
-        // ビデオモーダル内のビデオ要素にもイベントを設定
+        // ビデオモーダル内のビデオ要素にイベントを設定
         video.addEventListener('play', () => {
             this.isPlaying = true;
             this.updatePlayButton();
@@ -230,17 +234,31 @@ class MediaPlayer {
         });
         
         video.addEventListener('timeupdate', () => {
-            this.updateProgress();
+            // モーダルが開いている場合のみ進捗を更新
+            if (this.isVideoModalOpen) {
+                this.updateProgress();
+            }
+        });
+        
+        video.addEventListener('ended', () => {
+            this.playNext();
         });
     }
     
     closeVideoModal() {
         if (this.videoModal) {
+            // モーダル内のビデオを停止
+            if (this.modalVideoElement) {
+                this.modalVideoElement.pause();
+                this.modalVideoElement.src = '';
+            }
             this.videoModal.remove();
             this.videoModal = null;
+            this.modalVideoElement = null;
         }
         this.isVideoModalOpen = false;
-        this.pause();
+        this.isPlaying = false;
+        this.updatePlayButton();
     }
     
     togglePlayPause() {
@@ -260,16 +278,15 @@ class MediaPlayer {
             this.audioElement.play().catch(error => {
                 console.error('Audio play error:', error);
             });
-        } else {
-            if (this.isVideoModalOpen && this.videoModal) {
-                const video = this.videoModal.querySelector('video');
-                video.play().catch(error => {
+        } else if (this.currentMedia.type === 'video') {
+            // モーダルが開いている場合のみモーダル内のビデオを再生
+            if (this.isVideoModalOpen && this.modalVideoElement) {
+                this.modalVideoElement.play().catch(error => {
                     console.error('Video play error:', error);
                 });
             } else {
-                this.videoElement.play().catch(error => {
-                    console.error('Video play error:', error);
-                });
+                // モーダルが閉じている場合は再度モーダルを開く
+                this.showVideoModal();
             }
         }
         
@@ -282,12 +299,10 @@ class MediaPlayer {
         
         if (this.currentMedia.type === 'audio') {
             this.audioElement.pause();
-        } else {
-            if (this.isVideoModalOpen && this.videoModal) {
-                const video = this.videoModal.querySelector('video');
-                video.pause();
-            } else {
-                this.videoElement.pause();
+        } else if (this.currentMedia.type === 'video') {
+            // モーダルが開いている場合のみモーダル内のビデオを停止
+            if (this.isVideoModalOpen && this.modalVideoElement) {
+                this.modalVideoElement.pause();
             }
         }
         
@@ -296,15 +311,22 @@ class MediaPlayer {
     }
     
     stop() {
-        this.audioElement.pause();
-        this.audioElement.src = '';
+        // オーディオ停止
+        if (this.audioElement) {
+            this.audioElement.pause();
+            this.audioElement.src = '';
+        }
         
-        this.videoElement.pause();
-        this.videoElement.src = '';
+        // メインのビデオ要素停止（念のため）
+        if (this.videoElement) {
+            this.videoElement.pause();
+            this.videoElement.src = '';
+        }
         
         // ビデオモーダルも閉じる
         this.closeVideoModal();
         
+        this.currentMedia = null;
         this.isPlaying = false;
         this.updatePlayButton();
     }
@@ -315,26 +337,33 @@ class MediaPlayer {
         let mediaElement;
         if (this.currentMedia.type === 'audio') {
             mediaElement = this.audioElement;
-        } else {
-            if (this.isVideoModalOpen && this.videoModal) {
-                mediaElement = this.videoModal.querySelector('video');
+        } else if (this.currentMedia.type === 'video') {
+            if (this.isVideoModalOpen && this.modalVideoElement) {
+                mediaElement = this.modalVideoElement;
             } else {
-                mediaElement = this.videoElement;
+                return; // モーダルが開いていない場合はシークできない
             }
         }
         
-        mediaElement.currentTime = percent * mediaElement.duration;
+        if (mediaElement && !isNaN(mediaElement.duration)) {
+            mediaElement.currentTime = percent * mediaElement.duration;
+        }
     }
     
     setVolume(volume) {
         this.volume = Math.max(0, Math.min(1, volume));
         
-        this.audioElement.volume = this.volume;
-        this.videoElement.volume = this.volume;
+        if (this.audioElement) {
+            this.audioElement.volume = this.volume;
+        }
         
-        if (this.isVideoModalOpen && this.videoModal) {
-            const video = this.videoModal.querySelector('video');
-            video.volume = this.volume;
+        if (this.videoElement) {
+            this.videoElement.volume = this.volume;
+        }
+        
+        // モーダル内のビデオ要素の音量も更新
+        if (this.isVideoModalOpen && this.modalVideoElement) {
+            this.modalVideoElement.volume = this.volume;
         }
         
         this.updateVolumeUI();
@@ -398,23 +427,16 @@ class MediaPlayer {
     updateProgress() {
         if (!this.currentMedia) return;
         
-        let mediaElement;
-        let currentTime;
-        let duration;
+        let currentTime = 0;
+        let duration = 0;
         
         if (this.currentMedia.type === 'audio') {
-            mediaElement = this.audioElement;
-            currentTime = mediaElement.currentTime;
-            duration = mediaElement.duration || 0;
-        } else {
-            if (this.isVideoModalOpen && this.videoModal) {
-                mediaElement = this.videoModal.querySelector('video');
-                currentTime = mediaElement.currentTime;
-                duration = mediaElement.duration || 0;
-            } else {
-                mediaElement = this.videoElement;
-                currentTime = mediaElement.currentTime;
-                duration = mediaElement.duration || 0;
+            currentTime = this.audioElement.currentTime || 0;
+            duration = this.audioElement.duration || 0;
+        } else if (this.currentMedia.type === 'video') {
+            if (this.isVideoModalOpen && this.modalVideoElement) {
+                currentTime = this.modalVideoElement.currentTime || 0;
+                duration = this.modalVideoElement.duration || 0;
             }
         }
         
