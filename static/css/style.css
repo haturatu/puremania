@@ -534,7 +534,7 @@ body {
   padding: 15px 20px;
   z-index: 900;
   display: flex;
-  align-items: center;
+  /* align-items: center; */
   justify-content: space-between;
 }
 
@@ -632,6 +632,7 @@ body {
   width: 0%;
 }
 
+/*
 .progress-handle {
   width: 12px;
   height: 12px;
@@ -643,6 +644,7 @@ body {
   opacity: 0;
   transition: opacity 0.3s ease;
 }
+*/
 
 .progress-bar:hover .progress-handle {
   opacity: 1;
