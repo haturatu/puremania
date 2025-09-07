@@ -629,6 +629,33 @@ class FileManagerApp {
         container.appendChild(table);
     }
 
+    renderMasonryView(files, container) {
+        const imageFiles = files.filter(file => 
+            file.mime_type && file.mime_type.startsWith('image/')
+        );
+        
+        const otherFiles = files.filter(file => 
+            !file.mime_type || !file.mime_type.startsWith('image/')
+        );
+        
+        const viewToggle = document.createElement('div');
+        viewToggle.className = 'view-toggle';
+        viewToggle.innerHTML = `
+            <button class="view-toggle-btn" data-view="grid">Grid</button>
+            <button class="view-toggle-btn" data-view="list">List</button>
+            <button class="view-toggle-btn active" data-view="masonry">Masonry</button>
+        `;
+        container.appendChild(viewToggle);
+        
+        if (imageFiles.length > 0) {
+            this.renderImageSection(imageFiles, container);
+        }
+        
+        if (otherFiles.length > 0) {
+            this.renderOtherFilesSection(otherFiles, container);
+        }
+    }
+
     createTableRow(file) {
         const tr = document.createElement('tr');
         tr.className = 'file-item';
