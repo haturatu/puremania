@@ -6,27 +6,35 @@ class MediaPlayer {
         this.isPlaying = false;
         this.volume = 0.7;
         this.playlist = [];
+        this.originalPlaylist = []; // 元の順序を保持
         this.currentIndex = 0;
         this.isMinimized = false;
         this.isVideoModalOpen = false;
         this.videoModal = null;
         this.modalVideoElement = null;
-        
+        this.previousVolume = this.volume; // ミュート用の前回の音量
+
+        // 再生モード設定
+        this.playbackMode = {
+            repeat: 'off', // 'off', 'playlist', 'one'
+            shuffle: false
+        };
+
+        this.currentDirectory = ''; // 現在のディレクトリを追跡
+
+        // アルバムアートのキャッシュ
         this.albumArtCache = new Map();
-        this.metadataCache = new Map();
-        this.isAutoPlay = true; // 自動再生フラグ
-        this.isShuffleMode = false; // シャッフルモード
-        this.isRepeatMode = 'off'; // 'off', 'one', 'all'
-        
+
         this.init();
     }
-    
+
     init() {
         this.createPlayerElement();
         this.bindEvents();
         this.hide();
+        this.updateModeUI();
     }
-    
+
     createPlayerElement() {
         const player = document.createElement('div');
         player.className = 'media-player';
@@ -43,7 +51,7 @@ class MediaPlayer {
             
             <div class="media-controls">
                 <div class="control-buttons">
-                    <button class="control-btn shuffle" title="Shuffle">
+                    <button class="control-btn shuffle-btn" title="Shuffle">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M0 3.5A.5.5 0 0 1 .5 3H1c2.202 0 3.827 1.24 4.874 2.418.49.552.865 1.102 1.126 1.532.26-.43.636-.98 1.126-1.532C9.173 4.24 10.798 3 13 3v1c-1.798 0-3.173 1.01-4.126 2.082A9.624 9.624 0 0 0 7.556 8a9.624 9.624 0 0 0 1.317 1.918C9.828 10.99 11.204 12 13 12v1c-2.202 0-3.827-1.24-4.874-2.418A10.595 10.595 0 0 1 7 9.05c-.26.43-.636.98-1.126 1.532C4.827 11.76 3.202 13 1 13H.5a.5.5 0 0 1 0-1H1c1.798 0 3.173-1.01 4.126-2.082A9.624 9.624 0 0 0 6.444 8a9.624 9.624 0 0 0-1.317-1.918C4.172 5.01 2.796 4 1 4H.5a.5.5 0 0 1-.5-.5z"/>
                             <path d="M13 5.466V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192zm0 9v-3.932a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192z"/>
@@ -67,7 +75,7 @@ class MediaPlayer {
                             <path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.588a.7.7 0 0 0 1.05.606L12 8.149V13.3a.7.7 0 0 0 1.4 0V1.7a.7.7 0 0 0-.7-.7z"/>
                         </svg>
                     </button>
-                    <button class="control-btn repeat" title="Repeat">
+                    <button class="control-btn repeat-btn" title="Repeat">
                         <svg class="repeat-off" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M11 5.466V4H5a4 4 0 0 0-3.584 5.777.5.5 0 1 1-.896.446A5 5 0 0 1 5 3h6V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192Zm3.81.086a.5.5 0 0 1 .67.225A5 5 0 0 1 11 13H5v1.466a.25.25 0 0 1-.41.192l-2.36-1.966a.25.25 0 0 1 0-.384l2.36-1.966a.25.25 0 0 1 .41.192V12h6a4 4 0 0 0 3.585-5.777.5.5 0 0 1 .225-.67Z"/>
                         </svg>
@@ -164,171 +172,208 @@ class MediaPlayer {
         this.videoElement.volume = this.volume;
         this.updateVolumeUI();
     }
-    
+   
     bindEvents() {
-        // 既存のイベントバインディング
-        this.playerElement.querySelector('.play-pause').addEventListener('click', () => {
-            this.togglePlayPause();
-        });
-        
-        this.playerElement.querySelector('.prev').addEventListener('click', () => {
-            this.playPrevious();
-        });
-        
-        this.playerElement.querySelector('.next').addEventListener('click', () => {
-            this.playNext();
-        });
-        
-        // 新しいコントロールボタン
-        this.playerElement.querySelector('.shuffle').addEventListener('click', () => {
-            this.toggleShuffle();
-        });
-        
-        this.playerElement.querySelector('.repeat').addEventListener('click', () => {
-            this.toggleRepeat();
-        });
-        
+        // Play/Pause buttons (both main and minimized)
+        const playPauseBtns = this.playerElement.querySelectorAll('.play-pause');
+        const prevBtn = this.playerElement.querySelector('.prev');
+        const nextBtn = this.playerElement.querySelector('.next');
+        const repeatBtn = this.playerElement.querySelector('.repeat-btn');
+        const shuffleBtn = this.playerElement.querySelector('.shuffle-btn');
         const progressBar = this.playerElement.querySelector('.progress-bar');
-        progressBar.addEventListener('click', (e) => {
-            const rect = progressBar.getBoundingClientRect();
-            const percent = (e.clientX - rect.left) / rect.width;
-            this.seekTo(percent);
-        });
-        
         const volumeSlider = this.playerElement.querySelector('.volume-slider');
-        volumeSlider.addEventListener('click', (e) => {
-            const rect = volumeSlider.getBoundingClientRect();
-            const volume = (e.clientX - rect.left) / rect.width;
-            this.setVolume(volume);
+        const volumeBtn = this.playerElement.querySelector('.volume-btn');
+        const minimizeBtns = this.playerElement.querySelectorAll('.minimize-btn');
+        const closeBtns = this.playerElement.querySelectorAll('.close-btn');
+        
+        playPauseBtns.forEach(btn => {
+            if (btn) btn.addEventListener('click', () => this.togglePlayPause());
         });
         
-        this.playerElement.querySelector('.volume-btn').addEventListener('click', () => {
-            this.toggleMute();
-        });
+        if (prevBtn) prevBtn.addEventListener('click', () => this.playPrevious());
+        if (nextBtn) nextBtn.addEventListener('click', () => this.playNext());
+        if (repeatBtn) repeatBtn.addEventListener('click', () => this.toggleRepeatMode());
+        if (shuffleBtn) shuffleBtn.addEventListener('click', () => this.toggleShuffleMode());
         
-        this.playerElement.querySelectorAll('.minimize-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                this.toggleMinimize();
+        if (progressBar) {
+            progressBar.addEventListener('click', (e) => {
+                const rect = progressBar.getBoundingClientRect();
+                const percent = (e.clientX - rect.left) / rect.width;
+                this.seekTo(percent);
             });
+        }
+        
+        if (volumeSlider) {
+            volumeSlider.addEventListener('click', (e) => {
+                const rect = volumeSlider.getBoundingClientRect();
+                const volume = (e.clientX - rect.left) / rect.width;
+                this.setVolume(volume);
+            });
+        }
+        
+        if (volumeBtn) volumeBtn.addEventListener('click', () => this.toggleMute());
+        
+        minimizeBtns.forEach(btn => {
+            if (btn) btn.addEventListener('click', () => this.toggleMinimize());
         });
         
-        this.playerElement.querySelectorAll('.close-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
+        closeBtns.forEach(btn => {
+            if (btn) btn.addEventListener('click', () => {
                 this.stop();
                 this.hide();
             });
         });
         
-        // オーディオイベント
-        this.audioElement.addEventListener('timeupdate', () => {
-            if (this.currentMedia && this.currentMedia.type === 'audio') {
-                this.updateProgress();
-            }
-        });
+        // Audio events
+        if (this.audioElement) {
+            this.audioElement.addEventListener('timeupdate', () => {
+                if (this.currentMedia && this.currentMedia.type === 'audio') {
+                    this.updateProgress();
+                }
+            });
+            
+            this.audioElement.addEventListener('ended', () => {
+                this.handleMediaEnded();
+            });
+        }
         
-        this.audioElement.addEventListener('ended', () => {
-            this.handleMediaEnded();
-        });
-        
-        this.audioElement.addEventListener('loadedmetadata', () => {
-            if (this.currentMedia && this.currentMedia.type === 'audio') {
-                this.loadMetadata();
-            }
-        });
-        
-        // ビデオイベント
-        this.videoElement.addEventListener('timeupdate', () => {
-            if (this.currentMedia && this.currentMedia.type === 'video' && !this.isVideoModalOpen) {
-                this.updateProgress();
-            }
-        });
-        
-        this.videoElement.addEventListener('ended', () => {
-            this.handleMediaEnded();
-        });
+        // Video events
+        if (this.videoElement) {
+            this.videoElement.addEventListener('timeupdate', () => {
+                if (this.currentMedia && this.currentMedia.type === 'video' && !this.isVideoModalOpen) {
+                    this.updateProgress();
+                }
+            });
+            
+            this.videoElement.addEventListener('ended', () => {
+                this.handleMediaEnded();
+            });
+        }
     }
-    
-    // メディア終了時の処理
+
     handleMediaEnded() {
-        if (this.isRepeatMode === 'one') {
-            // 1曲リピート
-            this.seekTo(0);
-            this.play();
-        } else if (this.isAutoPlay) {
-            // 自動再生で次の曲へ
-            if (this.isRepeatMode === 'all' || this.hasNextTrack()) {
-                this.playNext();
-            } else {
-                // プレイリスト終了
-                this.isPlaying = false;
-                this.updatePlayButton();
-            }
-        } else {
-            // 自動再生無効
-            this.isPlaying = false;
-            this.updatePlayButton();
-        }
-    }
-    
-    // 次のトラックがあるかチェック
-    hasNextTrack() {
-        if (this.isShuffleMode) {
-            return this.playlist.length > 1;
-        }
-        return this.currentIndex < this.playlist.length - 1;
-    }
-    
-    // シャッフル切り替え
-    toggleShuffle() {
-        this.isShuffleMode = !this.isShuffleMode;
-        const shuffleBtn = this.playerElement.querySelector('.shuffle');
-        if (this.isShuffleMode) {
-            shuffleBtn.classList.add('active');
-        } else {
-            shuffleBtn.classList.remove('active');
-        }
-    }
-    
-    // リピート切り替え
-    toggleRepeat() {
-        const modes = ['off', 'all', 'one'];
-        const currentIndex = modes.indexOf(this.isRepeatMode);
-        this.isRepeatMode = modes[(currentIndex + 1) % modes.length];
-        
-        const repeatBtn = this.playerElement.querySelector('.repeat');
-        const repeatOff = repeatBtn.querySelector('.repeat-off');
-        const repeatAll = repeatBtn.querySelector('.repeat-all');
-        const repeatOne = repeatBtn.querySelector('.repeat-one');
-        
-        // すべて非表示
-        repeatOff.style.display = 'none';
-        repeatAll.style.display = 'none';
-        repeatOne.style.display = 'none';
-        
-        // 現在のモードを表示
-        switch (this.isRepeatMode) {
-            case 'off':
-                repeatOff.style.display = 'block';
-                repeatBtn.classList.remove('active');
-                break;
-            case 'all':
-                repeatAll.style.display = 'block';
-                repeatBtn.classList.add('active');
-                break;
+        switch (this.playbackMode.repeat) {
             case 'one':
-                repeatOne.style.display = 'block';
-                repeatBtn.classList.add('active');
+                // 同じ曲を繰り返し再生
+                this.seekTo(0);
+                this.play();
+                break;
+            case 'playlist':
+                // プレイリストをループ再生
+                this.playNext();
+                break;
+            case 'off':
+            default:
+                // 次の曲を再生（最後の曲なら停止）
+                if (this.currentIndex < this.playlist.length - 1) {
+                    this.playNext();
+                } else {
+                    this.pause();
+                    this.isPlaying = false;
+                    this.updatePlayButton();
+                }
                 break;
         }
     }
     
-    // ミュート切り替え
-    toggleMute() {
-        if (this.volume > 0) {
-            this.previousVolume = this.volume;
-            this.setVolume(0);
-        } else {
-            this.setVolume(this.previousVolume || 0.7);
+    toggleRepeatMode() {
+        const modes = ['off', 'playlist', 'one'];
+        const currentIndex = modes.indexOf(this.playbackMode.repeat);
+        this.playbackMode.repeat = modes[(currentIndex + 1) % modes.length];
+        this.updateModeUI();
+    }
+    
+    toggleShuffleMode() {
+        this.playbackMode.shuffle = !this.playbackMode.shuffle;
+        
+        if (this.playbackMode.shuffle && this.playlist.length > 0) {
+            // シャッフル有効：元の順序を保存してシャッフル
+            if (this.originalPlaylist.length === 0) {
+                this.originalPlaylist = [...this.playlist];
+            }
+            this.shufflePlaylist();
+        } else if (!this.playbackMode.shuffle && this.originalPlaylist.length > 0) {
+            // シャッフル無効：元の順序に戻す
+            const currentMediaPath = this.currentMedia?.path;
+            this.playlist = [...this.originalPlaylist];
+            this.originalPlaylist = [];
+            
+            // 現在の曲のインデックスを更新
+            if (currentMediaPath) {
+                this.currentIndex = this.playlist.findIndex(item => item.path === currentMediaPath);
+                if (this.currentIndex === -1) this.currentIndex = 0;
+            }
+        }
+        
+        this.updateModeUI();
+    }
+    
+    shufflePlaylist() {
+        if (this.playlist.length <= 1) return;
+        
+        const currentMediaPath = this.currentMedia?.path;
+        
+        // 現在の曲を先頭に保持
+        if (currentMediaPath) {
+            const currentIndex = this.playlist.findIndex(item => item.path === currentMediaPath);
+            if (currentIndex > 0) {
+                const [currentItem] = this.playlist.splice(currentIndex, 1);
+                this.playlist.unshift(currentItem);
+            }
+        }
+        
+        // 残りの曲をシャッフル（Fisher-Yatesアルゴリズム）
+        for (let i = this.playlist.length - 1; i > 1; i--) {
+            const j = Math.floor(Math.random() * (i - 1)) + 1;
+            [this.playlist[i], this.playlist[j]] = [this.playlist[j], this.playlist[i]];
+        }
+        
+        this.currentIndex = 0;
+    }
+
+    updateModeUI() {
+        // リピートモードのUI更新
+        const repeatOff = this.playerElement.querySelector('.repeat-off');
+        const repeatAll = this.playerElement.querySelector('.repeat-all');
+        const repeatOne = this.playerElement.querySelector('.repeat-one');
+        const repeatBtn = this.playerElement.querySelector('.repeat-btn');
+        
+        // シャッフルモードのUI更新
+        const shuffleBtn = this.playerElement.querySelector('.shuffle-btn');
+        
+        // リピートUI要素の更新
+        if (repeatOff && repeatAll && repeatOne && repeatBtn) {
+            repeatOff.style.display = 'none';
+            repeatAll.style.display = 'none';
+            repeatOne.style.display = 'none';
+            
+            // リピートボタンの色と状態表示を更新
+            switch (this.playbackMode.repeat) {
+                case 'playlist':
+                    repeatAll.style.display = 'block';
+                    repeatBtn.setAttribute('title', 'Repeat: Playlist');
+                    repeatBtn.style.color = '#4A90E2';
+                    break;
+                case 'one':
+                    repeatOne.style.display = 'block';
+                    repeatBtn.setAttribute('title', 'Repeat: One');
+                    repeatBtn.style.color = '#4A90E2';
+                    break;
+                case 'off':
+                default:
+                    repeatOff.style.display = 'block';
+                    repeatBtn.setAttribute('title', 'Repeat: Off');
+                    repeatBtn.style.color = '';
+                    break;
+            }
+        }
+        
+        // シャッフルUI要素の更新
+        if (shuffleBtn) {
+            shuffleBtn.setAttribute('title', 
+                this.playbackMode.shuffle ? 'Shuffle: On' : 'Shuffle: Off'
+            );
+            shuffleBtn.style.color = this.playbackMode.shuffle ? '#4A90E2' : '';
         }
     }
     
@@ -360,16 +405,7 @@ class MediaPlayer {
                 }
             }
             
-            // 2. MP3ファイルからID3タグのアルバムアートを抽出
-            if (filePath.toLowerCase().endsWith('.mp3')) {
-                // const albumArt = await this.extractAlbumArtFromMP3(filePath);
-                if (albumArt) {
-                    this.albumArtCache.set(filePath, albumArt);
-                    return albumArt;
-                }
-            }
-            
-            // 3. デフォルト画像を返す
+            // 2. デフォルト画像を返す
             const defaultArt = this.getDefaultAlbumArt();
             this.albumArtCache.set(filePath, defaultArt);
             return defaultArt;
@@ -382,74 +418,9 @@ class MediaPlayer {
         }
     }
     
-    // MP3ファイルからアルバムアートを抽出
-    //async extractAlbumArtFromMP3(filePath) {
-    //    try {
-            // TODO: ID3タグを解析してアルバムアートを返すAPI
-    //        const response = await fetch(`/api/files/metadata?path=${encodeURIComponent(filePath)}`);
-    //        if (response.ok) {
-    //            const metadata = await response.json();
-    //            if (metadata.albumArt) {
-    //                return `data:${metadata.albumArt.mimeType};base64,${metadata.albumArt.data}`;
-    //            }
-    //        }
-    //    } catch (error) {
-    //        console.error('ID3タグ解析エラー:', error);
-    //    }
-    //    return null;
-    //}
-    
     // デフォルトアルバムアート
     getDefaultAlbumArt() {
         return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBmaWxsPSIjNjY2IiBkPSJNMjU2IDhDMTE5IDggOCAxMTkgOCAyNTZzMTExIDI0OCAyNDggMjQ4IDI0OC0xMTEgMjQ4LTI0OFMzOTMgOCAyNTYgOHptMCA0NDhjLTExMC41IDAtMjAwLTg5LjUtMjAwLTIwMFMxNDUuNSA1NiAyNTYgNTZzMjAwIDg5LjUgMjAwIDIwMC04OS41IDIwMC0yMDAgMjAweiIvPjxwYXRoIGZpbGw9IiM2NjYiIGQ9Ik0yNjQgNDE2Yy0zMS42IDAtNDcuOC0yMS44LTQ3LjgtNDEuOGMwLTE1LjIgMTEuNC0zMC44IDM1LjQtNDUuMmw0LjItMi40di03My4yYzAtNS44LTQuOC0xMC42LTEwLjYtMTAuNmgtNS4yYy01LjggMC0xMC42IDQuOC0xMC42IDEwLjZ2NDQuNGwtMy4xLTEuNmMtMjQuOS0xMy45LTQwLjEtMjYuOC00MC4xLTQ2LjcgMC0zMC44IDI4LjUtNDYuNyA1Ni4xLTQ2LjcgMzEuNiAwIDQ3LjggMjEuOCA0Ny44IDQxLjggMCAxNS4yLTExLjQgMzAuOC0zNS40IDQ1LjJsLTQuMiAyLjR2NzMuMmMwIDUuOCA0LjggMTAuNiAxMC42IDEwLjZoNS4yYzUuOCAwIDEwLjYtNC44IDEwLjYtMTAuNnYtNDQuNGwyLjQgMS4yYzI1LjYgMTQuNCA0MS44IDI3LjYgNDEuOCA0Ny44IDAgMzEuNi0yOS42IDQ3LjgtNTcuOCA0Ny44eiIvPjwvc3ZnPg==';
-    }
-    
-    // メタデータを読み込む
-    async loadMetadata() {
-        if (!this.currentMedia) return;
-        
-        try {
-            // キャッシュチェック
-            if (this.metadataCache.has(this.currentMedia.path)) {
-                const metadata = this.metadataCache.get(this.currentMedia.path);
-                this.updateMediaInfoWithMetadata(metadata);
-                return;
-            }
-            
-            // サーバーからメタデータを取得
-            const response = await fetch(`/api/files/metadata?path=${encodeURIComponent(this.currentMedia.path)}`);
-            if (response.ok) {
-                const metadata = await response.json();
-                this.metadataCache.set(this.currentMedia.path, metadata);
-                this.updateMediaInfoWithMetadata(metadata);
-            } else {
-                // サーバーからメタデータが取得できない場合はファイル名から推測
-                this.updateMediaInfoFromFilename();
-            }
-        } catch (error) {
-            console.error('メタデータ読み込みエラー:', error);
-            this.updateMediaInfoFromFilename();
-        }
-    }
-    
-    // メタデータでUI更新
-    updateMediaInfoWithMetadata(metadata) {
-        const titleElement = this.playerElement.querySelector('.media-title');
-        const artistElement = this.playerElement.querySelector('.media-artist');
-        const albumElement = this.playerElement.querySelector('.media-album');
-        const minimizedTitle = this.playerElement.querySelector('.minimized-title');
-        
-        const title = metadata.title || this.currentMedia.path.split('/').pop();
-        const artist = metadata.artist || this.getFolderName(this.currentMedia.path);
-        const album = metadata.album || '';
-        
-        titleElement.textContent = title;
-        artistElement.textContent = artist;
-        albumElement.textContent = album;
-        minimizedTitle.textContent = `${artist} - ${title}`;
-        
-        // アルバムアートを非同期で更新
-        this.updateAlbumArt();
     }
     
     // ファイル名からメタデータを推測
@@ -491,9 +462,17 @@ class MediaPlayer {
             thumbnailElement.src = this.getDefaultAlbumArt();
         }
     }
-    
+
     playAudio(path) {
         this.stop();
+        
+        const directory = path.split('/').slice(0, -1).join('/');
+        
+        // ディレクトリが変更された場合はプレイリストを再生成（オーディオのみ）
+        if (directory !== this.currentDirectory) {
+            this.currentDirectory = directory;
+            this.createAutoPlaylist(path, 'audio');
+        }
         
         this.currentMedia = { type: 'audio', path };
         
@@ -507,9 +486,15 @@ class MediaPlayer {
         this.updatePlayButton();
         this.show();
     }
-    
+   
     playVideo(path) {
         this.stop();
+        
+        // 動画ファイルの場合はプレイリストを作成しない
+        this.playlist = [];
+        this.originalPlaylist = [];
+        this.currentIndex = 0;
+        this.currentDirectory = '';
         
         this.currentMedia = { type: 'video', path };
         
@@ -522,6 +507,43 @@ class MediaPlayer {
         this.showVideoModal();
     }
     
+    createAutoPlaylist(currentPath = null, mediaType = 'audio') {
+        // 現在のディレクトリのメディアファイルを収集
+        const fileItems = document.querySelectorAll('.file-item, .masonry-item');
+        const mediaFiles = [];
+        
+        fileItems.forEach(item => {
+            const mimeType = item.dataset.mimeType || '';
+            const path = item.dataset.path;
+            
+            // オーディオファイルのみを含める
+            if (mimeType.startsWith('audio/')) {
+                mediaFiles.push({
+                    path: path,
+                    mime_type: mimeType,
+                    name: item.querySelector('.file-name, .masonry-name')?.textContent || path.split('/').pop()
+                });
+            }
+        });
+        
+        this.playlist = mediaFiles;
+        this.originalPlaylist = []; // 元のプレイリストをリセット
+        
+        // シャッフルモードが有効な場合はシャッフル
+        if (this.playbackMode.shuffle && this.playlist.length > 0) {
+            this.originalPlaylist = [...this.playlist];
+            this.shufflePlaylist();
+        }
+        
+        // 現在再生中のファイルのインデックスを設定
+        if (currentPath) {
+            this.currentIndex = this.playlist.findIndex(file => file.path === currentPath);
+            if (this.currentIndex === -1) this.currentIndex = 0;
+        } else {
+            this.currentIndex = 0;
+        }
+    }
+   
     showVideoModal() {
         if (this.isVideoModalOpen) return;
         
@@ -696,60 +718,67 @@ class MediaPlayer {
         this.updateVolumeUI();
     }
     
+    toggleMute() {
+        if (this.volume > 0) {
+            this.previousVolume = this.volume;
+            this.setVolume(0);
+        } else {
+            this.setVolume(this.previousVolume || 0.7);
+        }
+    }
+    
     playPrevious() {
         if (this.playlist.length === 0) return;
         
-        if (this.isShuffleMode) {
-            this.currentIndex = Math.floor(Math.random() * this.playlist.length);
+        if (this.currentIndex > 0) {
+            this.currentIndex--;
+        } else if (this.playbackMode.repeat === 'playlist') {
+            // ループモードの場合、最後の曲に移動
+            this.currentIndex = this.playlist.length - 1;
         } else {
-            this.currentIndex = (this.currentIndex - 1 + this.playlist.length) % this.playlist.length;
+            // 最初の曲で停止
+            return;
         }
         
         this.playMediaFromPlaylist();
     }
-    
+   
     playNext() {
         if (this.playlist.length === 0) return;
         
-        if (this.isShuffleMode) {
-            // シャッフルモードではランダムに選択
-            let nextIndex;
-            do {
-                nextIndex = Math.floor(Math.random() * this.playlist.length);
-            } while (nextIndex === this.currentIndex && this.playlist.length > 1);
-            this.currentIndex = nextIndex;
+        if (this.currentIndex < this.playlist.length - 1) {
+            this.currentIndex++;
+        } else if (this.playbackMode.repeat === 'playlist') {
+            // ループモードの場合、最初の曲に移動
+            this.currentIndex = 0;
         } else {
-            this.currentIndex = (this.currentIndex + 1) % this.playlist.length;
+            // 最後の曲で停止
+            return;
         }
         
         this.playMediaFromPlaylist();
     }
-    
+   
     playMediaFromPlaylist() {
+        if (this.playlist.length === 0 || this.currentIndex >= this.playlist.length) return;
+        
         const media = this.playlist[this.currentIndex];
         
         if (media.mime_type.startsWith('audio/')) {
             this.playAudio(media.path);
-        } else if (media.mime_type.startsWith('video/')) {
-            this.playVideo(media.path);
         }
     }
-    
-    setPlaylist(files, startIndex = 0) {
+   
+    setPlaylist(files) {
         this.playlist = files.filter(file => 
-            file.mime_type && (file.mime_type.startsWith('audio/') || file.mime_type.startsWith('video/'))
+            file.mime_type && file.mime_type.startsWith('audio/')
         );
         
-        this.currentIndex = startIndex;
-    }
-    
-    // 自動再生の設定
-    setAutoPlay(enabled) {
-        this.isAutoPlay = enabled;
+        this.currentIndex = 0;
     }
     
     updateMediaInfo(path) {
-        // 基本情報の設定（後でメタデータで上書きされる）
+        // 基本情報の設定
         this.currentMedia = { ...this.currentMedia, path };
         this.updateMediaInfoFromFilename();
     }
@@ -856,7 +885,6 @@ class MediaPlayer {
         });
         
         this.albumArtCache.clear();
-        this.metadataCache.clear();
     }
     
     // プレイヤー破棄
@@ -867,6 +895,19 @@ class MediaPlayer {
         if (this.playerElement) {
             this.playerElement.remove();
         }
+    }
+    
+    // 自動再生を有効/無効にするメソッド
+    setAutoPlay(enabled) {
+        this.autoPlayNext = enabled;
+    }
+    
+    // 現在のプレイリストをクリアするメソッド
+    clearPlaylist() {
+        this.playlist = [];
+        this.originalPlaylist = [];
+        this.currentIndex = 0;
+        this.currentDirectory = '';
     }
 }
 
