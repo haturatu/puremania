@@ -251,7 +251,6 @@ class FileManagerApp {
         this.searchHandler = new SearchHandler();
         this.editor = new FileEditor();
         this.progressManager = new ProgressManager();
-        this.currentContextMenu = null;
         
         this.init();
     }
@@ -275,8 +274,6 @@ class FileManagerApp {
         document.addEventListener('click', (e) => this.handleClick(e));
         document.addEventListener('dblclick', (e) => this.handleDoubleClick(e));
         document.addEventListener('keydown', (e) => this.handleKeydown(e));
-        document.addEventListener('contextmenu', (e) => this.handleContextMenu(e));
-        document.addEventListener('click', () => this.hideContextMenu());
 
         const fileBrowser = document.querySelector('.file-browser');
         if (fileBrowser) {
@@ -305,12 +302,12 @@ class FileManagerApp {
             return;
         }
         
-        // File action button clicks (修正)
+        // File action button clicks
         if (e.target.matches('.file-action-btn, .file-action-btn *')) {
             const button = e.target.closest('.file-action-btn');
             const fileItem = e.target.closest('.file-item, .masonry-item');
             if (button && fileItem) {
-                e.stopPropagation(); // 親要素へのイベント伝播を防止
+                e.stopPropagation();
                 this.handleFileActionClick(button, fileItem);
                 return;
             }
@@ -342,9 +339,7 @@ class FileManagerApp {
         const path = fileItem.dataset.path;
         const isDir = fileItem.dataset.isDir === 'true';
         
-        // クリックされたボタンの特定のアクションを判定
         if (button.classList.contains('file-action-btn')) {
-            // data-action属性からアクションを取得
             const action = button.dataset.action;
             
             switch (action) {
@@ -357,18 +352,29 @@ class FileManagerApp {
                 case 'edit':
                     this.editFile(path);
                     break;
+                case 'rename':
+                    this.renameFile(path);
+                    break;
+                case 'move':
+                    this.moveFile(path);
+                    break;
                 default:
-                    // 互換性のため、従来のテキストベースの判定も残す
                     const textAction = button.textContent.trim();
                     switch (textAction) {
-                        case '↓':
+                        case '⬇':
                             this.downloadFile(path);
                             break;
-                        case '×':
+                        case '🗑':
                             this.deleteFile(path);
                             break;
-                        case '✎':
+                        case '✏':
                             this.editFile(path);
+                            break;
+                        case '✏️':
+                            this.renameFile(path);
+                            break;
+                        case '➡️':
+                            this.moveFile(path);
                             break;
                     }
             }
@@ -420,25 +426,18 @@ class FileManagerApp {
                     e.shiftKey ? this.createNewFolder() : this.createNewFile();
                 }
             },
-            'u': () => e.ctrlKey && (e.preventDefault(), this.showUploadDialog())
+            'u': () => e.ctrlKey && (e.preventDefault(), this.showUploadDialog()),
+            'F2': () => {
+                if (this.selectedFiles.size === 1) {
+                    const path = Array.from(this.selectedFiles)[0];
+                    this.renameFile(path);
+                }
+            }
         };
 
         const action = keyActions[e.key];
         if (action) {
             action();
-        }
-    }
-
-    handleContextMenu(e) {
-        if (e.target.matches('.file-item, .masonry-item') || e.target.closest('.file-item, .masonry-item')) {
-            e.preventDefault();
-            const fileItem = e.target.closest('.file-item, .masonry-item');
-            if (fileItem) {
-                this.showContextMenu(e, fileItem);
-            }
-        } else if (e.target.matches('.file-browser')) {
-            e.preventDefault();
-            this.showBrowserContextMenu(e);
         }
     }
 
@@ -474,7 +473,6 @@ class FileManagerApp {
                 this.displayFiles(result.data);
                 this.updateBreadcrumb(path);
                 
-                // ルーターのパスを更新（履歴には追加しない）
                 this.router.updatePath(path);
                 this.updateToolbar();
                 
@@ -483,7 +481,6 @@ class FileManagerApp {
                 this.showToast('Error', result.message, 'error');
                 this.displayFiles([]);
                 
-                // エラーの場合もパスを更新
                 this.router.updatePath(path);
             }
         } catch (error) {
@@ -491,7 +488,6 @@ class FileManagerApp {
             console.error('Error loading files:', error);
             this.displayFiles([]);
             
-            // エラーの場合もパスを更新
             this.router.updatePath(path);
         } finally {
             this.hideLoading();
@@ -532,11 +528,11 @@ class FileManagerApp {
         const toolbar = document.createElement('div');
         toolbar.className = 'toolbar';
         toolbar.innerHTML = `
-            <button class="toolbar-btn" data-action="upload" title="Upload (Ctrl+U)">📤 Upload</button>
+            <button class="toolbar-btn" data-action="upload" title="Upload (Ctrl+U)">📂 Upload</button>
             <button class="toolbar-btn" data-action="new-folder" title="New Folder (Ctrl+Shift+N)">📁 New Folder</button>
             <button class="toolbar-btn" data-action="new-file" title="New File (Ctrl+N)">📄 New File</button>
-            <button class="toolbar-btn" data-action="download" title="Download Selected" ${this.selectedFiles.size === 0 ? 'disabled' : ''}>📥 Download</button>
-            <button class="toolbar-btn" data-action="move" title="Move Selected" ${this.selectedFiles.size === 0 ? 'disabled' : ''}>↗️ Move</button>
+            <button class="toolbar-btn" data-action="download" title="Download Selected" ${this.selectedFiles.size === 0 ? 'disabled' : ''}>⬇ Download</button>
+            <button class="toolbar-btn" data-action="move" title="Move Selected" ${this.selectedFiles.size === 0 ? 'disabled' : ''}>➡️ Move</button>
             <button class="toolbar-btn" data-action="delete" title="Delete Selected (Delete)" ${this.selectedFiles.size === 0 ? 'disabled' : ''}>🗑️ Delete</button>
         `;
         container.appendChild(toolbar);
@@ -673,10 +669,16 @@ class FileManagerApp {
             <td>${file.is_dir ? 'Folder' : (file.mime_type || 'Unknown')}</td>
             <td>
                 ${!file.is_dir ? `
-                    <button class="file-action-btn download-btn" data-action="download" title="Download">↓</button>
-                    ${file.is_editable ? '<button class="file-action-btn edit-btn" data-action="edit" title="Edit">✎</button>' : ''}
-                    <button class="file-action-btn delete-btn" data-action="delete" title="Delete">×</button>
-                ` : ''}
+                    <button class="file-action-btn" data-action="download" title="Download">⬇</button>
+                    ${file.is_editable ? '<button class="file-action-btn" data-action="edit" title="Edit">✏</button>' : ''}
+                    <button class="file-action-btn" data-action="rename" title="Rename (F2)">✏️</button>
+                    <button class="file-action-btn" data-action="move" title="Move">➡️</button>
+                    <button class="file-action-btn" data-action="delete" title="Delete">🗑</button>
+                ` : `
+                    <button class="file-action-btn" data-action="rename" title="Rename (F2)">✏️</button>
+                    <button class="file-action-btn" data-action="move" title="Move">➡️</button>
+                    <button class="file-action-btn" data-action="delete" title="Delete">🗑</button>
+                `}
             </td>
         `;
         
@@ -701,8 +703,10 @@ class FileManagerApp {
                 <div class="masonry-size">${this.formatFileSize(file.size)}</div>
             </div>
             <div class="file-actions">
-                <button class="file-action-btn download-btn" data-action="download" title="Download">↓</button>
-                <button class="file-action-btn delete-btn" data-action="delete" title="Delete">×</button>
+                <button class="file-action-btn" data-action="download" title="Download">⬇</button>
+                <button class="file-action-btn" data-action="rename" title="Rename">✏️</button>
+                <button class="file-action-btn" data-action="move" title="Move">➡️</button>
+                <button class="file-action-btn" data-action="delete" title="Delete">🗑</button>
             </div>
         `;
         
@@ -760,40 +764,20 @@ class FileManagerApp {
             </div>
             <div class="file-actions">
                 ${!file.is_dir ? `
-                    <button class="file-action-btn download-btn" data-action="download" title="Download">↓</button>
-                    ${file.is_editable ? '<button class="file-action-btn edit-btn" data-action="edit" title="Edit">✎</button>' : ''}
-                    <button class="file-action-btn delete-btn" data-action="delete" title="Delete">×</button>
-                ` : ''}
+                    <button class="file-action-btn" data-action="download" title="Download">⬇</button>
+                    ${file.is_editable ? '<button class="file-action-btn" data-action="edit" title="Edit">✏</button>' : ''}
+                    <button class="file-action-btn" data-action="rename" title="Rename (F2)">✏️</button>
+                    <button class="file-action-btn" data-action="move" title="Move">➡️</button>
+                    <button class="file-action-btn" data-action="delete" title="Delete">🗑</button>
+                ` : `
+                    <button class="file-action-btn" data-action="rename" title="Rename (F2)">✏️</button>
+                    <button class="file-action-btn" data-action="move" title="Move">➡️</button>
+                    <button class="file-action-btn" data-action="delete" title="Delete">🗑</button>
+                `}
             </div>
         `;
         
         return fileItem;
-    }
-
-    createMasonryItem(file) {
-        const item = document.createElement('div');
-        item.className = 'masonry-item';
-        this.setFileItemData(item, file);
-        
-        item.style.gridRowEnd = 'span 20';
-        
-        item.innerHTML = `
-            <img src="/api/files/content?path=${encodeURIComponent(file.path)}" 
-                 alt="${file.name}" 
-                 class="masonry-image"
-                 onload="this.closest('.masonry-item').style.gridRowEnd = 'span ' + Math.round((this.naturalHeight / this.naturalWidth) * 20)"
-                 onerror="this.style.display='none'">
-            <div class="masonry-info">
-                <div class="masonry-name">${file.name}</div>
-                <div class="masonry-size">${this.formatFileSize(file.size)}</div>
-            </div>
-            <div class="file-actions">
-                <button class="file-action-btn" title="Download">↓</button>
-                <button class="file-action-btn" title="Delete">×</button>
-            </div>
-        `;
-        
-        return item;
     }
 
     setFileItemData(element, file) {
@@ -1015,132 +999,6 @@ class FileManagerApp {
     setViewMode(mode) {
         this.viewMode = mode;
         this.loadFiles(this.currentPath);
-    }
-
-    showContextMenu(e, fileItem) {
-        this.hideContextMenu();
-        
-        const contextMenu = document.createElement('div');
-        contextMenu.className = 'context-menu';
-        contextMenu.style.left = e.pageX + 'px';
-        contextMenu.style.top = e.pageY + 'px';
-        
-        const path = fileItem.dataset.path;
-        const isDir = fileItem.dataset.isDir === 'true';
-        
-        contextMenu.innerHTML = `
-            <div class="context-menu-item" data-action="download">
-                <span>📥 Download</span>
-            </div>
-            ${!isDir && this.isEditableFile(path) ? `
-                <div class="context-menu-item" data-action="edit">
-                    <span>✎ Edit</span>
-                </div>
-            ` : ''}
-            <div class="context-menu-item" data-action="rename">
-                <span>📝 Rename</span>
-            </div>
-            <div class="context-menu-item" data-action="move">
-                <span>↗ Move</span>
-            </div>
-            <div class="context-menu-divider"></div>
-            <div class="context-menu-item" data-action="delete">
-                <span>🗑 Delete</span>
-            </div>
-        `;
-        
-        document.body.appendChild(contextMenu);
-        
-        contextMenu.querySelectorAll('.context-menu-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const action = item.dataset.action;
-                this.handleContextMenuAction(action, path, isDir);
-                this.hideContextMenu();
-            });
-        });
-        
-        this.currentContextMenu = contextMenu;
-    }
-
-    showBrowserContextMenu(e) {
-        this.hideContextMenu();
-        
-        const contextMenu = document.createElement('div');
-        contextMenu.className = 'context-menu';
-        contextMenu.style.left = e.pageX + 'px';
-        contextMenu.style.top = e.pageY + 'px';
-        
-        contextMenu.innerHTML = `
-            <div class="context-menu-item" data-action="new-folder">
-                <span>📁 New Folder</span>
-            </div>
-            <div class="context-menu-item" data-action="new-file">
-                <span>📄 New File</span>
-            </div>
-            <div class="context-menu-item" data-action="upload">
-                <span>📤 Upload</span>
-            </div>
-            <div class="context-menu-divider"></div>
-            <div class="context-menu-item" data-action="refresh">
-                <span>🔄 Refresh</span>
-            </div>
-        `;
-        
-        document.body.appendChild(contextMenu);
-        
-        contextMenu.querySelectorAll('.context-menu-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const action = item.dataset.action;
-                this.handleBrowserContextMenuAction(action);
-                this.hideContextMenu();
-            });
-        });
-        
-        this.currentContextMenu = contextMenu;
-    }
-
-    hideContextMenu() {
-        if (this.currentContextMenu) {
-            this.currentContextMenu.remove();
-            this.currentContextMenu = null;
-        }
-    }
-
-    handleContextMenuAction(action, path, isDir) {
-        switch (action) {
-            case 'download':
-                this.downloadFile(path);
-                break;
-            case 'edit':
-                this.editFile(path);
-                break;
-            case 'rename':
-                this.renameFile(path);
-                break;
-            case 'move':
-                this.moveFile(path);
-                break;
-            case 'delete':
-                this.deleteFile(path);
-                break;
-        }
-    }
-
-    handleBrowserContextMenuAction(action) {
-        switch (action) {
-            case 'new-folder':
-                this.createNewFolder();
-                break;
-            case 'new-file':
-                this.createNewFile();
-                break;
-            case 'upload':
-                this.showUploadDialog();
-                break;
-            case 'refresh':
-                this.loadFiles(this.currentPath);
-                break;
-        }
     }
 
     // Utility methods
