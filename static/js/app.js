@@ -1259,10 +1259,27 @@ class FileManagerApp {
         const input = document.createElement('input');
         input.type = 'file';
         input.multiple = true;
+        
+        // フォルダー選択を可能にする（各ブラウザ対応）
+        if ('webkitdirectory' in input || 'directory' in input || 'mozdirectory' in input) {
+            input.setAttribute('webkitdirectory', '');
+            input.setAttribute('directory', '');
+            input.setAttribute('mozdirectory', '');
+        }
+        
         input.addEventListener('change', (e) => {
-            this.handleFileUpload(e.target.files);
+            if (e.target.files && e.target.files.length > 0) {
+                console.log('Selected files:', Array.from(e.target.files).map(f => ({
+                    name: f.name,
+                    webkitRelativePath: f.webkitRelativePath,
+                    size: f.size
+                })));
+                
+                this.handleFileUpload(e.target.files);
+            }
             e.target.value = '';
         });
+        
         input.click();
     }
 
@@ -1287,8 +1304,40 @@ class FileManagerApp {
             const formData = new FormData();
             formData.append('path', this.currentPath);
             
+            // フォルダー構造を解析
+            const folderStructure = this.analyzeFolderStructure(files);
+            console.log('Folder structure:', folderStructure);
+            
+            // フォルダー名を取得（最初のファイルの相対パスから）
+            let folderName = '';
+            if (files[0].webkitRelativePath) {
+                const firstSlash = files[0].webkitRelativePath.indexOf('/');
+                if (firstSlash !== -1) {
+                    folderName = files[0].webkitRelativePath.split('/')[0];
+                    console.log('Detected folder name:', folderName);
+                }
+            }
+            
+            // フォルダー構造を維持してファイルを追加
             for (let i = 0; i < files.length; i++) {
-                formData.append('file', files[i]);
+                const file = files[i];
+                
+                // フォルダー構造を保持するための相対パスを取得
+                let relativePath = file.name;
+                
+                // webkitRelativePath が利用可能な場合（フォルダーアップロード時）
+                if (file.webkitRelativePath) {
+                    relativePath = file.webkitRelativePath;
+                    console.log('Uploading with full relative path:', relativePath);
+                }
+                
+                // FormDataに追加（フルパスを維持）
+                formData.append('file', file, relativePath);
+            }
+            
+            // フォルダー名も送信（バックエンドで使用）
+            if (folderName) {
+                formData.append('folderName', folderName);
             }
             
             const xhr = new XMLHttpRequest();
@@ -1312,6 +1361,8 @@ class FileManagerApp {
                         const response = JSON.parse(xhr.responseText);
                         const successMessage = `Uploaded ${response.successful} file(s) successfully`;
                         
+                        console.log('Upload response:', response);
+                        
                         if (response.failed_count > 0) {
                             this.showToast('Upload Complete', 
                                 `${successMessage}, ${response.failed_count} failed`, 
@@ -1333,11 +1384,12 @@ class FileManagerApp {
                         this.showToast('Error', 'Failed to parse response', 'error');
                     }
                 } else {
-                    this.showToast('Error', 'Upload failed', 'error');
+                    this.showToast('Error', 'Upload failed: ' + xhr.statusText, 'error');
                 }
             });
             
-            xhr.addEventListener('error', () => {
+            xhr.addEventListener('error', (e) => {
+                console.error('Upload error:', e);
                 this.showToast('Error', 'Network error occurred', 'error');
             });
             
@@ -1358,23 +1410,9 @@ class FileManagerApp {
             
             xhr.send(formData);
             
-            await new Promise((resolve, reject) => {
-                xhr.addEventListener('load', resolve);
-                xhr.addEventListener('error', reject);
-                xhr.addEventListener('abort', resolve);
-            });
-            
         } catch (error) {
-            this.showToast('Error', 'Failed to upload files', 'error');
+            this.showToast('Error', 'Failed to upload files: ' + error.message, 'error');
             console.error('Error uploading files:', error);
-        } finally {
-            setTimeout(() => {
-                this.progressManager.hide();
-                const uploadArea = document.querySelector('.upload-area');
-                if (uploadArea) {
-                    uploadArea.classList.remove('uploading');
-                }
-            }, 1000);
         }
     }
 
@@ -1385,12 +1423,44 @@ class FileManagerApp {
             uploadArea.classList.remove('dragover');
         }
         
-        const files = e.dataTransfer.files;
-        if (files && files.length > 0) {
+        const items = e.dataTransfer.items;
+        const files = [];
+        
+        // ドロップされたアイテムを処理
+        if (items && items.length > 0) {
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.kind === 'file') {
+                    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+                    if (entry && entry.isDirectory) {
+                        // ディレクトリの場合は警告を表示
+                        this.showToast('Info', 'Please use folder selection dialog for folders', 'info');
+                        return;
+                    } else {
+                        // ファイルの場合は追加
+                        const file = item.getAsFile();
+                        if (file) {
+                            files.push(file);
+                        }
+                    }
+                }
+            }
+        } else {
+            // 従来のファイル処理
+            const fileList = e.dataTransfer.files;
+            if (fileList && fileList.length > 0) {
+                for (let i = 0; i < fileList.length; i++) {
+                    files.push(fileList[i]);
+                }
+            }
+        }
+        
+        if (files.length > 0) {
             this.handleFileUpload(files);
         }
     }
-    
+
+   
     async downloadSelected() {
         if (this.selectedFiles.size === 0) return;
         

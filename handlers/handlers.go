@@ -238,6 +238,13 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if err := r.ParseMultipartForm(h.config.MaxFileSize << 20); err != nil {
 		h.respondError(w, "File is too large", http.StatusBadRequest)
 		return
@@ -247,6 +254,8 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		path = "/"
 	}
+
+	folderName := r.FormValue("folderName")
 
 	fullPath, err := h.convertToPhysicalPath(path)
 	if err != nil {
@@ -272,22 +281,42 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 		defer file.Close()
 
-		filePath := filepath.Join(fullPath, fileHeader.Filename)
-		dst, err := os.Create(filePath)
+		// ファイル名と相対パスを取得
+		filename := fileHeader.Filename
+
+		// フォルダー構造を維持したターゲットパスを作成
+		var targetFilePath string
+
+		if folderName != "" {
+			// フォルダーごとアップロードの場合、フォルダー名を維持
+			targetFilePath = filepath.Join(fullPath, filename)
+		} else {
+			// 単一ファイルアップロードの場合、直接パスを使用
+			targetFilePath = filepath.Join(fullPath, filepath.Base(filename))
+		}
+
+		// 必要なディレクトリを作成
+		targetDir := filepath.Dir(targetFilePath)
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			failedFiles = append(failedFiles, filename)
+			continue
+		}
+
+		dst, err := os.Create(targetFilePath)
 		if err != nil {
-			failedFiles = append(failedFiles, fileHeader.Filename)
+			failedFiles = append(failedFiles, filename)
 			continue
 		}
 		defer dst.Close()
 
 		_, err = io.Copy(dst, file)
 		if err != nil {
-			failedFiles = append(failedFiles, fileHeader.Filename)
+			failedFiles = append(failedFiles, filename)
 			continue
 		}
 
 		// 仮想パスを返す
-		virtualPath := h.convertToVirtualPath(filePath)
+		virtualPath := h.convertToVirtualPath(targetFilePath)
 		uploadedFiles = append(uploadedFiles, virtualPath)
 	}
 
