@@ -1,11 +1,11 @@
 package main
 
 import (
-	"puremania/config"
-	"puremania/handlers"
 	"fmt"
 	"log"
 	"net/http"
+	"puremania/config"
+	"puremania/handlers"
 	"strings"
 	"time"
 
@@ -46,7 +46,7 @@ func main() {
 	// 静的ファイルのサービス
 	fs := http.FileServer(http.Dir("./static"))
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
-	
+
 	// その他のリクエストはindex.htmlを返す
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// APIパス以外はindex.htmlを返す
@@ -70,11 +70,15 @@ func main() {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 許可するオリジンを設定（実際のデプロイ時には適切なオリジンに変更）
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Range")
-		w.Header().Set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges")
-		
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Range, Content-Disposition, X-Requested-With")
+		w.Header().Set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges, Content-Disposition")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Max-Age", "86400") // 24時間
+
+		// Preflightリクエストへの対応
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
