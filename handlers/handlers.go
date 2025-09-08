@@ -3,20 +3,20 @@ package handlers
 import (
 	"archive/zip"
 	"encoding/json"
-	"puremania/config"
-	"puremania/models"
-	"puremania/utils"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
+	"puremania/config"
+	"puremania/models"
+	"puremania/utils"
+	"regexp"
 	"strconv"
 	"strings"
-	"time"
-	"regexp"
 	"syscall"
+	"time"
 )
 
 type Handler struct {
@@ -25,6 +25,79 @@ type Handler struct {
 
 func NewHandler(config *config.Config) *Handler {
 	return &Handler{config: config}
+}
+
+// 物理パスを仮想パスに変換するメソッド
+func (h *Handler) convertToVirtualPath(physicalPath string) string {
+	// ストレージディレクトリ内のパスの場合
+	if strings.HasPrefix(physicalPath, h.config.StorageDir) {
+		relPath, err := filepath.Rel(h.config.StorageDir, physicalPath)
+		if err == nil {
+			return "/" + filepath.ToSlash(relPath)
+		}
+	}
+
+	// マウントディレクトリの場合
+	for _, mountDir := range h.config.MountDirs {
+		if strings.HasPrefix(physicalPath, mountDir) {
+			relPath, err := filepath.Rel(mountDir, physicalPath)
+			if err == nil {
+				mountName := filepath.Base(mountDir)
+				return "/" + mountName + "/" + filepath.ToSlash(relPath)
+			}
+		}
+	}
+
+	// 変換できない場合は元のパスを返す
+	return physicalPath
+}
+
+// 仮想パスを物理パスに変換するメソッド
+func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
+	if virtualPath == "" || virtualPath == "/" {
+		return h.config.StorageDir, nil
+	}
+
+	// 特別なディレクトリのマッピング
+	specialDirs := map[string]string{
+		"/documents": filepath.Join(h.config.StorageDir, "Documents"),
+		"/images":    filepath.Join(h.config.StorageDir, "Images"),
+		"/music":     filepath.Join(h.config.StorageDir, "Music"),
+		"/videos":    filepath.Join(h.config.StorageDir, "Videos"),
+		"/downloads": filepath.Join(h.config.StorageDir, "Downloads"),
+	}
+
+	// 特別なディレクトリのチェック
+	if physicalPath, exists := specialDirs[virtualPath]; exists {
+		return physicalPath, nil
+	}
+
+	// 特別なディレクトリ内のファイル/サブディレクトリ
+	for specialPath, physicalBase := range specialDirs {
+		if strings.HasPrefix(virtualPath, specialPath+"/") {
+			relPath := strings.TrimPrefix(virtualPath, specialPath+"/")
+			return filepath.Join(physicalBase, relPath), nil
+		}
+	}
+
+	// マウントポイントのチェック
+	parts := strings.Split(strings.Trim(virtualPath, "/"), "/")
+	if len(parts) > 0 {
+		mountName := parts[0]
+		for _, mountDir := range h.config.MountDirs {
+			if filepath.Base(mountDir) == mountName {
+				if len(parts) == 1 {
+					return mountDir, nil
+				} else {
+					relPath := strings.Join(parts[1:], "/")
+					return filepath.Join(mountDir, relPath), nil
+				}
+			}
+		}
+	}
+
+	// デフォルトはストレージディレクトリ内
+	return filepath.Join(h.config.StorageDir, strings.TrimPrefix(virtualPath, "/")), nil
 }
 
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +121,7 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	if dirName, exists := specialDirs[path]; exists {
 		// 特別なディレクトリの場合はストレージディレクトリ内の対応するフォルダを表示
 		fullPath := filepath.Join(h.config.StorageDir, dirName)
-		
+
 		// ディレクトリが存在する場合のみ読み込み
 		if _, err := os.Stat(fullPath); err == nil {
 			files, err := os.ReadDir(fullPath)
@@ -62,7 +135,7 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					continue
 				}
-				
+
 				mimeType := "application/octet-stream"
 				isEditable := false
 
@@ -74,9 +147,12 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 					isEditable = utils.IsTextFile(mimeType) || utils.IsEditableByExtension(file.Name())
 				}
 
+				// 仮想パスを設定
+				virtualPath := h.convertToVirtualPath(filepath.Join(fullPath, file.Name()))
+
 				fileInfo := models.FileInfo{
 					Name:       file.Name(),
-					Path:       filepath.ToSlash(filepath.Join(path, file.Name())),
+					Path:       virtualPath,
 					Size:       info.Size(),
 					ModTime:    info.ModTime().Format(time.RFC3339),
 					IsDir:      file.IsDir(),
@@ -92,7 +168,7 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 通常のパス処理
-	fullPath, err := utils.ResolveAndValidatePath(h.config, path)
+	fullPath, err := h.convertToPhysicalPath(path)
 	if err != nil {
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
@@ -104,9 +180,10 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 		for _, mountDir := range h.config.MountDirs {
 			info, err := os.Stat(mountDir)
 			if err == nil {
+				virtualPath := h.convertToVirtualPath(mountDir)
 				fileInfos = append(fileInfos, models.FileInfo{
 					Name:    filepath.Base(mountDir),
-					Path:    "/" + filepath.Base(mountDir),
+					Path:    virtualPath,
 					Size:    info.Size(),
 					ModTime: info.ModTime().Format(time.RFC3339),
 					IsDir:   true,
@@ -129,7 +206,7 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		
+
 		mimeType := "application/octet-stream"
 		isEditable := false
 
@@ -141,9 +218,13 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 			isEditable = utils.IsTextFile(mimeType) || utils.IsEditableByExtension(file.Name())
 		}
 
+		// 仮想パスを設定
+		physicalFilepath := filepath.Join(fullPath, file.Name())
+		virtualPath := h.convertToVirtualPath(physicalFilepath)
+
 		fileInfo := models.FileInfo{
 			Name:       file.Name(),
-			Path:       filepath.ToSlash(filepath.Join(path, file.Name())),
+			Path:       virtualPath,
 			Size:       info.Size(),
 			ModTime:    info.ModTime().Format(time.RFC3339),
 			IsDir:      file.IsDir(),
@@ -157,67 +238,69 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
-    if err := r.ParseMultipartForm(h.config.MaxFileSize << 20); err != nil {
-        h.respondError(w, "File is too large", http.StatusBadRequest)
-        return
-    }
+	if err := r.ParseMultipartForm(h.config.MaxFileSize << 20); err != nil {
+		h.respondError(w, "File is too large", http.StatusBadRequest)
+		return
+	}
 
-    path := r.FormValue("path")
-    if path == "" {
-        path = "/"
-    }
+	path := r.FormValue("path")
+	if path == "" {
+		path = "/"
+	}
 
-    fullPath, err := utils.ResolveAndValidatePath(h.config, path)
-    if err != nil {
-        h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
-        return
-    }
+	fullPath, err := h.convertToPhysicalPath(path)
+	if err != nil {
+		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 
-    if err := os.MkdirAll(fullPath, 0755); err != nil {
-        h.respondError(w, "Cannot create directory", http.StatusInternalServerError)
-        return
-    }
+	if err := os.MkdirAll(fullPath, 0755); err != nil {
+		h.respondError(w, "Cannot create directory", http.StatusInternalServerError)
+		return
+	}
 
-    // 複数ファイルの処理
-    files := r.MultipartForm.File["file"]
-    uploadedFiles := make([]string, 0)
-    failedFiles := make([]string, 0)
+	// 複数ファイルの処理
+	files := r.MultipartForm.File["file"]
+	uploadedFiles := make([]string, 0)
+	failedFiles := make([]string, 0)
 
-    for _, fileHeader := range files {
-        file, err := fileHeader.Open()
-        if err != nil {
-            failedFiles = append(failedFiles, fileHeader.Filename)
-            continue
-        }
-        defer file.Close()
+	for _, fileHeader := range files {
+		file, err := fileHeader.Open()
+		if err != nil {
+			failedFiles = append(failedFiles, fileHeader.Filename)
+			continue
+		}
+		defer file.Close()
 
-        filePath := filepath.Join(fullPath, fileHeader.Filename)
-        dst, err := os.Create(filePath)
-        if err != nil {
-            failedFiles = append(failedFiles, fileHeader.Filename)
-            continue
-        }
-        defer dst.Close()
+		filePath := filepath.Join(fullPath, fileHeader.Filename)
+		dst, err := os.Create(filePath)
+		if err != nil {
+			failedFiles = append(failedFiles, fileHeader.Filename)
+			continue
+		}
+		defer dst.Close()
 
-        _, err = io.Copy(dst, file)
-        if err != nil {
-            failedFiles = append(failedFiles, fileHeader.Filename)
-            continue
-        }
+		_, err = io.Copy(dst, file)
+		if err != nil {
+			failedFiles = append(failedFiles, fileHeader.Filename)
+			continue
+		}
 
-        uploadedFiles = append(uploadedFiles, filepath.ToSlash(filepath.Join(path, fileHeader.Filename)))
-    }
+		// 仮想パスを返す
+		virtualPath := h.convertToVirtualPath(filePath)
+		uploadedFiles = append(uploadedFiles, virtualPath)
+	}
 
-    response := map[string]interface{}{
-        "message":      fmt.Sprintf("Uploaded %d file(s) successfully", len(uploadedFiles)),
-        "uploaded":     uploadedFiles,
-        "failed":       failedFiles,
-        "total":        len(files),
-        "successful":   len(uploadedFiles),
-        "failed_count": len(failedFiles),
-    }
+	response := map[string]interface{}{
+		"message":      fmt.Sprintf("Uploaded %d file(s) successfully", len(uploadedFiles)),
+		"uploaded":     uploadedFiles,
+		"failed":       failedFiles,
+		"total":        len(files),
+		"successful":   len(uploadedFiles),
+		"failed_count": len(failedFiles),
+	}
 
-    h.respondSuccess(w, response)
+	h.respondSuccess(w, response)
 }
 
 func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
@@ -227,7 +310,7 @@ func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath, err := utils.ResolveAndValidatePath(h.config, path)
+	fullPath, err := h.convertToPhysicalPath(path)
 	if err != nil {
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
@@ -306,7 +389,7 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath, err := utils.ResolveAndValidatePath(h.config, path)
+	fullPath, err := h.convertToPhysicalPath(path)
 	if err != nil {
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
@@ -379,7 +462,7 @@ func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 	failedFiles := 0
 
 	for _, userPath := range req.Paths {
-		fullPath, err := utils.ResolveAndValidatePath(h.config, userPath)
+		fullPath, err := h.convertToPhysicalPath(userPath)
 		if err != nil {
 			fmt.Printf("Skipping invalid path for zipping: %s (%v)\n", userPath, err)
 			failedFiles++
@@ -496,7 +579,7 @@ func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath, err := utils.ResolveAndValidatePath(h.config, req.Path)
+	fullPath, err := h.convertToPhysicalPath(req.Path)
 	if err != nil {
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
@@ -520,7 +603,7 @@ func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
 
 	var errors []string
 	for _, path := range req.Paths {
-		fullPath, err := utils.ResolveAndValidatePath(h.config, path)
+		fullPath, err := h.convertToPhysicalPath(path)
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("Invalid path %s: %v", path, err))
 			continue
@@ -547,12 +630,12 @@ func (h *Handler) CreateDirectory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parentPath, err := utils.ResolveAndValidatePath(h.config, req.Path)
+	parentPath, err := h.convertToPhysicalPath(req.Path)
 	if err != nil {
 		h.respondError(w, "Invalid base path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	
+
 	newDirPath := filepath.Join(parentPath, req.Name)
 	if strings.Contains(req.Name, "..") {
 		h.respondError(w, "Invalid directory name", http.StatusBadRequest)
@@ -585,13 +668,13 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sourceFullPath, err := utils.ResolveAndValidatePath(h.config, req.SourcePath)
+	sourceFullPath, err := h.convertToPhysicalPath(req.SourcePath)
 	if err != nil {
 		h.respondError(w, "Invalid source path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	targetFullPath, err := utils.ResolveAndValidatePath(h.config, req.TargetPath)
+	targetFullPath, err := h.convertToPhysicalPath(req.TargetPath)
 	if err != nil {
 		h.respondError(w, "Invalid target path: "+err.Error(), http.StatusBadRequest)
 		return
@@ -631,7 +714,7 @@ func (h *Handler) CreateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parentPath, err := utils.ResolveAndValidatePath(h.config, req.Path)
+	parentPath, err := h.convertToPhysicalPath(req.Path)
 	if err != nil {
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
@@ -666,9 +749,12 @@ func (h *Handler) CreateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 仮想パスを返す
+	virtualPath := h.convertToVirtualPath(newFilePath)
+
 	h.respondSuccess(w, map[string]string{
 		"message": "File created successfully",
-		"path":    filepath.ToSlash(filepath.Join(req.Path, req.Name)),
+		"path":    virtualPath,
 	})
 }
 
@@ -696,7 +782,7 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	basePath, err := utils.ResolveAndValidatePath(h.config, req.Path)
+	basePath, err := h.convertToPhysicalPath(req.Path)
 	if err != nil {
 		h.respondError(w, "Invalid path", http.StatusBadRequest)
 		return
@@ -757,18 +843,18 @@ func (h *Handler) searchCurrent(path string, matchFunc func(string) bool, maxRes
 				mimeType = "application/octet-stream"
 			}
 
-			relPath, err := filepath.Rel(h.config.StorageDir, filepath.Join(path, file.Name()))
-			if err != nil {
-				relPath = filepath.Join(path, file.Name())
-			}
+			fullPath := filepath.Join(path, file.Name())
+
+			// 物理パスを仮想パスに変換
+			virtualPath := h.convertToVirtualPath(fullPath)
 
 			results = append(results, models.FileInfo{
-				Name:      file.Name(),
-				Path:      filepath.ToSlash(relPath),
-				Size:      info.Size(),
-				ModTime:   info.ModTime().Format(time.RFC3339),
-				IsDir:     file.IsDir(),
-				MimeType:  mimeType,
+				Name:       file.Name(),
+				Path:       virtualPath,
+				Size:       info.Size(),
+				ModTime:    info.ModTime().Format(time.RFC3339),
+				IsDir:      file.IsDir(),
+				MimeType:   mimeType,
 				IsEditable: utils.IsTextFile(mimeType) || utils.IsEditableByExtension(file.Name()),
 			})
 
@@ -795,14 +881,12 @@ func (h *Handler) searchRecursive(path string, matchFunc func(string) bool, maxR
 				mimeType = "application/octet-stream"
 			}
 
-			relPath, err := filepath.Rel(h.config.StorageDir, filePath)
-			if err != nil {
-				relPath = filePath
-			}
+			// 物理パスを仮想パスに変換
+			virtualPath := h.convertToVirtualPath(filePath)
 
 			results = append(results, models.FileInfo{
 				Name:       info.Name(),
-				Path:       filepath.ToSlash(relPath),
+				Path:       virtualPath,
 				Size:       info.Size(),
 				ModTime:    info.ModTime().Format(time.RFC3339),
 				IsDir:      info.IsDir(),
@@ -839,9 +923,9 @@ func (h *Handler) GetStorageInfo(w http.ResponseWriter, r *http.Request) {
 	used := total - free
 
 	h.respondSuccess(w, map[string]interface{}{
-		"total": total,
-		"free":  free,
-		"used":  used,
+		"total":         total,
+		"free":          free,
+		"used":          used,
 		"usage_percent": float64(used) / float64(total) * 100,
 	})
 }
@@ -865,23 +949,22 @@ func (h *Handler) respondError(w http.ResponseWriter, message string, status int
 }
 
 func IsEditableByExtension(filename string) bool {
-    editableExts := []string{
-        ".txt", ".md", ".markdown", ".json", ".xml", ".yaml", ".yml",
-        ".html", ".htm", ".css", ".js", ".jsx", ".ts", ".tsx",
-        ".py", ".java", ".c", ".cpp", ".h", ".hpp", ".go", ".rs",
-        ".php", ".rb", ".sh", ".bash", ".zsh", ".ps1", ".bat", ".cmd",
-        ".sql", ".conf", ".config", ".ini", ".env", ".dockerfile",
-        ".gitignore", ".gitattributes", ".editorconfig", ".prettierrc",
-        ".eslintrc", ".babelrc", ".npmrc", ".yarnrc", ".toml",
-    }
+	editableExts := []string{
+		".txt", ".md", ".markdown", ".json", ".xml", ".yaml", ".yml",
+		".html", ".htm", ".css", ".js", ".jsx", ".ts", ".tsx",
+		".py", ".java", ".c", ".cpp", ".h", ".hpp", ".go", ".rs",
+		".php", ".rb", ".sh", ".bash", ".zsh", ".ps1", ".bat", ".cmd",
+		".sql", ".conf", ".config", ".ini", ".env", ".dockerfile",
+		".gitignore", ".gitattributes", ".editorconfig", ".prettierrc",
+		".eslintrc", ".babelrc", ".npmrc", ".yarnrc", ".toml",
+	}
 
-    ext := strings.ToLower(filepath.Ext(filename))
-    for _, editableExt := range editableExts {
-        if ext == editableExt {
-            return true
-        }
-    }
+	ext := strings.ToLower(filepath.Ext(filename))
+	for _, editableExt := range editableExts {
+		if ext == editableExt {
+			return true
+		}
+	}
 
-    return false
+	return false
 }
-
