@@ -12,6 +12,12 @@ class MediaPlayer {
         this.videoModal = null;
         this.modalVideoElement = null;
         
+        this.albumArtCache = new Map();
+        this.metadataCache = new Map();
+        this.isAutoPlay = true; // 自動再生フラグ
+        this.isShuffleMode = false; // シャッフルモード
+        this.isRepeatMode = 'off'; // 'off', 'one', 'all'
+        
         this.init();
     }
     
@@ -31,11 +37,18 @@ class MediaPlayer {
                 <div class="media-details">
                     <div class="media-title">No media selected</div>
                     <div class="media-artist"></div>
+                    <div class="media-album"></div>
                 </div>
             </div>
             
             <div class="media-controls">
                 <div class="control-buttons">
+                    <button class="control-btn shuffle" title="Shuffle">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M0 3.5A.5.5 0 0 1 .5 3H1c2.202 0 3.827 1.24 4.874 2.418.49.552.865 1.102 1.126 1.532.26-.43.636-.98 1.126-1.532C9.173 4.24 10.798 3 13 3v1c-1.798 0-3.173 1.01-4.126 2.082A9.624 9.624 0 0 0 7.556 8a9.624 9.624 0 0 0 1.317 1.918C9.828 10.99 11.204 12 13 12v1c-2.202 0-3.827-1.24-4.874-2.418A10.595 10.595 0 0 1 7 9.05c-.26.43-.636.98-1.126 1.532C4.827 11.76 3.202 13 1 13H.5a.5.5 0 0 1 0-1H1c1.798 0 3.173-1.01 4.126-2.082A9.624 9.624 0 0 0 6.444 8a9.624 9.624 0 0 0-1.317-1.918C4.172 5.01 2.796 4 1 4H.5a.5.5 0 0 1-.5-.5z"/>
+                            <path d="M13 5.466V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192zm0 9v-3.932a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192z"/>
+                        </svg>
+                    </button>
                     <button class="control-btn prev" title="Previous">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M3.3 1a.7.7 0 0 1 .7.7v5.15l9.95-5.744a.7.7 0 0 1 1.05.606v12.588a.7.7 0 0 1-1.05.606L4 8.149V13.3a.7.7 0 0 1-1.4 0V1.7a.7.7 0 0 1 .7-.7z"/>
@@ -52,6 +65,18 @@ class MediaPlayer {
                     <button class="control-btn next" title="Next">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M12.7 1a.7.7 0 0 0-.7.7v5.15L2.05 1.107A.7.7 0 0 0 1 1.712v12.588a.7.7 0 0 0 1.05.606L12 8.149V13.3a.7.7 0 0 0 1.4 0V1.7a.7.7 0 0 0-.7-.7z"/>
+                        </svg>
+                    </button>
+                    <button class="control-btn repeat" title="Repeat">
+                        <svg class="repeat-off" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M11 5.466V4H5a4 4 0 0 0-3.584 5.777.5.5 0 1 1-.896.446A5 5 0 0 1 5 3h6V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192Zm3.81.086a.5.5 0 0 1 .67.225A5 5 0 0 1 11 13H5v1.466a.25.25 0 0 1-.41.192l-2.36-1.966a.25.25 0 0 1 0-.384l2.36-1.966a.25.25 0 0 1 .41.192V12h6a4 4 0 0 0 3.585-5.777.5.5 0 0 1 .225-.67Z"/>
+                        </svg>
+                        <svg class="repeat-all" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: none;">
+                            <path d="M11 5.466V4H5a4 4 0 0 0-3.584 5.777.5.5 0 1 1-.896.446A5 5 0 0 1 5 3h6V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192Zm3.81.086a.5.5 0 0 1 .67.225A5 5 0 0 1 11 13H5v1.466a.25.25 0 0 1-.41.192l-2.36-1.966a.25.25 0 0 1 0-.384l2.36-1.966a.25.25 0 0 1 .41.192V12h6a4 4 0 0 0 3.585-5.777.5.5 0 0 1 .225-.67Z"/>
+                        </svg>
+                        <svg class="repeat-one" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: none;">
+                            <path d="M11 4v1.466a.25.25 0 0 0 .41.192l2.36-1.966a.25.25 0 0 0 0-.384l-2.36-1.966a.25.25 0 0 0-.41.192V3H5a5 5 0 0 0-4.48 7.223.5.5 0 0 0 .896-.446A4 4 0 0 1 5 4h6Zm4.48 1.777a.5.5 0 0 0-.896.446A4 4 0 0 1 11 12H5.001v-1.466a.25.25 0 0 0-.41-.192l-2.36 1.966a.25.25 0 0 0 0 .384l2.36 1.966a.25.25 0 0 0 .41-.192V13H11a5 5 0 0 0 4.48-7.223Z"/>
+                            <text x="8" y="11" font-size="6" text-anchor="middle" fill="currentColor">1</text>
                         </svg>
                     </button>
                 </div>
@@ -141,6 +166,7 @@ class MediaPlayer {
     }
     
     bindEvents() {
+        // 既存のイベントバインディング
         this.playerElement.querySelector('.play-pause').addEventListener('click', () => {
             this.togglePlayPause();
         });
@@ -151,6 +177,15 @@ class MediaPlayer {
         
         this.playerElement.querySelector('.next').addEventListener('click', () => {
             this.playNext();
+        });
+        
+        // 新しいコントロールボタン
+        this.playerElement.querySelector('.shuffle').addEventListener('click', () => {
+            this.toggleShuffle();
+        });
+        
+        this.playerElement.querySelector('.repeat').addEventListener('click', () => {
+            this.toggleRepeat();
         });
         
         const progressBar = this.playerElement.querySelector('.progress-bar');
@@ -167,6 +202,10 @@ class MediaPlayer {
             this.setVolume(volume);
         });
         
+        this.playerElement.querySelector('.volume-btn').addEventListener('click', () => {
+            this.toggleMute();
+        });
+        
         this.playerElement.querySelectorAll('.minimize-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 this.toggleMinimize();
@@ -180,6 +219,7 @@ class MediaPlayer {
             });
         });
         
+        // オーディオイベント
         this.audioElement.addEventListener('timeupdate', () => {
             if (this.currentMedia && this.currentMedia.type === 'audio') {
                 this.updateProgress();
@@ -187,9 +227,16 @@ class MediaPlayer {
         });
         
         this.audioElement.addEventListener('ended', () => {
-            this.playNext();
+            this.handleMediaEnded();
         });
         
+        this.audioElement.addEventListener('loadedmetadata', () => {
+            if (this.currentMedia && this.currentMedia.type === 'audio') {
+                this.loadMetadata();
+            }
+        });
+        
+        // ビデオイベント
         this.videoElement.addEventListener('timeupdate', () => {
             if (this.currentMedia && this.currentMedia.type === 'video' && !this.isVideoModalOpen) {
                 this.updateProgress();
@@ -197,8 +244,252 @@ class MediaPlayer {
         });
         
         this.videoElement.addEventListener('ended', () => {
-            this.playNext();
+            this.handleMediaEnded();
         });
+    }
+    
+    // メディア終了時の処理
+    handleMediaEnded() {
+        if (this.isRepeatMode === 'one') {
+            // 1曲リピート
+            this.seekTo(0);
+            this.play();
+        } else if (this.isAutoPlay) {
+            // 自動再生で次の曲へ
+            if (this.isRepeatMode === 'all' || this.hasNextTrack()) {
+                this.playNext();
+            } else {
+                // プレイリスト終了
+                this.isPlaying = false;
+                this.updatePlayButton();
+            }
+        } else {
+            // 自動再生無効
+            this.isPlaying = false;
+            this.updatePlayButton();
+        }
+    }
+    
+    // 次のトラックがあるかチェック
+    hasNextTrack() {
+        if (this.isShuffleMode) {
+            return this.playlist.length > 1;
+        }
+        return this.currentIndex < this.playlist.length - 1;
+    }
+    
+    // シャッフル切り替え
+    toggleShuffle() {
+        this.isShuffleMode = !this.isShuffleMode;
+        const shuffleBtn = this.playerElement.querySelector('.shuffle');
+        if (this.isShuffleMode) {
+            shuffleBtn.classList.add('active');
+        } else {
+            shuffleBtn.classList.remove('active');
+        }
+    }
+    
+    // リピート切り替え
+    toggleRepeat() {
+        const modes = ['off', 'all', 'one'];
+        const currentIndex = modes.indexOf(this.isRepeatMode);
+        this.isRepeatMode = modes[(currentIndex + 1) % modes.length];
+        
+        const repeatBtn = this.playerElement.querySelector('.repeat');
+        const repeatOff = repeatBtn.querySelector('.repeat-off');
+        const repeatAll = repeatBtn.querySelector('.repeat-all');
+        const repeatOne = repeatBtn.querySelector('.repeat-one');
+        
+        // すべて非表示
+        repeatOff.style.display = 'none';
+        repeatAll.style.display = 'none';
+        repeatOne.style.display = 'none';
+        
+        // 現在のモードを表示
+        switch (this.isRepeatMode) {
+            case 'off':
+                repeatOff.style.display = 'block';
+                repeatBtn.classList.remove('active');
+                break;
+            case 'all':
+                repeatAll.style.display = 'block';
+                repeatBtn.classList.add('active');
+                break;
+            case 'one':
+                repeatOne.style.display = 'block';
+                repeatBtn.classList.add('active');
+                break;
+        }
+    }
+    
+    // ミュート切り替え
+    toggleMute() {
+        if (this.volume > 0) {
+            this.previousVolume = this.volume;
+            this.setVolume(0);
+        } else {
+            this.setVolume(this.previousVolume || 0.7);
+        }
+    }
+    
+    // アルバムアートを取得
+    async getAlbumArt(filePath) {
+        // キャッシュチェック
+        if (this.albumArtCache.has(filePath)) {
+            return this.albumArtCache.get(filePath);
+        }
+        
+        try {
+            // 1. 同じディレクトリのカバー画像を検索
+            const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+            const coverImages = ['cover.jpg', 'cover.jpeg', 'cover.png', 'folder.jpg', 'album.jpg'];
+            
+            for (const coverName of coverImages) {
+                const coverPath = `${dirPath}/${coverName}`;
+                try {
+                    const response = await fetch(`/api/files/download?path=${encodeURIComponent(coverPath)}`);
+                    if (response.ok) {
+                        const blob = await response.blob();
+                        const imageUrl = URL.createObjectURL(blob);
+                        this.albumArtCache.set(filePath, imageUrl);
+                        return imageUrl;
+                    }
+                } catch (error) {
+                    // エラーは無視して次の画像を試す
+                    continue;
+                }
+            }
+            
+            // 2. MP3ファイルからID3タグのアルバムアートを抽出
+            if (filePath.toLowerCase().endsWith('.mp3')) {
+                // const albumArt = await this.extractAlbumArtFromMP3(filePath);
+                if (albumArt) {
+                    this.albumArtCache.set(filePath, albumArt);
+                    return albumArt;
+                }
+            }
+            
+            // 3. デフォルト画像を返す
+            const defaultArt = this.getDefaultAlbumArt();
+            this.albumArtCache.set(filePath, defaultArt);
+            return defaultArt;
+            
+        } catch (error) {
+            console.error('アルバムアート取得エラー:', error);
+            const defaultArt = this.getDefaultAlbumArt();
+            this.albumArtCache.set(filePath, defaultArt);
+            return defaultArt;
+        }
+    }
+    
+    // MP3ファイルからアルバムアートを抽出
+    //async extractAlbumArtFromMP3(filePath) {
+    //    try {
+            // TODO: ID3タグを解析してアルバムアートを返すAPI
+    //        const response = await fetch(`/api/files/metadata?path=${encodeURIComponent(filePath)}`);
+    //        if (response.ok) {
+    //            const metadata = await response.json();
+    //            if (metadata.albumArt) {
+    //                return `data:${metadata.albumArt.mimeType};base64,${metadata.albumArt.data}`;
+    //            }
+    //        }
+    //    } catch (error) {
+    //        console.error('ID3タグ解析エラー:', error);
+    //    }
+    //    return null;
+    //}
+    
+    // デフォルトアルバムアート
+    getDefaultAlbumArt() {
+        return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBmaWxsPSIjNjY2IiBkPSJNMjU2IDhDMTE5IDggOCAxMTkgOCAyNTZzMTExIDI0OCAyNDggMjQ4IDI0OC0xMTEgMjQ4LTI0OFMzOTMgOCAyNTYgOHptMCA0NDhjLTExMC41IDAtMjAwLTg5LjUtMjAwLTIwMFMxNDUuNSA1NiAyNTYgNTZzMjAwIDg5LjUgMjAwIDIwMC04OS41IDIwMC0yMDAgMjAweiIvPjxwYXRoIGZpbGw9IiM2NjYiIGQ9Ik0yNjQgNDE2Yy0zMS42IDAtNDcuOC0yMS44LTQ3LjgtNDEuOGMwLTE1LjIgMTEuNC0zMC44IDM1LjQtNDUuMmw0LjItMi40di03My4yYzAtNS44LTQuOC0xMC42LTEwLjYtMTAuNmgtNS4yYy01LjggMC0xMC42IDQuOC0xMC42IDEwLjZ2NDQuNGwtMy4xLTEuNmMtMjQuOS0xMy45LTQwLjEtMjYuOC00MC4xLTQ2LjcgMC0zMC44IDI4LjUtNDYuNyA1Ni4xLTQ2LjcgMzEuNiAwIDQ3LjggMjEuOCA0Ny44IDQxLjggMCAxNS4yLTExLjQgMzAuOC0zNS40IDQ1LjJsLTQuMiAyLjR2NzMuMmMwIDUuOCA0LjggMTAuNiAxMC42IDEwLjZoNS4yYzUuOCAwIDEwLjYtNC44IDEwLjYtMTAuNnYtNDQuNGwyLjQgMS4yYzI1LjYgMTQuNCA0MS44IDI3LjYgNDEuOCA0Ny44IDAgMzEuNi0yOS42IDQ3LjgtNTcuOCA0Ny44eiIvPjwvc3ZnPg==';
+    }
+    
+    // メタデータを読み込む
+    async loadMetadata() {
+        if (!this.currentMedia) return;
+        
+        try {
+            // キャッシュチェック
+            if (this.metadataCache.has(this.currentMedia.path)) {
+                const metadata = this.metadataCache.get(this.currentMedia.path);
+                this.updateMediaInfoWithMetadata(metadata);
+                return;
+            }
+            
+            // サーバーからメタデータを取得
+            const response = await fetch(`/api/files/metadata?path=${encodeURIComponent(this.currentMedia.path)}`);
+            if (response.ok) {
+                const metadata = await response.json();
+                this.metadataCache.set(this.currentMedia.path, metadata);
+                this.updateMediaInfoWithMetadata(metadata);
+            } else {
+                // サーバーからメタデータが取得できない場合はファイル名から推測
+                this.updateMediaInfoFromFilename();
+            }
+        } catch (error) {
+            console.error('メタデータ読み込みエラー:', error);
+            this.updateMediaInfoFromFilename();
+        }
+    }
+    
+    // メタデータでUI更新
+    updateMediaInfoWithMetadata(metadata) {
+        const titleElement = this.playerElement.querySelector('.media-title');
+        const artistElement = this.playerElement.querySelector('.media-artist');
+        const albumElement = this.playerElement.querySelector('.media-album');
+        const minimizedTitle = this.playerElement.querySelector('.minimized-title');
+        
+        const title = metadata.title || this.currentMedia.path.split('/').pop();
+        const artist = metadata.artist || this.getFolderName(this.currentMedia.path);
+        const album = metadata.album || '';
+        
+        titleElement.textContent = title;
+        artistElement.textContent = artist;
+        albumElement.textContent = album;
+        minimizedTitle.textContent = `${artist} - ${title}`;
+        
+        // アルバムアートを非同期で更新
+        this.updateAlbumArt();
+    }
+    
+    // ファイル名からメタデータを推測
+    updateMediaInfoFromFilename() {
+        const fileName = this.currentMedia.path.split('/').pop();
+        const folderName = this.getFolderName(this.currentMedia.path);
+        
+        const titleElement = this.playerElement.querySelector('.media-title');
+        const artistElement = this.playerElement.querySelector('.media-artist');
+        const albumElement = this.playerElement.querySelector('.media-album');
+        const minimizedTitle = this.playerElement.querySelector('.minimized-title');
+        
+        titleElement.textContent = fileName;
+        artistElement.textContent = folderName;
+        albumElement.textContent = '';
+        minimizedTitle.textContent = `${folderName} - ${fileName}`;
+        
+        this.updateAlbumArt();
+    }
+    
+    // フォルダ名を取得
+    getFolderName(path) {
+        const pathParts = path.split('/');
+        return pathParts.length > 1 ? pathParts[pathParts.length - 2] : '';
+    }
+    
+    // アルバムアートを更新
+    async updateAlbumArt() {
+        if (!this.currentMedia) return;
+        
+        try {
+            const albumArt = await this.getAlbumArt(this.currentMedia.path);
+            const thumbnailElement = this.playerElement.querySelector('.media-thumbnail');
+            thumbnailElement.src = albumArt;
+            thumbnailElement.style.display = 'block';
+        } catch (error) {
+            console.error('アルバムアート更新エラー:', error);
+            const thumbnailElement = this.playerElement.querySelector('.media-thumbnail');
+            thumbnailElement.src = this.getDefaultAlbumArt();
+        }
     }
     
     playAudio(path) {
@@ -285,7 +576,7 @@ class MediaPlayer {
         });
         
         video.addEventListener('ended', () => {
-            this.playNext();
+            this.handleMediaEnded();
         });
     }
     
@@ -408,14 +699,29 @@ class MediaPlayer {
     playPrevious() {
         if (this.playlist.length === 0) return;
         
-        this.currentIndex = (this.currentIndex - 1 + this.playlist.length) % this.playlist.length;
+        if (this.isShuffleMode) {
+            this.currentIndex = Math.floor(Math.random() * this.playlist.length);
+        } else {
+            this.currentIndex = (this.currentIndex - 1 + this.playlist.length) % this.playlist.length;
+        }
+        
         this.playMediaFromPlaylist();
     }
     
     playNext() {
         if (this.playlist.length === 0) return;
         
-        this.currentIndex = (this.currentIndex + 1) % this.playlist.length;
+        if (this.isShuffleMode) {
+            // シャッフルモードではランダムに選択
+            let nextIndex;
+            do {
+                nextIndex = Math.floor(Math.random() * this.playlist.length);
+            } while (nextIndex === this.currentIndex && this.playlist.length > 1);
+            this.currentIndex = nextIndex;
+        } else {
+            this.currentIndex = (this.currentIndex + 1) % this.playlist.length;
+        }
+        
         this.playMediaFromPlaylist();
     }
     
@@ -429,35 +735,23 @@ class MediaPlayer {
         }
     }
     
-    setPlaylist(files) {
+    setPlaylist(files, startIndex = 0) {
         this.playlist = files.filter(file => 
             file.mime_type && (file.mime_type.startsWith('audio/') || file.mime_type.startsWith('video/'))
         );
         
-        this.currentIndex = 0;
+        this.currentIndex = startIndex;
+    }
+    
+    // 自動再生の設定
+    setAutoPlay(enabled) {
+        this.isAutoPlay = enabled;
     }
     
     updateMediaInfo(path) {
-        const fileName = path.split('/').pop();
-        const titleElement = this.playerElement.querySelector('.media-title');
-        const artistElement = this.playerElement.querySelector('.media-artist');
-        const thumbnailElement = this.playerElement.querySelector('.media-thumbnail');
-        const minimizedTitle = this.playerElement.querySelector('.minimized-title');
-        
-        titleElement.textContent = fileName;
-        minimizedTitle.textContent = fileName;
-        artistElement.textContent = '';
-        
-        if (this.currentMedia.type === 'audio') {
-            const folderName = path.split('/').slice(-2, -1)[0] || '';
-            artistElement.textContent = folderName;
-        }
-        
-        if (this.currentMedia.type === 'audio') {
-            thumbnailElement.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBmaWxsPSIjNjY2IiBkPSJNMjU2IDhDMTE5IDggOCAxMTkgOCAyNTZzMTExIDI0OCAyNDggMjQ4IDI0OC0xMTEgMjQ4LTI0OFMzOTMgOCAyNTYgOHptMCA0NDhjLTExMC41IDAtMjAwLTg5LjUtMjAwLTIwMFMxNDUuNSA1NiAyNTYgNTZzMjAwIDg5LjUgMjAwIDIwMC04OS41IDIwMC0yMDAgMjAweiIvPjxwYXRoIGZpbGw9IiM2NjYiIGQ9Ik0yNjQgNDE2Yy0zMS42IDAtNDcuOC0yMS44LTQ3LjgtNDEuOGMwLTE1LjIgMTEuNC0zMC44IDM1LjQtNDUuMmw0LjItMi40di03My4yYzAtNS44LTQuOC0xMC42LTEwLjYtMTAuNmgtNS4yYy01LjggMC0xMC42IDQuOC0xMC42IDEwLjZ2NDQuNGwtMy4xLTEuNmMtMjQuOS0xMy45LTQwLjEtMjYuOC00MC4xLTQ2LjcgMC0zMC44IDI4LjUtNDYuNyA1Ni4xLTQ2LjcgMzEuNiAwIDQ3LjggMjEuOCA0Ny44IDQxLjggMCAxNS4yLTExLjQgMzAuOC0zNS40IDQ1LjJsLTQuMiAyLjR2NzMuMmMwIDUuOCA0LjggMTAuNiAxMC42IDEwLjZoNS4yYzUuOCAwIDEwLjYtNC44IDEwLjYtMTAuNnYtNDQuNGwyLjQgMS4yYzI1LjYgMTQuNCA0MS44IDI3LjYgNDEuOCA0Ny44IDAgMzEuNi0yOS42IDQ3LjgtNTcuOCA0Ny44eiIvPjwvc3ZnPg==';
-        } else {
-            thumbnailElement.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBmaWxsPSIjNjY2IiBkPSJNNDQ4IDgwSDY0QzI4LjcgODAgMCAxMDguNyAwIDE0NHYyMjRjMCAzNS4zIDI4LjcgNjQgNjQgNjRoMzg0YzM1LjMgMCA2NC0yOC43IDY0LTY0VjE0NGMwLTM1LjMtMjguNy02NC02NC02NHptLTY0IDI0MGMwIDYuNi01LjQgMTItMTIgMTJIMTQwYy02LjYgMC0xMi01LjQtMTItMTJ2LTcyYzAtNi42IDUuNC0xMiAxMi0xMmgxMzJjNi42IDAgMTIgNS40IDEyIDEydjcyeiIvPjwvc3ZnPg==';
-        }
+        // 基本情報の設定（後でメタデータで上書きされる）
+        this.currentMedia = { ...this.currentMedia, path };
+        this.updateMediaInfoFromFilename();
     }
     
     updateProgress() {
@@ -551,4 +845,28 @@ class MediaPlayer {
         const secs = Math.floor(seconds % 60);
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     }
+    
+    // キャッシュクリア（メモリ管理）
+    clearCache() {
+        // アルバムアートのURLオブジェクトを解放
+        this.albumArtCache.forEach(url => {
+            if (url.startsWith('blob:')) {
+                URL.revokeObjectURL(url);
+            }
+        });
+        
+        this.albumArtCache.clear();
+        this.metadataCache.clear();
+    }
+    
+    // プレイヤー破棄
+    destroy() {
+        this.stop();
+        this.clearCache();
+        
+        if (this.playerElement) {
+            this.playerElement.remove();
+        }
+    }
 }
+
