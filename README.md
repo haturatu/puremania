@@ -55,7 +55,7 @@ In general, as long as proper user and permission management is in place, any fi
   
 ### Prerequisites  
   
-- [Go](https://golang.org/doc/install) (version 1.20 or later)  
+- [Go](https://golang.org/doc/install) (version 1.24.0 or later)  
   
 ### Installation & Building  
   
@@ -160,3 +160,14 @@ Pure Mania exposes the following RESTful API endpoints under the `/api` prefix:
   
 This project is licensed under the terms of the `LICENSE` file.  
   
+# Preview
+<table>
+  <tr>
+    <td>
+      <img src="https://github.com/user-attachments/assets/c9dcc503-ad1c-462c-a79d-4e84a2c136b1" height="500" />
+    </td>
+    <td>
+      <img src="https://github.com/user-attachments/assets/01aef601-853f-4f2e-882e-287196052023" height="500" />
+    </td>
+  </tr>
+</table>
