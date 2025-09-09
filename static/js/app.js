@@ -43,6 +43,73 @@ class ProgressManager {
         });
     }
 
+    showError(message) {
+        if (this.progressOverlay) {
+            const statusElement = this.progressOverlay.querySelector('.progress-status');
+            if (statusElement) {
+                statusElement.textContent = 'Error: ' + message;
+                statusElement.style.color = 'var(--error)';
+            }
+            
+            // エラー表示用のスタイルを追加
+            const modal = this.progressOverlay.querySelector('.progress-modal');
+            if (modal) {
+                modal.style.border = '2px solid var(--error)';
+            }
+            
+            // 閉じるボタンのみ表示
+            const closeBtn = this.progressOverlay.querySelector('.progress-close');
+            if (closeBtn) {
+                closeBtn.style.display = 'block';
+            }
+        }
+    }
+
+    resetError() {
+        if (this.progressOverlay) {
+            const statusElement = this.progressOverlay.querySelector('.progress-status');
+            if (statusElement) {
+                statusElement.style.color = '';
+            }
+            
+            const modal = this.progressOverlay.querySelector('.progress-modal');
+            if (modal) {
+                modal.style.border = '';
+            }
+        }
+    }
+
+    safeUpdateProgress(progress) {
+        if (!this.progressOverlay) return;
+
+        const {
+            currentFile = '',
+            percentage = 0,
+            processed = 0,
+            total = 0,
+            status = ''
+        } = progress;
+
+        // 数値の検証
+        const safePercentage = Math.max(0, Math.min(100, percentage));
+        const safeProcessed = Math.max(0, Math.min(total, processed));
+        const safeTotal = Math.max(0, total);
+
+        const percentageText = Math.round(safePercentage) + '%';
+        const statsText = safeTotal > 0 ? 
+            `${safeProcessed}/${safeTotal} files` : 
+            `${safeProcessed} files processed`;
+
+        this.progressOverlay.querySelector('.progress-current').textContent = currentFile;
+        this.progressOverlay.querySelector('.progress-bar-fill').style.width = percentageText;
+        this.progressOverlay.querySelector('.progress-percentage').textContent = percentageText;
+        this.progressOverlay.querySelector('.progress-stats').textContent = statsText;
+
+        if (status) {
+            this.progressOverlay.querySelector('.progress-status').textContent = status;
+        }
+    }
+
     show(title = 'Uploading Files') {
         if (this.progressOverlay) {
             this.progressOverlay.querySelector('.progress-title').textContent = title;
@@ -1288,7 +1355,7 @@ class FileManagerApp {
         
         try {
             this.progressManager.show('Uploading Files');
-            this.progressManager.updateProgress({
+            this.progressManager.safeUpdateProgress({
                 currentFile: 'Preparing upload...',
                 percentage: 0,
                 processed: 0,
@@ -1304,40 +1371,22 @@ class FileManagerApp {
             const formData = new FormData();
             formData.append('path', this.currentPath);
             
-            // フォルダー構造を解析
-            const folderStructure = this.analyzeFolderStructure(files);
-            console.log('Folder structure:', folderStructure);
-            
-            // フォルダー名を取得（最初のファイルの相対パスから）
+            // フォルダー名を検出
             let folderName = '';
-            if (files[0].webkitRelativePath) {
-                const firstSlash = files[0].webkitRelativePath.indexOf('/');
-                if (firstSlash !== -1) {
-                    folderName = files[0].webkitRelativePath.split('/')[0];
-                    console.log('Detected folder name:', folderName);
+            if (files[0] && files[0].webkitRelativePath) {
+                const pathParts = files[0].webkitRelativePath.split('/');
+                if (pathParts.length > 1) {
+                    folderName = pathParts[0];
+                    console.log('Detected folder:', folderName);
+                    formData.append('folderName', folderName);
                 }
             }
             
-            // フォルダー構造を維持してファイルを追加
+            // ファイルを追加
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
-                
-                // フォルダー構造を保持するための相対パスを取得
-                let relativePath = file.name;
-                
-                // webkitRelativePath が利用可能な場合（フォルダーアップロード時）
-                if (file.webkitRelativePath) {
-                    relativePath = file.webkitRelativePath;
-                    console.log('Uploading with full relative path:', relativePath);
-                }
-                
-                // FormDataに追加（フルパスを維持）
+                const relativePath = file.webkitRelativePath || file.name;
                 formData.append('file', file, relativePath);
-            }
-            
-            // フォルダー名も送信（バックエンドで使用）
-            if (folderName) {
-                formData.append('folderName', folderName);
             }
             
             const xhr = new XMLHttpRequest();
@@ -1345,7 +1394,7 @@ class FileManagerApp {
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
                     const percentage = (e.loaded / e.total) * 100;
-                    this.progressManager.updateProgress({
+                    this.progressManager.safeUpdateProgress({
                         currentFile: `Uploading ${files.length} files...`,
                         percentage: percentage,
                         processed: Math.floor((percentage / 100) * files.length),
@@ -1356,51 +1405,24 @@ class FileManagerApp {
             });
             
             xhr.addEventListener('load', () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        const successMessage = `Uploaded ${response.successful} file(s) successfully`;
-                        
-                        console.log('Upload response:', response);
-                        
-                        if (response.failed_count > 0) {
-                            this.showToast('Upload Complete', 
-                                `${successMessage}, ${response.failed_count} failed`, 
-                                'warning');
-                        } else {
-                            this.showToast('Success', successMessage, 'success');
-                        }
-                        this.loadFiles(this.currentPath);
-                        
-                        this.progressManager.updateProgress({
-                            currentFile: 'Upload complete!',
-                            percentage: 100,
-                            processed: response.successful,
-                            total: files.length,
-                            status: `Completed: ${response.successful} successful, ${response.failed_count} failed`
-                        });
-                        
-                    } catch (error) {
-                        this.showToast('Error', 'Failed to parse response', 'error');
-                    }
-                } else {
-                    this.showToast('Error', 'Upload failed: ' + xhr.statusText, 'error');
-                }
+                this.handleUploadResponse(xhr, files.length);
             });
             
             xhr.addEventListener('error', (e) => {
                 console.error('Upload error:', e);
+                this.progressManager.showError('Network error');
                 this.showToast('Error', 'Network error occurred', 'error');
             });
             
             xhr.addEventListener('abort', () => {
+                this.progressManager.hide();
                 this.showToast('Info', 'Upload cancelled', 'info');
             });
             
             xhr.open('POST', '/api/files/upload');
             this.progressManager.setCurrentUpload(xhr);
             
-            this.progressManager.updateProgress({
+            this.progressManager.safeUpdateProgress({
                 currentFile: 'Starting upload...',
                 percentage: 0,
                 processed: 0,
@@ -1411,9 +1433,91 @@ class FileManagerApp {
             xhr.send(formData);
             
         } catch (error) {
+            this.progressManager.showError('Upload failed');
             this.showToast('Error', 'Failed to upload files: ' + error.message, 'error');
             console.error('Error uploading files:', error);
         }
+    }
+
+    handleUploadResponse(xhr, totalFiles) {
+        if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+                const response = JSON.parse(xhr.responseText);
+                console.log('Upload response:', response);
+                
+                // レスポンスを解析
+                const result = this.parseUploadResponse(response, totalFiles);
+                
+                // メッセージ表示
+                if (result.failedCount > 0) {
+                    this.showToast('Upload Complete', 
+                        `${result.message}, ${result.failedCount} failed`, 
+                        'warning');
+                } else {
+                    this.showToast('Success', result.message, 'success');
+                }
+                
+                // ファイルリストを更新
+                this.loadFiles(this.currentPath);
+                
+                // 進捗表示を更新
+                this.progressManager.safeUpdateProgress({
+                    currentFile: 'Upload complete!',
+                    percentage: 100,
+                    processed: result.successful,
+                    total: result.total,
+                    status: `Completed: ${result.successful} successful, ${result.failedCount} failed`
+                });
+                
+                // 3秒後にプログレスを非表示
+                setTimeout(() => {
+                    this.progressManager.hide();
+                }, 3000);
+                
+            } catch (error) {
+                console.error('Response parsing error:', error, xhr.responseText);
+                this.handleUploadError('Invalid server response format');
+            }
+        } else {
+            let errorMsg = 'Upload failed';
+            if (xhr.status === 413) errorMsg = 'File too large';
+            else if (xhr.status === 403) errorMsg = 'Access denied';
+            else if (xhr.status === 404) errorMsg = 'Upload endpoint not found';
+            else if (xhr.status === 0) errorMsg = 'Network error';
+            
+            this.handleUploadError(errorMsg);
+        }
+    }
+    
+    handleUploadError(message) {
+        this.progressManager.showError(message);
+        this.showToast('Error', message, 'error');
+        
+        // エラー時も数秒後に非表示
+        setTimeout(() => {
+            this.progressManager.hide();
+        }, 5000);
+    }
+
+    getSafeNumber(value, defaultValue = 0) {
+        if (value === undefined || value === null) {
+            return defaultValue;
+        }
+        const num = parseInt(value, 10);
+        return isNaN(num) ? defaultValue : num;
+    }
+
+    // レスポンス解析メソッド
+    parseUploadResponse(response, defaultTotal = 0) {
+        // レスポンスデータを取得
+        const data = response.data || response;
+        
+        return {
+            successful: this.getSafeNumber(data.successful, data.uploaded ? data.uploaded.length : 0),
+            failedCount: this.getSafeNumber(data.failed_count, data.failed ? data.failed.length : 0),
+            total: this.getSafeNumber(data.total, defaultTotal),
+            message: data.message || response.message || 'Upload completed'
+        };
     }
 
     handleFileDrop(e) {
