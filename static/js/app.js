@@ -282,11 +282,11 @@ class FileManagerApp {
         this.selectedFiles = new Set();
         this.lastSelectedIndex = -1;
         this.viewMode = 'grid';
-        this.sortBy = 'name';
-        this.sortOrder = 'asc';
+        this.sortBy = 'type';
+        this.sortOrder = 'desc';
         this.sortState = {
-            field: 'name',
-            direction: 'asc'
+            field: 'type',
+            direction: 'desc'
         };
         this.searchOptions = {
             term: '',
