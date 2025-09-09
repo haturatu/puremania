@@ -284,6 +284,10 @@ class FileManagerApp {
         this.viewMode = 'grid';
         this.sortBy = 'name';
         this.sortOrder = 'asc';
+        this.sortState = {
+            field: 'name',
+            direction: 'asc'
+        };
         this.searchOptions = {
             term: '',
             useRegex: false,
@@ -527,7 +531,7 @@ class FileManagerApp {
         if (!container) return;
         
         container.innerHTML = '';
-
+        
         this.renderToolbar(container);
         this.renderUploadArea(container);
         
@@ -536,15 +540,17 @@ class FileManagerApp {
             return;
         }
         
-        const imageCount = files.filter(file => 
+        const sortedFiles = this.sortFiles(files);
+        
+        const imageCount = sortedFiles.filter(file => 
             file.mime_type && file.mime_type.startsWith('image/')
         ).length;
         
         if (imageCount >= 10 && this.viewMode !== 'list') {
             this.viewMode = 'masonry';
-            this.renderMasonryView(files, container);
+            this.renderMasonryView(sortedFiles, container);
         } else {
-            this.renderStandardView(files, container);
+            this.renderStandardView(sortedFiles, container);
         }
     }
 
@@ -653,14 +659,29 @@ class FileManagerApp {
         const thead = document.createElement('thead');
         thead.innerHTML = `
             <tr>
-                <th data-sort="name">Name</th>
-                <th data-sort="size">Size</th>
-                <th data-sort="mod_time">Modified</th>
-                <th>Type</th>
+                <th class="sortable ${this.sortState.field === 'name' ? this.sortState.direction : ''}" data-sort="name">
+                    Name ${this.sortState.field === 'name' ? (this.sortState.direction === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th class="sortable ${this.sortState.field === 'size' ? this.sortState.direction : ''}" data-sort="size">
+                    Size ${this.sortState.field === 'size' ? (this.sortState.direction === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th class="sortable ${this.sortState.field === 'modified' ? this.sortState.direction : ''}" data-sort="modified">
+                    Modified ${this.sortState.field === 'modified' ? (this.sortState.direction === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th class="sortable ${this.sortState.field === 'type' ? this.sortState.direction : ''}" data-sort="type">
+                    Type ${this.sortState.field === 'type' ? (this.sortState.direction === 'asc' ? '↑' : '↓') : ''}
+                </th>
                 <th>Actions</th>
             </tr>
         `;
         table.appendChild(thead);
+        
+        // ソート可能なヘッダーのクリックイベントを追加
+        thead.querySelectorAll('.sortable').forEach(header => {
+            header.addEventListener('click', (e) => {
+                this.setSort(e.currentTarget.dataset.sort);
+            });
+        });
         
         const tbody = document.createElement('tbody');
         files.forEach(file => {
@@ -670,6 +691,53 @@ class FileManagerApp {
         
         table.appendChild(tbody);
         container.appendChild(table);
+    }
+
+    setSort(field) {
+        if (this.sortState.field === field) {
+            this.sortState.direction = this.sortState.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.sortState.field = field;
+            this.sortState.direction = 'asc';
+        }
+        
+        this.loadFiles(this.currentPath);
+    }
+
+    sortFiles(files) {
+        return [...files].sort((a, b) => {
+            let valueA, valueB;
+            
+            switch (this.sortState.field) {
+                case 'name':
+                    valueA = a.name.toLowerCase();
+                    valueB = b.name.toLowerCase();
+                    break;
+                case 'size':
+                    valueA = a.size || 0;
+                    valueB = b.size || 0;
+                    break;
+                case 'modified':
+                    valueA = new Date(a.mod_time).getTime();
+                    valueB = new Date(b.mod_time).getTime();
+                    break;
+                case 'type':
+                    valueA = a.is_dir ? 'dir' : (a.mime_type || 'file');
+                    valueB = b.is_dir ? 'dir' : (b.mime_type || 'file');
+                    break;
+                default:
+                    valueA = a.name.toLowerCase();
+                    valueB = b.name.toLowerCase();
+            }
+            
+            if (valueA < valueB) {
+                return this.sortState.direction === 'asc' ? -1 : 1;
+            }
+            if (valueA > valueB) {
+                return this.sortState.direction === 'asc' ? 1 : -1;
+            }
+            return 0;
+        });
     }
 
     renderMasonryView(files, container) {
