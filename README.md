@@ -172,7 +172,7 @@ The following environment variables can be configured in the `.env` file:
 - User Management
   - Not needed. Managing by Linux's default user accounts is sufficient.
   - If separation is desired, we expect running separate daemons per user type (e.g., one for images, one for videos, one for music) and hosting them on different ports.
--HTTPS
+- HTTPS
   - Not needed.
   - If needed, handle HTTPS at the HTTP server application level via local or internal reverse proxy.
 
