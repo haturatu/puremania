@@ -280,6 +280,7 @@ class FileManagerApp {
     constructor() {
         this.currentPath = '/';
         this.selectedFiles = new Set();
+        this.lastSelectedIndex = -1;
         this.viewMode = 'grid';
         this.sortBy = 'name';
         this.sortOrder = 'asc';
@@ -900,17 +901,39 @@ class FileManagerApp {
     handleFileClick(fileItem) {
         const path = fileItem.dataset.path;
         const isSelected = this.selectedFiles.has(path);
+        const fileItems = Array.from(document.querySelectorAll('.file-item, .masonry-item'));
+        const currentIndex = fileItems.indexOf(fileItem);
         
-        if (!event.ctrlKey && !event.metaKey) {
+        if (event.shiftKey && this.lastSelectedIndex !== -1 && this.lastSelectedIndex !== currentIndex) {
             this.clearSelection();
-        }
-        
-        if (isSelected) {
-            this.selectedFiles.delete(path);
-            fileItem.classList.remove('selected');
-        } else {
+            
+            const start = Math.min(this.lastSelectedIndex, currentIndex);
+            const end = Math.max(this.lastSelectedIndex, currentIndex);
+            
+            for (let i = start; i <= end; i++) {
+                if (i < fileItems.length) {
+                    const item = fileItems[i];
+                    const itemPath = item.dataset.path;
+                    this.selectedFiles.add(itemPath);
+                    item.classList.add('selected');
+                }
+            }
+        } 
+        else if (event.ctrlKey || event.metaKey) {
+            if (isSelected) {
+                this.selectedFiles.delete(path);
+                fileItem.classList.remove('selected');
+            } else {
+                this.selectedFiles.add(path);
+                fileItem.classList.add('selected');
+                this.lastSelectedIndex = currentIndex;
+            }
+        } 
+        else {
+            this.clearSelection();
             this.selectedFiles.add(path);
             fileItem.classList.add('selected');
+            this.lastSelectedIndex = currentIndex;
         }
         
         this.updateToolbar();
