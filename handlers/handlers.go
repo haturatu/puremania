@@ -237,6 +237,7 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	h.respondSuccess(w, fileInfos)
 }
 
+// バックエンドの修正版（handlers/handlers.go）
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
@@ -245,6 +246,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// マルチパートフォームの解析
 	if err := r.ParseMultipartForm(h.config.MaxFileSize << 20); err != nil {
 		h.respondError(w, "File is too large", http.StatusBadRequest)
 		return
@@ -255,70 +257,88 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		path = "/"
 	}
 
-	folderName := r.FormValue("folderName")
-
 	fullPath, err := h.convertToPhysicalPath(path)
 	if err != nil {
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	fmt.Printf("Uploading to path: %s\n", fullPath)
+
 	if err := os.MkdirAll(fullPath, 0755); err != nil {
 		h.respondError(w, "Cannot create directory", http.StatusInternalServerError)
 		return
 	}
 
-	// 複数ファイルの処理
+	// ファイルと相対パスを取得
 	files := r.MultipartForm.File["file"]
+	relativePaths := r.MultipartForm.Value["relativePath[]"]
+
 	uploadedFiles := make([]string, 0)
 	failedFiles := make([]string, 0)
 
-	for _, fileHeader := range files {
+	fmt.Printf("Received %d files for upload\n", len(files))
+	fmt.Printf("Received %d relative paths\n", len(relativePaths))
+
+	// ファイル数と相対パス数が一致するかチェック
+	if len(files) != len(relativePaths) {
+		h.respondError(w, "Mismatch between files and relative paths", http.StatusBadRequest)
+		return
+	}
+
+	for i, fileHeader := range files {
 		file, err := fileHeader.Open()
 		if err != nil {
+			fmt.Printf("Failed to open file: %s, error: %v\n", fileHeader.Filename, err)
 			failedFiles = append(failedFiles, fileHeader.Filename)
 			continue
 		}
 		defer file.Close()
 
-		// ファイル名と相対パスを取得
-		filename := fileHeader.Filename
+		// 相対パスを使用してターゲットパスを構築
+		relativePath := relativePaths[i]
+		fmt.Printf("Processing file: %s with relative path: %s\n", fileHeader.Filename, relativePath)
 
-		// フォルダー構造を維持したターゲットパスを作成
-		var targetFilePath string
+		// パス区切り文字を正規化（WindowsとUnix両対応）
+		normalizedRelativePath := filepath.FromSlash(relativePath)
 
-		if folderName != "" {
-			// フォルダーごとアップロードの場合、フォルダー名を維持
-			targetFilePath = filepath.Join(fullPath, filename)
-		} else {
-			// 単一ファイルアップロードの場合、直接パスを使用
-			targetFilePath = filepath.Join(fullPath, filepath.Base(filename))
-		}
+		// フルパスを作成（フォルダー構造を維持）
+		targetPath := filepath.Join(fullPath, normalizedRelativePath)
+		fmt.Printf("Target path: %s\n", targetPath)
 
 		// 必要なディレクトリを作成
-		targetDir := filepath.Dir(targetFilePath)
+		targetDir := filepath.Dir(targetPath)
+		fmt.Printf("Creating directory: %s\n", targetDir)
+
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
-			failedFiles = append(failedFiles, filename)
+			fmt.Printf("Failed to create directory: %s, error: %v\n", targetDir, err)
+			failedFiles = append(failedFiles, relativePath)
 			continue
 		}
 
-		dst, err := os.Create(targetFilePath)
+		dst, err := os.Create(targetPath)
 		if err != nil {
-			failedFiles = append(failedFiles, filename)
+			fmt.Printf("Failed to create file: %s, error: %v\n", targetPath, err)
+			failedFiles = append(failedFiles, relativePath)
 			continue
 		}
 		defer dst.Close()
 
 		_, err = io.Copy(dst, file)
 		if err != nil {
-			failedFiles = append(failedFiles, filename)
+			fmt.Printf("Failed to copy file: %s, error: %v\n", relativePath, err)
+			failedFiles = append(failedFiles, relativePath)
 			continue
 		}
 
+		fmt.Printf("Successfully uploaded: %s -> %s\n", relativePath, targetPath)
+
 		// 仮想パスを返す
-		virtualPath := h.convertToVirtualPath(targetFilePath)
+		virtualPath := h.convertToVirtualPath(targetPath)
 		uploadedFiles = append(uploadedFiles, virtualPath)
 	}
+
+	fmt.Printf("Upload completed: %d successful, %d failed\n", len(uploadedFiles), len(failedFiles))
 
 	response := map[string]interface{}{
 		"message":      fmt.Sprintf("Uploaded %d file(s) successfully", len(uploadedFiles)),
