@@ -44,42 +44,42 @@ class ProgressManager {
     }
 
     showError(message) {
-        if (this.progressOverlay) {
-            const statusElement = this.progressOverlay.querySelector('.progress-status');
-            if (statusElement) {
-                statusElement.textContent = 'Error: ' + message;
-                statusElement.style.color = 'var(--error)';
-            }
-            
-            // エラー表示用のスタイルを追加
-            const modal = this.progressOverlay.querySelector('.progress-modal');
-            if (modal) {
-                modal.style.border = '2px solid var(--error)';
-            }
-            
-            // 閉じるボタンのみ表示
-            const closeBtn = this.progressOverlay.querySelector('.progress-close');
-            if (closeBtn) {
-                closeBtn.style.display = 'block';
-            }
+        if (!this.progressOverlay) return;
+        
+        const statusElement = this.progressOverlay.querySelector('.progress-status');
+        const modal = this.progressOverlay.querySelector('.progress-modal');
+        const closeBtn = this.progressOverlay.querySelector('.progress-close');
+
+        if (statusElement) {
+            statusElement.textContent = 'Error: ' + message;
+            statusElement.style.color = 'var(--error)';
+        }
+        
+        if (modal) {
+            modal.style.border = '2px solid var(--error)';
+        }
+        
+        if (closeBtn) {
+            closeBtn.style.display = 'block';
         }
     }
 
     resetError() {
-        if (this.progressOverlay) {
-            const statusElement = this.progressOverlay.querySelector('.progress-status');
-            if (statusElement) {
-                statusElement.style.color = '';
-            }
-            
-            const modal = this.progressOverlay.querySelector('.progress-modal');
-            if (modal) {
-                modal.style.border = '';
-            }
+        if (!this.progressOverlay) return;
+        
+        const statusElement = this.progressOverlay.querySelector('.progress-status');
+        const modal = this.progressOverlay.querySelector('.progress-modal');
+
+        if (statusElement) {
+            statusElement.style.color = '';
+        }
+        
+        if (modal) {
+            modal.style.border = '';
         }
     }
 
-    safeUpdateProgress(progress) {
+    updateProgress(progress) {
         if (!this.progressOverlay) return;
 
         const {
@@ -90,7 +90,7 @@ class ProgressManager {
             status = ''
         } = progress;
 
-        // 数値の検証
+        // Validate and sanitize values
         const safePercentage = Math.max(0, Math.min(100, percentage));
         const safeProcessed = Math.max(0, Math.min(total, processed));
         const safeTotal = Math.max(0, total);
@@ -100,19 +100,27 @@ class ProgressManager {
             `${safeProcessed}/${safeTotal} files` : 
             `${safeProcessed} files processed`;
 
-        this.progressOverlay.querySelector('.progress-current').textContent = currentFile;
-        this.progressOverlay.querySelector('.progress-bar-fill').style.width = percentageText;
-        this.progressOverlay.querySelector('.progress-percentage').textContent = percentageText;
-        this.progressOverlay.querySelector('.progress-stats').textContent = statsText;
+        // Update DOM elements
+        const elements = {
+            current: this.progressOverlay.querySelector('.progress-current'),
+            barFill: this.progressOverlay.querySelector('.progress-bar-fill'),
+            percentage: this.progressOverlay.querySelector('.progress-percentage'),
+            stats: this.progressOverlay.querySelector('.progress-stats'),
+            status: this.progressOverlay.querySelector('.progress-status')
+        };
 
-        if (status) {
-            this.progressOverlay.querySelector('.progress-status').textContent = status;
-        }
+        if (elements.current) elements.current.textContent = currentFile;
+        if (elements.barFill) elements.barFill.style.width = percentageText;
+        if (elements.percentage) elements.percentage.textContent = percentageText;
+        if (elements.stats) elements.stats.textContent = statsText;
+        if (elements.status && status) elements.status.textContent = status;
     }
 
     show(title = 'Uploading Files') {
         if (this.progressOverlay) {
-            this.progressOverlay.querySelector('.progress-title').textContent = title;
+            const titleElement = this.progressOverlay.querySelector('.progress-title');
+            if (titleElement) titleElement.textContent = title;
+            
             this.progressOverlay.style.display = 'flex';
             this.resetProgress();
         }
@@ -133,30 +141,6 @@ class ProgressManager {
             total: 0,
             status: 'Initializing...'
         });
-    }
-
-    updateProgress(progress) {
-        if (!this.progressOverlay) return;
-
-        const {
-            currentFile = '',
-            percentage = 0,
-            processed = 0,
-            total = 0,
-            status = ''
-        } = progress;
-
-        const percentageText = Math.round(percentage) + '%';
-        const statsText = total > 0 ? `${processed}/${total} files` : `${processed} files processed`;
-
-        this.progressOverlay.querySelector('.progress-current').textContent = currentFile;
-        this.progressOverlay.querySelector('.progress-bar-fill').style.width = percentageText;
-        this.progressOverlay.querySelector('.progress-percentage').textContent = percentageText;
-        this.progressOverlay.querySelector('.progress-stats').textContent = statsText;
-
-        if (status) {
-            this.progressOverlay.querySelector('.progress-status').textContent = status;
-        }
     }
 
     setCurrentUpload(upload) {
@@ -261,35 +245,28 @@ class FileEditor {
             const result = await response.json();
             
             if (result.success) {
-                this.showToast('Success', 'File saved successfully', 'success');
+                this.showToast('File saved successfully', 'success');
                 this.close();
             } else {
-                this.showToast('Error', result.message, 'error');
+                this.showToast(result.message, 'error');
             }
         } catch (error) {
-            this.showToast('Error', 'Failed to save file', 'error');
+            this.showToast('Failed to save file', 'error');
             console.error('Error saving file:', error);
         }
     }
     
-    showToast(title, message, type) {
-        // Use the parent FileManagerApp's showToast if available
+    showToast(message, type) {
         if (window.fileManager && window.fileManager.showToast) {
-            window.fileManager.showToast(title, message, type);
+            window.fileManager.showToast('Editor', message, type);
             return;
         }
         
         // Fallback toast implementation
         const toast = document.createElement('div');
-        toast.style.position = 'fixed';
-        toast.style.top = '20px';
-        toast.style.right = '20px';
-        toast.style.padding = '10px 15px';
+        toast.className = 'toast-message';
+        toast.textContent = message;
         toast.style.background = type === 'success' ? 'var(--success)' : 'var(--error)';
-        toast.style.color = 'white';
-        toast.style.borderRadius = '4px';
-        toast.style.zIndex = '1000';
-        toast.textContent = `${title}: ${message}`;
         
         document.body.appendChild(toast);
         
@@ -404,48 +381,37 @@ class FileManagerApp {
 
     handleFileActionClick(button, fileItem) {
         const path = fileItem.dataset.path;
-        const isDir = fileItem.dataset.isDir === 'true';
+        const action = button.dataset.action || this.getActionFromButtonText(button);
         
-        if (button.classList.contains('file-action-btn')) {
-            const action = button.dataset.action;
-            
-            switch (action) {
-                case 'download':
-                    this.downloadFile(path);
-                    break;
-                case 'delete':
-                    this.deleteFile(path);
-                    break;
-                case 'edit':
-                    this.editFile(path);
-                    break;
-                case 'rename':
-                    this.renameFile(path);
-                    break;
-                case 'move':
-                    this.moveFile(path);
-                    break;
-                default:
-                    const textAction = button.textContent.trim();
-                    switch (textAction) {
-                        case '⬇':
-                            this.downloadFile(path);
-                            break;
-                        case '🗑':
-                            this.deleteFile(path);
-                            break;
-                        case '✏':
-                            this.editFile(path);
-                            break;
-                        case '✏️':
-                            this.renameFile(path);
-                            break;
-                        case '➡️':
-                            this.moveFile(path);
-                            break;
-                    }
-            }
+        switch (action) {
+            case 'download':
+                this.downloadFile(path);
+                break;
+            case 'delete':
+                this.deleteFile(path);
+                break;
+            case 'edit':
+                this.editFile(path);
+                break;
+            case 'rename':
+                this.renameFile(path);
+                break;
+            case 'move':
+                this.moveFile(path);
+                break;
         }
+    }
+
+    getActionFromButtonText(button) {
+        const text = button.textContent.trim();
+        const actionMap = {
+            '⬇': 'download',
+            '🗑': 'delete',
+            '✏': 'edit',
+            '✏️': 'rename',
+            '➡️': 'move'
+        };
+        return actionMap[text] || '';
     }
 
     handleToolbarClick(button) {
@@ -530,8 +496,6 @@ class FileManagerApp {
         try {
             this.showLoading();
             
-            console.log('Loading files for path:', path);
-            
             const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
             const result = await response.json();
             
@@ -542,19 +506,15 @@ class FileManagerApp {
                 
                 this.router.updatePath(path);
                 this.updateToolbar();
-                
-                console.log('Files loaded successfully for path:', path);
             } else {
                 this.showToast('Error', result.message, 'error');
                 this.displayFiles([]);
-                
                 this.router.updatePath(path);
             }
         } catch (error) {
             this.showToast('Error', 'Failed to load files', 'error');
             console.error('Error loading files:', error);
             this.displayFiles([]);
-            
             this.router.updatePath(path);
         } finally {
             this.hideLoading();
@@ -566,15 +526,11 @@ class FileManagerApp {
         if (!container) return;
         
         container.innerHTML = '';
-        
-        if (!files) {
-            files = [];
-        }
-        
+
         this.renderToolbar(container);
         this.renderUploadArea(container);
-    
-        if (files.length === 0) {
+        
+        if (!files || files.length === 0) {
             this.renderEmptyState(container);
             return;
         }
@@ -609,20 +565,43 @@ class FileManagerApp {
         const uploadArea = document.createElement('div');
         uploadArea.className = 'upload-area';
         uploadArea.innerHTML = `
-            <div class="upload-text">📁 Drop files here to upload</div>
-            <div class="upload-text">or click to select files</div>
-            <input type="file" class="upload-input" multiple>
+            <div class="upload-icon">📁</div>
+            <div class="upload-text">Drop files or folders here to upload</div>
+            <div class="upload-subtext">or click to select files/folders</div>
+            <input type="file" class="upload-input" multiple webkitdirectory>
+            <div class="upload-info">
+                <div class="upload-feature">• Folder upload will preserve directory structure</div>
+                <div class="upload-feature">• Files will be uploaded to: <span class="upload-path">${this.currentPath}</span></div>
+            </div>
         `;
         container.appendChild(uploadArea);
         
         const uploadInput = uploadArea.querySelector('.upload-input');
+        const uploadPath = uploadArea.querySelector('.upload-path');
+        
         uploadInput.addEventListener('change', (e) => {
-            this.handleFileUpload(e.target.files);
+            if (e.target.files && e.target.files.length > 0) {
+                const hasFolderStructure = !!e.target.files[0].webkitRelativePath;
+                if (hasFolderStructure) {
+                    const folderName = e.target.files[0].webkitRelativePath.split('/')[0];
+                    this.showToast('Info', `Uploading folder: ${folderName}`, 'info');
+                }
+                this.handleFileUpload(e.target.files);
+            }
+            e.target.value = '';
         });
         
         uploadArea.addEventListener('click', () => {
             uploadInput.click();
         });
+        
+        this.updateUploadPath = () => {
+            if (uploadPath) {
+                uploadPath.textContent = this.currentPath;
+            }
+        };
+        
+        this.updateUploadPath();
     }
 
     renderEmptyState(container) {
@@ -722,9 +701,7 @@ class FileManagerApp {
     createTableRow(file) {
         const tr = document.createElement('tr');
         tr.className = 'file-item';
-        tr.dataset.path = file.path;
-        tr.dataset.isDir = file.is_dir;
-        tr.dataset.mimeType = file.mime_type || '';
+        this.setFileItemData(tr, file);
         
         tr.innerHTML = `
             <td>
@@ -1073,21 +1050,21 @@ class FileManagerApp {
         return path && path.length > 0 && !path.includes('..');
     }
     
-    suggestMoveTarget(sourcePath) {
-        const parentPath = this.getParentPath(sourcePath);
-        return this.currentPath !== '/' ? this.currentPath : parentPath;
-    }
-
     getParentPath(path) {
         const parts = path.split('/').filter(part => part !== '');
         if (parts.length <= 1) return '/';
         parts.pop();
         return '/' + parts.join('/');
     }
+    
+    getBaseName(path) {
+        const parts = path.split('/').filter(part => part !== '');
+        return parts.length > 0 ? parts[parts.length - 1] : '';
+    }
 
     // File operations
     async renameFile(path) {
-        const newName = prompt('Enter new name:', path.split('/').pop());
+        const newName = prompt('Enter new name:', this.getBaseName(path));
         if (!newName) return;
         
         const newPath = this.getParentPath(path) + '/' + newName;
@@ -1123,8 +1100,8 @@ class FileManagerApp {
     }
 
     async moveFile(sourcePath) {
-        const fileName = sourcePath.split('/').pop();
-        const suggestedPath = this.suggestMoveTarget(sourcePath);
+        const fileName = this.getBaseName(sourcePath);
+        const suggestedPath = this.currentPath !== '/' ? this.currentPath : this.getParentPath(sourcePath);
         
         const targetDir = prompt(`Move "${fileName}" to directory:`, suggestedPath);
         if (!targetDir) return;
@@ -1186,7 +1163,7 @@ class FileManagerApp {
 
     async moveMultipleFiles() {
         const firstFile = Array.from(this.selectedFiles)[0];
-        const suggestedPath = this.suggestMoveTarget(firstFile);
+        const suggestedPath = this.currentPath !== '/' ? this.currentPath : this.getParentPath(firstFile);
         
         const targetDir = prompt(`Move ${this.selectedFiles.size} items to directory:`, suggestedPath);
         if (!targetDir) return;
@@ -1202,7 +1179,7 @@ class FileManagerApp {
             let failCount = 0;
             
             for (const sourcePath of this.selectedFiles) {
-                const fileName = sourcePath.split('/').pop();
+                const fileName = this.getBaseName(sourcePath);
                 const targetPath = targetDir.endsWith('/') ? 
                     targetDir + fileName : 
                     targetDir + '/' + fileName;
@@ -1287,7 +1264,7 @@ class FileManagerApp {
     }
 
     async createNewFile() {
-        const fileName = prompt('Enter file name (default: .md):');
+        const fileName = prompt('Enter file name:');
         if (!fileName) return;
         
         try {
@@ -1327,7 +1304,7 @@ class FileManagerApp {
         input.type = 'file';
         input.multiple = true;
         
-        // フォルダー選択を可能にする（各ブラウザ対応）
+        // Enable folder selection
         if ('webkitdirectory' in input || 'directory' in input || 'mozdirectory' in input) {
             input.setAttribute('webkitdirectory', '');
             input.setAttribute('directory', '');
@@ -1336,11 +1313,11 @@ class FileManagerApp {
         
         input.addEventListener('change', (e) => {
             if (e.target.files && e.target.files.length > 0) {
-                console.log('Selected files:', Array.from(e.target.files).map(f => ({
-                    name: f.name,
-                    webkitRelativePath: f.webkitRelativePath,
-                    size: f.size
-                })));
+                // Show folder name if available
+                if (e.target.files[0].webkitRelativePath) {
+                    const folderName = e.target.files[0].webkitRelativePath.split('/')[0];
+                    this.showToast('Info', `Uploading folder: ${folderName}`, 'info');
+                }
                 
                 this.handleFileUpload(e.target.files);
             }
@@ -1355,7 +1332,7 @@ class FileManagerApp {
         
         try {
             this.progressManager.show('Uploading Files');
-            this.progressManager.safeUpdateProgress({
+            this.progressManager.updateProgress({
                 currentFile: 'Preparing upload...',
                 percentage: 0,
                 processed: 0,
@@ -1371,30 +1348,30 @@ class FileManagerApp {
             const formData = new FormData();
             formData.append('path', this.currentPath);
             
-            // フォルダー名を検出
-            let folderName = '';
-            if (files[0] && files[0].webkitRelativePath) {
-                const pathParts = files[0].webkitRelativePath.split('/');
-                if (pathParts.length > 1) {
-                    folderName = pathParts[0];
-                    console.log('Detected folder:', folderName);
-                    formData.append('folderName', folderName);
-                }
-            }
-            
-            // ファイルを追加
+            // Add files with folder structure preservation
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
-                const relativePath = file.webkitRelativePath || file.name;
-                formData.append('file', file, relativePath);
+                let relativePath = file.webkitRelativePath || file.name;
+                
+                formData.append('file', file);
+                formData.append('relativePath[]', relativePath);
+                
+                // Update progress
+                this.progressManager.updateProgress({
+                    currentFile: `Preparing: ${file.name}`,
+                    percentage: (i / files.length) * 20,
+                    processed: i + 1,
+                    total: files.length,
+                    status: `Preparing files: ${i + 1}/${files.length}`
+                });
             }
             
             const xhr = new XMLHttpRequest();
             
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
-                    const percentage = (e.loaded / e.total) * 100;
-                    this.progressManager.safeUpdateProgress({
+                    const percentage = 20 + (e.loaded / e.total) * 80;
+                    this.progressManager.updateProgress({
                         currentFile: `Uploading ${files.length} files...`,
                         percentage: percentage,
                         processed: Math.floor((percentage / 100) * files.length),
@@ -1422,7 +1399,7 @@ class FileManagerApp {
             xhr.open('POST', '/api/files/upload');
             this.progressManager.setCurrentUpload(xhr);
             
-            this.progressManager.safeUpdateProgress({
+            this.progressManager.updateProgress({
                 currentFile: 'Starting upload...',
                 percentage: 0,
                 processed: 0,
@@ -1443,12 +1420,11 @@ class FileManagerApp {
         if (xhr.status >= 200 && xhr.status < 300) {
             try {
                 const response = JSON.parse(xhr.responseText);
-                console.log('Upload response:', response);
                 
-                // レスポンスを解析
+                // Parse response
                 const result = this.parseUploadResponse(response, totalFiles);
                 
-                // メッセージ表示
+                // Show message
                 if (result.failedCount > 0) {
                     this.showToast('Upload Complete', 
                         `${result.message}, ${result.failedCount} failed`, 
@@ -1457,11 +1433,13 @@ class FileManagerApp {
                     this.showToast('Success', result.message, 'success');
                 }
                 
-                // ファイルリストを更新
-                this.loadFiles(this.currentPath);
+                // Refresh file list
+                setTimeout(() => {
+                    this.loadFiles(this.currentPath);
+                }, 1000);
                 
-                // 進捗表示を更新
-                this.progressManager.safeUpdateProgress({
+                // Update progress
+                this.progressManager.updateProgress({
                     currentFile: 'Upload complete!',
                     percentage: 100,
                     processed: result.successful,
@@ -1469,7 +1447,7 @@ class FileManagerApp {
                     status: `Completed: ${result.successful} successful, ${result.failedCount} failed`
                 });
                 
-                // 3秒後にプログレスを非表示
+                // Hide progress after delay
                 setTimeout(() => {
                     this.progressManager.hide();
                 }, 3000);
@@ -1488,12 +1466,11 @@ class FileManagerApp {
             this.handleUploadError(errorMsg);
         }
     }
-    
+
     handleUploadError(message) {
         this.progressManager.showError(message);
         this.showToast('Error', message, 'error');
         
-        // エラー時も数秒後に非表示
         setTimeout(() => {
             this.progressManager.hide();
         }, 5000);
@@ -1507,9 +1484,7 @@ class FileManagerApp {
         return isNaN(num) ? defaultValue : num;
     }
 
-    // レスポンス解析メソッド
     parseUploadResponse(response, defaultTotal = 0) {
-        // レスポンスデータを取得
         const data = response.data || response;
         
         return {
@@ -1527,35 +1502,21 @@ class FileManagerApp {
             uploadArea.classList.remove('dragover');
         }
         
-        const items = e.dataTransfer.items;
         const files = [];
         
-        // ドロップされたアイテムを処理
-        if (items && items.length > 0) {
-            for (let i = 0; i < items.length; i++) {
-                const item = items[i];
-                if (item.kind === 'file') {
-                    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
-                    if (entry && entry.isDirectory) {
-                        // ディレクトリの場合は警告を表示
-                        this.showToast('Info', 'Please use folder selection dialog for folders', 'info');
-                        return;
-                    } else {
-                        // ファイルの場合は追加
-                        const file = item.getAsFile();
-                        if (file) {
-                            files.push(file);
-                        }
+        // Get files from drop event
+        if (e.dataTransfer.items) {
+            for (let i = 0; i < e.dataTransfer.items.length; i++) {
+                if (e.dataTransfer.items[i].kind === 'file') {
+                    const file = e.dataTransfer.items[i].getAsFile();
+                    if (file) {
+                        files.push(file);
                     }
                 }
             }
         } else {
-            // 従来のファイル処理
-            const fileList = e.dataTransfer.files;
-            if (fileList && fileList.length > 0) {
-                for (let i = 0; i < fileList.length; i++) {
-                    files.push(fileList[i]);
-                }
+            for (let i = 0; i < e.dataTransfer.files.length; i++) {
+                files.push(e.dataTransfer.files[i]);
             }
         }
         
@@ -1563,12 +1524,20 @@ class FileManagerApp {
             this.handleFileUpload(files);
         }
     }
-
    
     async downloadSelected() {
         if (this.selectedFiles.size === 0) return;
         
-        if (this.selectedFiles.size === 1) {
+        let hasDirectory = false;
+        for (const path of this.selectedFiles) {
+            const fileItem = document.querySelector(`[data-path="${CSS.escape(path)}"]`);
+            if (fileItem && fileItem.dataset.isDir === 'true') {
+                hasDirectory = true;
+                break;
+            }
+        }
+        
+        if (this.selectedFiles.size === 1 && !hasDirectory) {
             const path = Array.from(this.selectedFiles)[0];
             this.downloadFile(path);
         } else {
@@ -1599,6 +1568,9 @@ class FileManagerApp {
             
             if (response.ok) {
                 const contentLength = response.headers.get('content-length');
+                const successfulFiles = parseInt(response.headers.get('X-Zip-Successful-Files') || '0');
+                const failedFiles = parseInt(response.headers.get('X-Zip-Failed-Files') || '0');
+                
                 const reader = response.body.getReader();
                 const chunks = [];
                 let receivedLength = 0;
@@ -1644,8 +1616,16 @@ class FileManagerApp {
                 document.body.removeChild(a);
                 window.URL.revokeObjectURL(url);
                 
-                this.showToast('Success', `Downloaded ${this.selectedFiles.size} files successfully`, 'success');
+                let message = `Downloaded ${successfulFiles} files successfully`;
+                if (failedFiles > 0) {
+                    message += `, ${failedFiles} files failed`;
+                    this.showToast('Download Complete', message, 'warning');
+                } else {
+                    this.showToast('Success', message, 'success');
+                }
             } else {
+                const errorText = await response.text();
+                console.error('Download error:', errorText);
                 this.showToast('Error', 'Failed to download files', 'error');
             }
         } catch (error) {
@@ -1657,13 +1637,13 @@ class FileManagerApp {
             }, 1000);
         }
     }
-    
+   
     downloadFile(path) {
         window.open(`/api/files/download?path=${encodeURIComponent(path)}`, '_blank');
     }
 
     async deleteFile(path) {
-        if (!confirm(`Delete "${path.split('/').pop()}"? This action cannot be undone.`)) {
+        if (!confirm(`Delete "${this.getBaseName(path)}"? This action cannot be undone.`)) {
             return;
         }
         
