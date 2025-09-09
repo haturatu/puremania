@@ -237,7 +237,6 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	h.respondSuccess(w, fileInfos)
 }
 
-// バックエンドの修正版（handlers/handlers.go）
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
