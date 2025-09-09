@@ -2,6 +2,7 @@ class ProgressManager {
     constructor() {
         this.progressOverlay = null;
         this.currentUpload = null;
+        this.isCompleted = false;
         this.init();
     }
 
@@ -16,7 +17,7 @@ class ProgressManager {
             <div class="progress-modal">
                 <div class="progress-header">
                     <div class="progress-title">Uploading Files</div>
-                    <button class="progress-close">&times;</button>
+                    <button class="progress-close" style="display: none;">&times;</button>
                 </div>
                 <div class="progress-info">
                     <span class="progress-current">Preparing files...</span>
@@ -35,50 +36,67 @@ class ProgressManager {
         document.body.appendChild(overlay);
         this.progressOverlay = overlay;
 
+        // Only allow closing when explicitly shown
         overlay.querySelector('.progress-close').addEventListener('click', () => {
-            this.hide();
-            if (this.currentUpload) {
-                this.currentUpload.abort();
+            if (this.isCompleted || confirm('Cancel upload? This will stop the current upload process.')) {
+                this.hide();
+                if (this.currentUpload && !this.isCompleted) {
+                    this.currentUpload.abort();
+                }
             }
         });
     }
 
     showError(message) {
         if (!this.progressOverlay) return;
-        
+
         const statusElement = this.progressOverlay.querySelector('.progress-status');
         const modal = this.progressOverlay.querySelector('.progress-modal');
         const closeBtn = this.progressOverlay.querySelector('.progress-close');
 
         if (statusElement) {
-            statusElement.textContent = 'Error: ' + message;
-            statusElement.style.color = 'var(--error)';
+            statusElement.innerHTML = `Error: ${message}<br><strong>Click close to dismiss</strong>`;
+            statusElement.style.color = 'var(--error, #f44336)';
         }
-        
+
         if (modal) {
-            modal.style.border = '2px solid var(--error)';
+            modal.style.border = '2px solid var(--error, #f44336)';
         }
-        
+
         if (closeBtn) {
             closeBtn.style.display = 'block';
+            closeBtn.style.background = 'var(--error, #f44336)';
+            closeBtn.style.color = 'white';
         }
+
+        this.isCompleted = true;
     }
 
     resetError() {
         if (!this.progressOverlay) return;
-        
+
         const statusElement = this.progressOverlay.querySelector('.progress-status');
         const modal = this.progressOverlay.querySelector('.progress-modal');
+        const closeBtn = this.progressOverlay.querySelector('.progress-close');
 
         if (statusElement) {
             statusElement.style.color = '';
         }
-        
+
         if (modal) {
             modal.style.border = '';
         }
+
+        if (closeBtn) {
+            closeBtn.style.display = 'none';
+            closeBtn.style.background = '';
+            closeBtn.style.color = '';
+        }
+
+        this.isCompleted = false;
     }
 
+    // Core update method - handles the actual DOM updates
     updateProgress(progress) {
         if (!this.progressOverlay) return;
 
@@ -96,8 +114,8 @@ class ProgressManager {
         const safeTotal = Math.max(0, total);
 
         const percentageText = Math.round(safePercentage) + '%';
-        const statsText = safeTotal > 0 ? 
-            `${safeProcessed}/${safeTotal} files` : 
+        const statsText = safeTotal > 0 ?
+            `${safeProcessed}/${safeTotal} files` :
             `${safeProcessed} files processed`;
 
         // Update DOM elements
@@ -114,14 +132,38 @@ class ProgressManager {
         if (elements.percentage) elements.percentage.textContent = percentageText;
         if (elements.stats) elements.stats.textContent = statsText;
         if (elements.status && status) elements.status.textContent = status;
+
+        // Mark as completed when at 100%
+        if (safePercentage >= 100) {
+            this.isCompleted = true;
+        }
+    }
+
+    // Safe wrapper method - handles errors gracefully
+    safeUpdateProgress(progress) {
+        try {
+            this.updateProgress(progress);
+        } catch (error) {
+            console.error('Error updating progress:', error);
+            // Fallback: try to at least update the status
+            try {
+                const statusElement = this.progressOverlay?.querySelector('.progress-status');
+                if (statusElement) {
+                    statusElement.textContent = 'Updating progress...';
+                }
+            } catch (fallbackError) {
+                console.error('Fallback progress update also failed:', fallbackError);
+            }
+        }
     }
 
     show(title = 'Uploading Files') {
         if (this.progressOverlay) {
             const titleElement = this.progressOverlay.querySelector('.progress-title');
             if (titleElement) titleElement.textContent = title;
-            
+
             this.progressOverlay.style.display = 'flex';
+            this.resetError();
             this.resetProgress();
         }
     }
@@ -131,10 +173,11 @@ class ProgressManager {
             this.progressOverlay.style.display = 'none';
         }
         this.currentUpload = null;
+        this.isCompleted = false;
     }
 
     resetProgress() {
-        this.updateProgress({
+        this.safeUpdateProgress({
             currentFile: 'Preparing files...',
             percentage: 0,
             processed: 0,
@@ -145,9 +188,9 @@ class ProgressManager {
 
     setCurrentUpload(upload) {
         this.currentUpload = upload;
+        this.isCompleted = false;
     }
 }
-
 class FileEditor {
     constructor() {
         this.currentFile = null;
@@ -280,9 +323,14 @@ class FileManagerApp {
     constructor() {
         this.currentPath = '/';
         this.selectedFiles = new Set();
+        this.lastSelectedIndex = -1;
         this.viewMode = 'grid';
-        this.sortBy = 'name';
-        this.sortOrder = 'asc';
+        this.sortBy = 'type';
+        this.sortOrder = 'desc';
+        this.sortState = {
+            field: 'type',
+            direction: 'desc'
+        };
         this.searchOptions = {
             term: '',
             useRegex: false,
@@ -526,7 +574,7 @@ class FileManagerApp {
         if (!container) return;
         
         container.innerHTML = '';
-
+        
         this.renderToolbar(container);
         this.renderUploadArea(container);
         
@@ -535,15 +583,17 @@ class FileManagerApp {
             return;
         }
         
-        const imageCount = files.filter(file => 
+        const sortedFiles = this.sortFiles(files);
+        
+        const imageCount = sortedFiles.filter(file => 
             file.mime_type && file.mime_type.startsWith('image/')
         ).length;
         
         if (imageCount >= 10 && this.viewMode !== 'list') {
             this.viewMode = 'masonry';
-            this.renderMasonryView(files, container);
+            this.renderMasonryView(sortedFiles, container);
         } else {
-            this.renderStandardView(files, container);
+            this.renderStandardView(sortedFiles, container);
         }
     }
 
@@ -567,40 +617,74 @@ class FileManagerApp {
         uploadArea.innerHTML = `
             <div class="upload-icon">📁</div>
             <div class="upload-text">Drop files or folders here to upload</div>
-            <div class="upload-subtext">or click to select files/folders</div>
-            <input type="file" class="upload-input" multiple webkitdirectory>
+            <div class="upload-subtext">or use the buttons below</div>
+    
+            <!-- ファイル選択用 -->
+            <input type="file" class="upload-input-files" multiple hidden>
+            <!-- フォルダ選択用 -->
+            <input type="file" class="upload-input-folders" webkitdirectory hidden>
+    
+            <div class="upload-buttons">
+                <button type="button" class="btn-select-files">📄 Select Files</button>
+                <button type="button" class="btn-select-folders">📂 Select Folder</button>
+            </div>
+    
             <div class="upload-info">
                 <div class="upload-feature">• Folder upload will preserve directory structure</div>
                 <div class="upload-feature">• Files will be uploaded to: <span class="upload-path">${this.currentPath}</span></div>
             </div>
         `;
         container.appendChild(uploadArea);
-        
-        const uploadInput = uploadArea.querySelector('.upload-input');
+    
+        const uploadFilesInput = uploadArea.querySelector('.upload-input-files');
+        const uploadFoldersInput = uploadArea.querySelector('.upload-input-folders');
         const uploadPath = uploadArea.querySelector('.upload-path');
-        
-        uploadInput.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files.length > 0) {
-                const hasFolderStructure = !!e.target.files[0].webkitRelativePath;
+        const btnSelectFiles = uploadArea.querySelector('.btn-select-files');
+        const btnSelectFolders = uploadArea.querySelector('.btn-select-folders');
+    
+        const handleFiles = (files) => {
+            if (files && files.length > 0) {
+                const hasFolderStructure = !!files[0].webkitRelativePath;
                 if (hasFolderStructure) {
-                    const folderName = e.target.files[0].webkitRelativePath.split('/')[0];
+                    const folderName = files[0].webkitRelativePath.split('/')[0];
                     this.showToast('Info', `Uploading folder: ${folderName}`, 'info');
                 }
-                this.handleFileUpload(e.target.files);
+                return this.handleFileUpload(files); // Promise を返す想定
             }
+            return Promise.resolve();
+        };
+    
+        // ファイル選択
+        uploadFilesInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
             e.target.value = '';
         });
-        
-        uploadArea.addEventListener('click', () => {
-            uploadInput.click();
+    
+        // フォルダ選択
+        uploadFoldersInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+            e.target.value = '';
         });
-        
+    
+        // ボタンクリックで input を開く
+        btnSelectFiles.addEventListener('click', () => uploadFilesInput.click());
+        btnSelectFolders.addEventListener('click', () => uploadFoldersInput.click());
+    
+        // ドラッグ&ドロップ対応
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => this.handleFileDrop(e));
+    
+        // 現在のパス表示
         this.updateUploadPath = () => {
-            if (uploadPath) {
-                uploadPath.textContent = this.currentPath;
-            }
+            if (uploadPath) uploadPath.textContent = this.currentPath;
         };
-        
         this.updateUploadPath();
     }
 
@@ -652,14 +736,28 @@ class FileManagerApp {
         const thead = document.createElement('thead');
         thead.innerHTML = `
             <tr>
-                <th data-sort="name">Name</th>
-                <th data-sort="size">Size</th>
-                <th data-sort="mod_time">Modified</th>
-                <th>Type</th>
+                <th class="sortable ${this.sortState.field === 'name' ? this.sortState.direction : ''}" data-sort="name">
+                    Name ${this.sortState.field === 'name' ? (this.sortState.direction === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th class="sortable ${this.sortState.field === 'size' ? this.sortState.direction : ''}" data-sort="size">
+                    Size ${this.sortState.field === 'size' ? (this.sortState.direction === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th class="sortable ${this.sortState.field === 'modified' ? this.sortState.direction : ''}" data-sort="modified">
+                    Modified ${this.sortState.field === 'modified' ? (this.sortState.direction === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th class="sortable ${this.sortState.field === 'type' ? this.sortState.direction : ''}" data-sort="type">
+                    Type ${this.sortState.field === 'type' ? (this.sortState.direction === 'asc' ? '↑' : '↓') : ''}
+                </th>
                 <th>Actions</th>
             </tr>
         `;
         table.appendChild(thead);
+        
+        thead.querySelectorAll('.sortable').forEach(header => {
+            header.addEventListener('click', (e) => {
+                this.setSort(e.currentTarget.dataset.sort);
+            });
+        });
         
         const tbody = document.createElement('tbody');
         files.forEach(file => {
@@ -669,6 +767,53 @@ class FileManagerApp {
         
         table.appendChild(tbody);
         container.appendChild(table);
+    }
+
+    setSort(field) {
+        if (this.sortState.field === field) {
+            this.sortState.direction = this.sortState.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.sortState.field = field;
+            this.sortState.direction = 'asc';
+        }
+        
+        this.loadFiles(this.currentPath);
+    }
+
+    sortFiles(files) {
+        return [...files].sort((a, b) => {
+            let valueA, valueB;
+            
+            switch (this.sortState.field) {
+                case 'name':
+                    valueA = a.name.toLowerCase();
+                    valueB = b.name.toLowerCase();
+                    break;
+                case 'size':
+                    valueA = a.size || 0;
+                    valueB = b.size || 0;
+                    break;
+                case 'modified':
+                    valueA = new Date(a.mod_time).getTime();
+                    valueB = new Date(b.mod_time).getTime();
+                    break;
+                case 'type':
+                    valueA = a.is_dir ? 'dir' : (a.mime_type || 'file');
+                    valueB = b.is_dir ? 'dir' : (b.mime_type || 'file');
+                    break;
+                default:
+                    valueA = a.name.toLowerCase();
+                    valueB = b.name.toLowerCase();
+            }
+            
+            if (valueA < valueB) {
+                return this.sortState.direction === 'asc' ? -1 : 1;
+            }
+            if (valueA > valueB) {
+                return this.sortState.direction === 'asc' ? 1 : -1;
+            }
+            return 0;
+        });
     }
 
     renderMasonryView(files, container) {
@@ -900,17 +1045,39 @@ class FileManagerApp {
     handleFileClick(fileItem) {
         const path = fileItem.dataset.path;
         const isSelected = this.selectedFiles.has(path);
+        const fileItems = Array.from(document.querySelectorAll('.file-item, .masonry-item'));
+        const currentIndex = fileItems.indexOf(fileItem);
         
-        if (!event.ctrlKey && !event.metaKey) {
+        if (event.shiftKey && this.lastSelectedIndex !== -1 && this.lastSelectedIndex !== currentIndex) {
             this.clearSelection();
-        }
-        
-        if (isSelected) {
-            this.selectedFiles.delete(path);
-            fileItem.classList.remove('selected');
-        } else {
+            
+            const start = Math.min(this.lastSelectedIndex, currentIndex);
+            const end = Math.max(this.lastSelectedIndex, currentIndex);
+            
+            for (let i = start; i <= end; i++) {
+                if (i < fileItems.length) {
+                    const item = fileItems[i];
+                    const itemPath = item.dataset.path;
+                    this.selectedFiles.add(itemPath);
+                    item.classList.add('selected');
+                }
+            }
+        } 
+        else if (event.ctrlKey || event.metaKey) {
+            if (isSelected) {
+                this.selectedFiles.delete(path);
+                fileItem.classList.remove('selected');
+            } else {
+                this.selectedFiles.add(path);
+                fileItem.classList.add('selected');
+                this.lastSelectedIndex = currentIndex;
+            }
+        } 
+        else {
+            this.clearSelection();
             this.selectedFiles.add(path);
             fileItem.classList.add('selected');
+            this.lastSelectedIndex = currentIndex;
         }
         
         this.updateToolbar();
@@ -1304,7 +1471,7 @@ class FileManagerApp {
         input.type = 'file';
         input.multiple = true;
         
-        // Enable folder selection
+        // フォルダー選択を可能にする（各ブラウザ対応）
         if ('webkitdirectory' in input || 'directory' in input || 'mozdirectory' in input) {
             input.setAttribute('webkitdirectory', '');
             input.setAttribute('directory', '');
@@ -1313,7 +1480,13 @@ class FileManagerApp {
         
         input.addEventListener('change', (e) => {
             if (e.target.files && e.target.files.length > 0) {
-                // Show folder name if available
+                console.log('Selected files:', Array.from(e.target.files).map(f => ({
+                    name: f.name,
+                    webkitRelativePath: f.webkitRelativePath,
+                    size: f.size
+                })));
+                
+                // フォルダー名を表示
                 if (e.target.files[0].webkitRelativePath) {
                     const folderName = e.target.files[0].webkitRelativePath.split('/')[0];
                     this.showToast('Info', `Uploading folder: ${folderName}`, 'info');
@@ -1331,13 +1504,18 @@ class FileManagerApp {
         if (!files || files.length === 0) return;
         
         try {
-            this.progressManager.show('Uploading Files');
-            this.progressManager.updateProgress({
+            // If progress is already shown, update it; otherwise show it
+            if (!this.progressManager.progressOverlay || 
+                this.progressManager.progressOverlay.style.display === 'none') {
+                this.progressManager.show('Uploading Files');
+            }
+            
+            this.progressManager.safeUpdateProgress({
                 currentFile: 'Preparing upload...',
                 percentage: 0,
                 processed: 0,
                 total: files.length,
-                status: `0/${files.length} files`
+                status: `Preparing ${files.length} files`
             });
             
             const uploadArea = document.querySelector('.upload-area');
@@ -1348,19 +1526,22 @@ class FileManagerApp {
             const formData = new FormData();
             formData.append('path', this.currentPath);
             
-            // Add files with folder structure preservation
+            // Process files and show preparation progress
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 let relativePath = file.webkitRelativePath || file.name;
                 
+                console.log('Adding file to upload:', file.name, 'with relative path:', relativePath);
+                
                 formData.append('file', file);
                 formData.append('relativePath[]', relativePath);
                 
-                // Update progress
-                this.progressManager.updateProgress({
+                // Update preparation progress
+                const prepProgress = (i / files.length) * 15; // Use 15% for preparation
+                this.progressManager.safeUpdateProgress({
                     currentFile: `Preparing: ${file.name}`,
-                    percentage: (i / files.length) * 20,
-                    processed: i + 1,
+                    percentage: prepProgress,
+                    processed: i,
                     total: files.length,
                     status: `Preparing files: ${i + 1}/${files.length}`
                 });
@@ -1368,27 +1549,30 @@ class FileManagerApp {
             
             const xhr = new XMLHttpRequest();
             
+            // Upload progress handler
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
-                    const percentage = 20 + (e.loaded / e.total) * 80;
-                    this.progressManager.updateProgress({
+                    // Use 15-95% for actual upload, leaving 5% for completion
+                    const uploadProgress = 15 + (e.loaded / e.total) * 80;
+                    this.progressManager.safeUpdateProgress({
                         currentFile: `Uploading ${files.length} files...`,
-                        percentage: percentage,
-                        processed: Math.floor((percentage / 100) * files.length),
+                        percentage: uploadProgress,
+                        processed: Math.floor(((uploadProgress - 15) / 80) * files.length),
                         total: files.length,
-                        status: `${Math.round(percentage)}% complete`
+                        status: `Uploading: ${Math.round(uploadProgress - 15)}% complete`
                     });
                 }
             });
             
+            // Success handler
             xhr.addEventListener('load', () => {
                 this.handleUploadResponse(xhr, files.length);
             });
             
+            // Error handlers
             xhr.addEventListener('error', (e) => {
                 console.error('Upload error:', e);
-                this.progressManager.showError('Network error');
-                this.showToast('Error', 'Network error occurred', 'error');
+                this.handleUploadError('Network error occurred');
             });
             
             xhr.addEventListener('abort', () => {
@@ -1396,27 +1580,33 @@ class FileManagerApp {
                 this.showToast('Info', 'Upload cancelled', 'info');
             });
             
+            // Start upload
             xhr.open('POST', '/api/files/upload');
             this.progressManager.setCurrentUpload(xhr);
             
-            this.progressManager.updateProgress({
-                currentFile: 'Starting upload...',
-                percentage: 0,
+            this.progressManager.safeUpdateProgress({
+                currentFile: 'Connecting to server...',
+                percentage: 15,
                 processed: 0,
                 total: files.length,
-                status: 'Connecting to server'
+                status: 'Starting upload'
             });
             
             xhr.send(formData);
             
         } catch (error) {
-            this.progressManager.showError('Upload failed');
-            this.showToast('Error', 'Failed to upload files: ' + error.message, 'error');
-            console.error('Error uploading files:', error);
+            console.error('Error in handleFileUpload:', error);
+            this.handleUploadError('Upload failed: ' + error.message);
         }
     }
 
     handleUploadResponse(xhr, totalFiles) {
+        // Clean up upload area state first
+        const uploadArea = document.querySelector('.upload-area');
+        if (uploadArea) {
+            uploadArea.classList.remove('uploading');
+        }
+        
         if (xhr.status >= 200 && xhr.status < 300) {
             try {
                 const response = JSON.parse(xhr.responseText);
@@ -1424,7 +1614,16 @@ class FileManagerApp {
                 // Parse response
                 const result = this.parseUploadResponse(response, totalFiles);
                 
-                // Show message
+                // Update final progress with complete status
+                this.progressManager.safeUpdateProgress({
+                    currentFile: 'Upload complete!',
+                    percentage: 100,
+                    processed: result.successful,
+                    total: result.total,
+                    status: `Completed: ${result.successful} successful${result.failedCount > 0 ? `, ${result.failedCount} failed` : ''}`
+                });
+                
+                // Show result message immediately
                 if (result.failedCount > 0) {
                     this.showToast('Upload Complete', 
                         `${result.message}, ${result.failedCount} failed`, 
@@ -1433,24 +1632,11 @@ class FileManagerApp {
                     this.showToast('Success', result.message, 'success');
                 }
                 
-                // Refresh file list
-                setTimeout(() => {
-                    this.loadFiles(this.currentPath);
-                }, 1000);
-                
-                // Update progress
-                this.progressManager.updateProgress({
-                    currentFile: 'Upload complete!',
-                    percentage: 100,
-                    processed: result.successful,
-                    total: result.total,
-                    status: `Completed: ${result.successful} successful, ${result.failedCount} failed`
-                });
-                
-                // Hide progress after delay
-                setTimeout(() => {
+                // Wait for user confirmation before hiding progress
+                this.showUploadCompleteDialog(result).then(() => {
                     this.progressManager.hide();
-                }, 3000);
+                    this.loadFiles(this.currentPath);
+                });
                 
             } catch (error) {
                 console.error('Response parsing error:', error, xhr.responseText);
@@ -1465,6 +1651,22 @@ class FileManagerApp {
             
             this.handleUploadError(errorMsg);
         }
+    }
+
+   
+    handleUploadError(message) {
+        // Clean up upload area state
+        const uploadArea = document.querySelector('.upload-area');
+        if (uploadArea) {
+            uploadArea.classList.remove('uploading');
+        }
+        
+        this.progressManager.showError(message);
+        this.showToast('Error', message, 'error');
+        
+        setTimeout(() => {
+            this.progressManager.hide();
+        }, 5000);
     }
 
     handleUploadError(message) {
@@ -1498,33 +1700,258 @@ class FileManagerApp {
     handleFileDrop(e) {
         e.preventDefault();
         const uploadArea = document.querySelector('.upload-area');
-        if (uploadArea) {
-            uploadArea.classList.remove('dragover');
-        }
-        
-        const files = [];
-        
-        // Get files from drop event
-        if (e.dataTransfer.items) {
-            for (let i = 0; i < e.dataTransfer.items.length; i++) {
-                if (e.dataTransfer.items[i].kind === 'file') {
-                    const file = e.dataTransfer.items[i].getAsFile();
-                    if (file) {
-                        files.push(file);
+        if (uploadArea) uploadArea.classList.remove('dragover');
+    
+        // Start single progress session
+        this.progressManager.show('Processing Files');
+        this.progressManager.safeUpdateProgress({
+            currentFile: 'Analyzing dropped items...',
+            percentage: 0,
+            processed: 0,
+            total: 0,
+            status: 'Scanning files and folders'
+        });
+    
+        this.processDroppedItems(e.dataTransfer)
+            .then(allFiles => {
+                if (allFiles.length > 0) {
+                    // Update progress to show total files found
+                    this.progressManager.safeUpdateProgress({
+                        currentFile: 'Starting upload...',
+                        percentage: 0,
+                        processed: 0,
+                        total: allFiles.length,
+                        status: `Found ${allFiles.length} files to upload`
+                    });
+                    
+                    // Unified upload for all files
+                    return this.handleFileUpload(allFiles);
+                } else {
+                    this.progressManager.hide();
+                    this.showToast('Info', 'No files found to upload', 'info');
+                }
+            })
+            .catch(error => {
+                console.error('Error processing dropped items:', error);
+                this.progressManager.showError('Failed to process dropped items');
+            });
+    }
+    
+    async processDroppedItems(dataTransfer) {
+        const allFiles = [];
+        const processingPromises = [];
+    
+        if (dataTransfer.items) {
+            // Modern browsers with DataTransferItemList
+            for (let i = 0; i < dataTransfer.items.length; i++) {
+                const item = dataTransfer.items[i];
+                if (item.kind === 'file') {
+                    const entry = item.webkitGetAsEntry();
+                    if (entry) {
+                        processingPromises.push(this.processEntry(entry, ''));
                     }
                 }
             }
         } else {
-            for (let i = 0; i < e.dataTransfer.files.length; i++) {
-                files.push(e.dataTransfer.files[i]);
+            // Fallback for older browsers
+            for (let i = 0; i < dataTransfer.files.length; i++) {
+                const file = dataTransfer.files[i];
+                allFiles.push(file);
             }
         }
-        
-        if (files.length > 0) {
-            this.handleFileUpload(files);
+    
+        if (processingPromises.length > 0) {
+            const results = await Promise.all(processingPromises);
+            results.forEach(files => {
+                allFiles.push(...files);
+            });
         }
+    
+        // Update progress after scanning
+        this.progressManager.safeUpdateProgress({
+            currentFile: 'Scan complete',
+            percentage: 10,
+            processed: 0,
+            total: allFiles.length,
+            status: `Ready to upload ${allFiles.length} files`
+        });
+    
+        return allFiles;
     }
-   
+
+    async processEntry(entry, basePath = '') {
+        const files = [];
+        
+        if (entry.isFile) {
+            return new Promise((resolve) => {
+                entry.file((file) => {
+                    // Set the webkitRelativePath to maintain folder structure
+                    const relativePath = basePath + file.name;
+                    Object.defineProperty(file, 'webkitRelativePath', {
+                        value: relativePath,
+                        configurable: true
+                    });
+                    resolve([file]);
+                }, (error) => {
+                    console.warn('Error reading file:', error);
+                    resolve([]);
+                });
+            });
+        } else if (entry.isDirectory) {
+            return new Promise((resolve) => {
+                const reader = entry.createReader();
+                
+                const readAllEntries = async () => {
+                    const allEntries = [];
+                    
+                    const readBatch = () => {
+                        return new Promise((resolveBatch) => {
+                            reader.readEntries((entries) => {
+                                if (entries.length === 0) {
+                                    resolveBatch(allEntries);
+                                } else {
+                                    allEntries.push(...entries);
+                                    readBatch().then(resolveBatch);
+                                }
+                            }, (error) => {
+                                console.warn('Error reading directory entries:', error);
+                                resolveBatch(allEntries);
+                            });
+                        });
+                    };
+                    
+                    return readBatch();
+                };
+                
+                readAllEntries().then(async (entries) => {
+                    const subPromises = entries.map(subEntry => 
+                        this.processEntry(subEntry, basePath + entry.name + '/')
+                    );
+                    
+                    try {
+                        const results = await Promise.all(subPromises);
+                        const flatFiles = results.flat();
+                        resolve(flatFiles);
+                    } catch (error) {
+                        console.warn('Error processing directory contents:', error);
+                        resolve([]);
+                    }
+                });
+            });
+        }
+        
+        return [];
+    }
+    
+    showUploadCompleteDialog(result) {
+        return new Promise((resolve) => {
+            // Update the progress overlay to show completion with user action
+            const progressOverlay = this.progressManager.progressOverlay;
+            if (!progressOverlay) {
+                resolve();
+                return;
+            }
+            
+            const modal = progressOverlay.querySelector('.progress-modal');
+            const statusElement = progressOverlay.querySelector('.progress-status');
+            const closeBtn = progressOverlay.querySelector('.progress-close');
+            
+            if (statusElement) {
+                if (result.failedCount > 0) {
+                    statusElement.innerHTML = `
+                        Upload completed with ${result.failedCount} errors.<br>
+                        <strong>Click close to continue</strong>
+                    `;
+                    statusElement.style.color = 'var(--warning, #ff9800)';
+                } else {
+                    statusElement.innerHTML = `
+                        All files uploaded successfully!<br>
+                        <strong>Click close to continue</strong>
+                    `;
+                    statusElement.style.color = 'var(--success, #4caf50)';
+                }
+            }
+            
+            if (modal) {
+                modal.style.border = result.failedCount > 0 ? 
+                    '2px solid var(--warning, #ff9800)' : 
+                    '2px solid var(--success, #4caf50)';
+            }
+            
+            if (closeBtn) {
+                closeBtn.style.display = 'block';
+                closeBtn.style.background = result.failedCount > 0 ? 
+                    'var(--warning, #ff9800)' : 
+                    'var(--success, #4caf50)';
+                closeBtn.style.color = 'white';
+                closeBtn.style.fontWeight = 'bold';
+                
+                // Remove existing listeners and add new one
+                const newCloseBtn = closeBtn.cloneNode(true);
+                closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+                
+                newCloseBtn.addEventListener('click', () => {
+                    resolve();
+                });
+            }
+            
+            // Auto-close after 10 seconds as fallback
+            setTimeout(() => {
+                resolve();
+            }, 10000);
+        });
+    }
+
+    showUploadStatus(show) {
+        let status = document.querySelector('.upload-status');
+        if (!status) {
+            status = document.createElement('div');
+            status.className = 'upload-status';
+            status.style.position = 'absolute';
+            status.style.top = '10px';
+            status.style.right = '10px';
+            status.style.padding = '5px 10px';
+            status.style.background = 'rgba(0,0,0,0.7)';
+            status.style.color = '#fff';
+            status.style.borderRadius = '4px';
+            status.style.zIndex = '1000';
+            status.textContent = 'Uploading...';
+            document.body.appendChild(status);
+        }
+        status.style.display = show ? 'block' : 'none';
+    }
+
+    handleFolderUpload(entries) {
+        const folderFiles = [];
+    
+        const readEntry = (entry, pathPrefix = '') => {
+            return new Promise((resolve) => {
+                if (entry.isFile) {
+                    entry.file((file) => {
+                        Object.defineProperty(file, 'webkitRelativePath', {
+                            value: pathPrefix + file.name,
+                            configurable: true
+                        });
+                        folderFiles.push(file);
+                        resolve();
+                    });
+                } else if (entry.isDirectory) {
+                    const reader = entry.createReader();
+                    reader.readEntries((childEntries) => {
+                        Promise.all(childEntries.map((child) => readEntry(child, pathPrefix + entry.name + '/')))
+                            .then(() => resolve());
+                    });
+                }
+            });
+        };
+    
+        return Promise.all(entries.map((entry) => readEntry(entry)))
+            .then(() => {
+                if (folderFiles.length > 0) return this.handleFileUpload(folderFiles);
+            });
+    }
+
+ 
     async downloadSelected() {
         if (this.selectedFiles.size === 0) return;
         

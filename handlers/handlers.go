@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"archive/zip"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,18 +15,274 @@ import (
 	"puremania/models"
 	"puremania/utils"
 	"regexp"
+	"runtime"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
 
+// Optimized buffer sizes for different operations
+const (
+	SmallBufferSize = 32 * 1024       // 32KB for small files
+	LargeBufferSize = 64 * 1024       // 64KB for large files
+	HugeBufferSize  = 128 * 1024      // 128KB for very large files
+	CacheTTL        = 5 * time.Minute // Cache TTL
+)
+
+// getOptimalBufferSize returns optimal buffer size based on file size
+func getOptimalBufferSize(fileSize int64) int {
+	switch {
+	case fileSize < 1024*1024: // < 1MB
+		return SmallBufferSize
+	case fileSize < 10*1024*1024: // < 10MB
+		return LargeBufferSize
+	default: // >= 10MB
+		return HugeBufferSize
+	}
+}
+
+// 統一キャッシュエントリ（TTL付き）
+type CacheEntry struct {
+	Data      interface{}
+	Timestamp time.Time
+	Size      int64
+	TTL       time.Duration
+}
+
+func (c *CacheEntry) IsExpired() bool {
+	return time.Since(c.Timestamp) > c.TTL
+}
+
+// 統一TTLキャッシュ
+type TTLCache struct {
+	mu       sync.RWMutex
+	entries  map[string]*CacheEntry
+	order    []string
+	maxSize  int64
+	maxItems int
+	curSize  int64
+}
+
+func NewTTLCache(maxSize int64, maxItems int) *TTLCache {
+	cache := &TTLCache{
+		entries:  make(map[string]*CacheEntry),
+		order:    make([]string, 0, maxItems),
+		maxSize:  maxSize,
+		maxItems: maxItems,
+	}
+
+	// TTL清掃用goroutine
+	go cache.cleanupExpired()
+
+	return cache
+}
+
+func (c *TTLCache) cleanupExpired() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		c.mu.Lock()
+		var toDelete []string
+
+		for key, entry := range c.entries {
+			if entry.IsExpired() {
+				toDelete = append(toDelete, key)
+			}
+		}
+
+		for _, key := range toDelete {
+			c.evict(key)
+		}
+		c.mu.Unlock()
+	}
+}
+
+func (c *TTLCache) Get(key string) (interface{}, bool) {
+	c.mu.RLock()
+	entry, exists := c.entries[key]
+	c.mu.RUnlock()
+
+	if !exists || entry.IsExpired() {
+		if exists {
+			c.mu.Lock()
+			c.evict(key)
+			c.mu.Unlock()
+		}
+		return nil, false
+	}
+
+	// アクセス順序を更新
+	c.mu.Lock()
+	c.moveToFront(key)
+	c.mu.Unlock()
+
+	return entry.Data, true
+}
+
+func (c *TTLCache) Set(key string, data interface{}, size int64, ttl time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if existing, exists := c.entries[key]; exists {
+		c.curSize -= existing.Size
+		c.removeFromOrder(key)
+	}
+
+	// サイズチェック
+	for c.curSize+size > c.maxSize || len(c.entries) >= c.maxItems {
+		if len(c.order) == 0 {
+			break
+		}
+		oldest := c.order[len(c.order)-1]
+		c.evict(oldest)
+	}
+
+	c.entries[key] = &CacheEntry{
+		Data:      data,
+		Timestamp: time.Now(),
+		Size:      size,
+		TTL:       ttl,
+	}
+	c.order = append([]string{key}, c.order...)
+	c.curSize += size
+}
+
+func (c *TTLCache) moveToFront(key string) {
+	for i, k := range c.order {
+		if k == key {
+			c.order = append([]string{key}, append(c.order[:i], c.order[i+1:]...)...)
+			break
+		}
+	}
+}
+
+func (c *TTLCache) removeFromOrder(key string) {
+	for i, k := range c.order {
+		if k == key {
+			c.order = append(c.order[:i], c.order[i+1:]...)
+			break
+		}
+	}
+}
+
+func (c *TTLCache) evict(key string) {
+	if entry, exists := c.entries[key]; exists {
+		c.curSize -= entry.Size
+		delete(c.entries, key)
+		c.removeFromOrder(key)
+	}
+}
+
+func (c *TTLCache) InvalidateByPrefix(prefix string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var toDelete []string
+	for key := range c.entries {
+		if strings.HasPrefix(key, prefix) {
+			toDelete = append(toDelete, key)
+		}
+	}
+
+	for _, key := range toDelete {
+		c.evict(key)
+	}
+}
+
+// CPU論理コア数ベースのワーカープール
+type WorkerPool struct {
+	workers    int
+	taskQueue  chan func()
+	resultChan chan interface{}
+	wg         sync.WaitGroup
+	active     int64
+}
+
+func NewWorkerPool() *WorkerPool {
+	workers := runtime.NumCPU()
+	if workers > 16 { // 最大16ワーカーに制限
+		workers = 16
+	}
+	if workers < 2 {
+		workers = 2
+	}
+
+	pool := &WorkerPool{
+		workers:    workers,
+		taskQueue:  make(chan func(), workers*4), // バッファ付きチャネル
+		resultChan: make(chan interface{}, workers*2),
+	}
+
+	for i := 0; i < workers; i++ {
+		pool.wg.Add(1)
+		go pool.worker()
+	}
+
+	return pool
+}
+
+func (p *WorkerPool) worker() {
+	defer p.wg.Done()
+	for task := range p.taskQueue {
+		atomic.AddInt64(&p.active, 1)
+		task()
+		atomic.AddInt64(&p.active, -1)
+	}
+}
+
+func (p *WorkerPool) Submit(task func()) {
+	select {
+	case p.taskQueue <- task:
+	default:
+		// タスクキューが満杯の場合は同期実行
+		task()
+	}
+}
+
+func (p *WorkerPool) SubmitWithResult(task func() interface{}) <-chan interface{} {
+	resultChan := make(chan interface{}, 1)
+	p.Submit(func() {
+		result := task()
+		resultChan <- result
+		close(resultChan)
+	})
+	return resultChan
+}
+
+func (p *WorkerPool) ActiveWorkers() int64 {
+	return atomic.LoadInt64(&p.active)
+}
+
+func (p *WorkerPool) Close() {
+	close(p.taskQueue)
+	p.wg.Wait()
+	close(p.resultChan)
+}
+
 type Handler struct {
-	config *config.Config
+	config     *config.Config
+	cache      *TTLCache
+	workerPool *WorkerPool
 }
 
 func NewHandler(config *config.Config) *Handler {
-	return &Handler{config: config}
+	return &Handler{
+		config:     config,
+		cache:      NewTTLCache(250*1024*1024, 15000), // 250MB, 15K items
+		workerPool: NewWorkerPool(),
+	}
+}
+
+// 検索条件のハッシュ化でキー生成
+func (h *Handler) generateSearchCacheKey(term, path, scope string, useRegex, caseSensitive bool, maxResults int) string {
+	data := fmt.Sprintf("search:%s:%s:%s:%t:%t:%d", term, path, scope, useRegex, caseSensitive, maxResults)
+	hash := md5.Sum([]byte(data))
+	return "search:" + hex.EncodeToString(hash[:])
 }
 
 // 物理パスを仮想パスに変換するメソッド
@@ -48,7 +306,6 @@ func (h *Handler) convertToVirtualPath(physicalPath string) string {
 		}
 	}
 
-	// 変換できない場合は元のパスを返す
 	return physicalPath
 }
 
@@ -100,12 +357,38 @@ func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
 	return filepath.Join(h.config.StorageDir, strings.TrimPrefix(virtualPath, "/")), nil
 }
 
+// ListFiles - 並列処理とTTLキャッシュ使用
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	if path == "" {
 		path = "/"
 	}
 
+	// キャッシュチェック
+	cacheKey := "list:" + path
+	if cached, found := h.cache.Get(cacheKey); found {
+		if fileInfos, ok := cached.([]models.FileInfo); ok {
+			h.respondSuccess(w, fileInfos)
+			return
+		}
+	}
+
+	// 並列処理でファイルリストを取得
+	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+		return h.getFileList(path)
+	})
+
+	result := <-resultChan
+	if fileInfos, ok := result.([]models.FileInfo); ok {
+		// 結果をキャッシュ（TTL付き）
+		h.cache.Set(cacheKey, fileInfos, int64(len(fileInfos)*200), CacheTTL)
+		h.respondSuccess(w, fileInfos)
+	} else {
+		h.respondError(w, "Cannot read directory", http.StatusInternalServerError)
+	}
+}
+
+func (h *Handler) getFileList(path string) []models.FileInfo {
 	var fileInfos []models.FileInfo
 
 	// 特別なディレクトリのマッピング
@@ -119,67 +402,23 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 
 	// 特別なディレクトリへのアクセスを処理
 	if dirName, exists := specialDirs[path]; exists {
-		// 特別なディレクトリの場合はストレージディレクトリ内の対応するフォルダを表示
 		fullPath := filepath.Join(h.config.StorageDir, dirName)
-
-		// ディレクトリが存在する場合のみ読み込み
-		if _, err := os.Stat(fullPath); err == nil {
-			files, err := os.ReadDir(fullPath)
-			if err != nil {
-				h.respondError(w, "Cannot read directory", http.StatusInternalServerError)
-				return
-			}
-
-			for _, file := range files {
-				info, err := file.Info()
-				if err != nil {
-					continue
-				}
-
-				mimeType := "application/octet-stream"
-				isEditable := false
-
-				if !file.IsDir() {
-					mimeType = mime.TypeByExtension(filepath.Ext(file.Name()))
-					if mimeType == "" {
-						mimeType = "application/octet-stream"
-					}
-					isEditable = utils.IsTextFile(mimeType) || utils.IsEditableByExtension(file.Name())
-				}
-
-				// 仮想パスを設定
-				virtualPath := h.convertToVirtualPath(filepath.Join(fullPath, file.Name()))
-
-				fileInfo := models.FileInfo{
-					Name:       file.Name(),
-					Path:       virtualPath,
-					Size:       info.Size(),
-					ModTime:    info.ModTime().Format(time.RFC3339),
-					IsDir:      file.IsDir(),
-					MimeType:   mimeType,
-					IsEditable: isEditable,
-				}
-				fileInfos = append(fileInfos, fileInfo)
-			}
+		if entries, err := os.ReadDir(fullPath); err == nil {
+			fileInfos = h.processDirectoryEntries(entries, fullPath)
 		}
-		// ディレクトリが存在しない場合は空のリストを返す
-		h.respondSuccess(w, fileInfos)
-		return
+		return fileInfos
 	}
 
 	// 通常のパス処理
 	fullPath, err := h.convertToPhysicalPath(path)
 	if err != nil {
-		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
-		return
+		return fileInfos
 	}
 
 	// ルートディレクトリの場合はマウントポイントも表示
 	if path == "/" {
-		// Add mount directories as special folders
 		for _, mountDir := range h.config.MountDirs {
-			info, err := os.Stat(mountDir)
-			if err == nil {
+			if info, err := os.Stat(mountDir); err == nil {
 				virtualPath := h.convertToVirtualPath(mountDir)
 				fileInfos = append(fileInfos, models.FileInfo{
 					Name:    filepath.Base(mountDir),
@@ -193,51 +432,70 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ディレクトリのファイルを読み込み
-	files, err := os.ReadDir(fullPath)
-	if err != nil {
-		// ディレクトリが存在しない場合や読み込みエラーの場合
-		h.respondError(w, "Cannot read directory", http.StatusInternalServerError)
-		return
+	if entries, err := os.ReadDir(fullPath); err == nil {
+		directoryFileInfos := h.processDirectoryEntries(entries, fullPath)
+		fileInfos = append(fileInfos, directoryFileInfos...)
 	}
 
-	for _, file := range files {
-		info, err := file.Info()
-		if err != nil {
-			continue
-		}
-
-		mimeType := "application/octet-stream"
-		isEditable := false
-
-		if !file.IsDir() {
-			mimeType = mime.TypeByExtension(filepath.Ext(file.Name()))
-			if mimeType == "" {
-				mimeType = "application/octet-stream"
-			}
-			isEditable = utils.IsTextFile(mimeType) || utils.IsEditableByExtension(file.Name())
-		}
-
-		// 仮想パスを設定
-		physicalFilepath := filepath.Join(fullPath, file.Name())
-		virtualPath := h.convertToVirtualPath(physicalFilepath)
-
-		fileInfo := models.FileInfo{
-			Name:       file.Name(),
-			Path:       virtualPath,
-			Size:       info.Size(),
-			ModTime:    info.ModTime().Format(time.RFC3339),
-			IsDir:      file.IsDir(),
-			MimeType:   mimeType,
-			IsEditable: isEditable,
-		}
-		fileInfos = append(fileInfos, fileInfo)
-	}
-
-	h.respondSuccess(w, fileInfos)
+	return fileInfos
 }
 
-// バックエンドの修正版（handlers/handlers.go）
+func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string) []models.FileInfo {
+	var fileInfos []models.FileInfo
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// 並列処理でエントリーを処理
+	for _, entry := range entries {
+		wg.Add(1)
+		h.workerPool.Submit(func() {
+			defer wg.Done()
+
+			var size int64
+			var modTime time.Time
+
+			if entry.Type().IsRegular() || entry.IsDir() {
+				if info, err := entry.Info(); err == nil {
+					size = info.Size()
+					modTime = info.ModTime()
+				}
+			}
+
+			mimeType := "application/octet-stream"
+			isEditable := false
+
+			if !entry.IsDir() {
+				mimeType = mime.TypeByExtension(filepath.Ext(entry.Name()))
+				if mimeType == "" {
+					mimeType = "application/octet-stream"
+				}
+				isEditable = utils.IsTextFile(mimeType) || utils.IsEditableByExtension(entry.Name())
+			}
+
+			physicalFilepath := filepath.Join(basePath, entry.Name())
+			virtualPath := h.convertToVirtualPath(physicalFilepath)
+
+			fileInfo := models.FileInfo{
+				Name:       entry.Name(),
+				Path:       virtualPath,
+				Size:       size,
+				ModTime:    modTime.Format(time.RFC3339),
+				IsDir:      entry.IsDir(),
+				MimeType:   mimeType,
+				IsEditable: isEditable,
+			}
+
+			mu.Lock()
+			fileInfos = append(fileInfos, fileInfo)
+			mu.Unlock()
+		})
+	}
+
+	wg.Wait()
+	return fileInfos
+}
+
+// UploadFile - 並列処理でファイルアップロード
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
@@ -246,7 +504,6 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// マルチパートフォームの解析
 	if err := r.ParseMultipartForm(h.config.MaxFileSize << 20); err != nil {
 		h.respondError(w, "File is too large", http.StatusBadRequest)
 		return
@@ -263,82 +520,85 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("Uploading to path: %s\n", fullPath)
-
 	if err := os.MkdirAll(fullPath, 0755); err != nil {
 		h.respondError(w, "Cannot create directory", http.StatusInternalServerError)
 		return
 	}
 
-	// ファイルと相対パスを取得
 	files := r.MultipartForm.File["file"]
 	relativePaths := r.MultipartForm.Value["relativePath[]"]
 
-	uploadedFiles := make([]string, 0)
-	failedFiles := make([]string, 0)
-
-	fmt.Printf("Received %d files for upload\n", len(files))
-	fmt.Printf("Received %d relative paths\n", len(relativePaths))
-
-	// ファイル数と相対パス数が一致するかチェック
 	if len(files) != len(relativePaths) {
 		h.respondError(w, "Mismatch between files and relative paths", http.StatusBadRequest)
 		return
 	}
 
+	// 並列アップロード処理
+	resultChan := make(chan uploadResult, len(files))
+	var wg sync.WaitGroup
+
 	for i, fileHeader := range files {
-		file, err := fileHeader.Open()
-		if err != nil {
-			fmt.Printf("Failed to open file: %s, error: %v\n", fileHeader.Filename, err)
-			failedFiles = append(failedFiles, fileHeader.Filename)
-			continue
-		}
-		defer file.Close()
+		wg.Add(1)
+		h.workerPool.Submit(func() {
+			defer wg.Done()
 
-		// 相対パスを使用してターゲットパスを構築
-		relativePath := relativePaths[i]
-		fmt.Printf("Processing file: %s with relative path: %s\n", fileHeader.Filename, relativePath)
+			file, err := fileHeader.Open()
+			if err != nil {
+				resultChan <- uploadResult{path: fileHeader.Filename, success: false}
+				return
+			}
+			defer file.Close()
 
-		// パス区切り文字を正規化（WindowsとUnix両対応）
-		normalizedRelativePath := filepath.FromSlash(relativePath)
+			relativePath := relativePaths[i]
+			normalizedRelativePath := filepath.FromSlash(relativePath)
+			targetPath := filepath.Join(fullPath, normalizedRelativePath)
+			targetDir := filepath.Dir(targetPath)
 
-		// フルパスを作成（フォルダー構造を維持）
-		targetPath := filepath.Join(fullPath, normalizedRelativePath)
-		fmt.Printf("Target path: %s\n", targetPath)
+			if err := os.MkdirAll(targetDir, 0755); err != nil {
+				resultChan <- uploadResult{path: relativePath, success: false}
+				return
+			}
 
-		// 必要なディレクトリを作成
-		targetDir := filepath.Dir(targetPath)
-		fmt.Printf("Creating directory: %s\n", targetDir)
+			dst, err := os.Create(targetPath)
+			if err != nil {
+				resultChan <- uploadResult{path: relativePath, success: false}
+				return
+			}
+			defer dst.Close()
 
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
-			fmt.Printf("Failed to create directory: %s, error: %v\n", targetDir, err)
-			failedFiles = append(failedFiles, relativePath)
-			continue
-		}
+			// バッファサイズ最適化
+			buffer := make([]byte, getOptimalBufferSize(fileHeader.Size))
+			_, err = io.CopyBuffer(dst, file, buffer)
 
-		dst, err := os.Create(targetPath)
-		if err != nil {
-			fmt.Printf("Failed to create file: %s, error: %v\n", targetPath, err)
-			failedFiles = append(failedFiles, relativePath)
-			continue
-		}
-		defer dst.Close()
+			if err != nil {
+				resultChan <- uploadResult{path: relativePath, success: false}
+				return
+			}
 
-		_, err = io.Copy(dst, file)
-		if err != nil {
-			fmt.Printf("Failed to copy file: %s, error: %v\n", relativePath, err)
-			failedFiles = append(failedFiles, relativePath)
-			continue
-		}
+			virtualPath := h.convertToVirtualPath(targetPath)
+			resultChan <- uploadResult{path: virtualPath, success: true}
 
-		fmt.Printf("Successfully uploaded: %s -> %s\n", relativePath, targetPath)
-
-		// 仮想パスを返す
-		virtualPath := h.convertToVirtualPath(targetPath)
-		uploadedFiles = append(uploadedFiles, virtualPath)
+			// 関連キャッシュをクリア
+			h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(targetDir)))
+		})
 	}
 
-	fmt.Printf("Upload completed: %d successful, %d failed\n", len(uploadedFiles), len(failedFiles))
+	// 結果収集
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	uploadedFiles := make([]string, 0)
+	failedFiles := make([]string, 0)
+
+	for result := range resultChan {
+		if result.success {
+			uploadedFiles = append(uploadedFiles, result.path)
+		} else {
+			failedFiles = append(failedFiles, result.path)
+		}
+	}
 
 	response := map[string]interface{}{
 		"message":      fmt.Sprintf("Uploaded %d file(s) successfully", len(uploadedFiles)),
@@ -352,6 +612,12 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	h.respondSuccess(w, response)
 }
 
+type uploadResult struct {
+	path    string
+	success bool
+}
+
+// DownloadFile - http.ServeContentを使用してsendfile最適化
 func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	if path == "" {
@@ -387,50 +653,15 @@ func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
-	w.Header().Set("Content-Type", contentType)
-
-	// オーディオ/ビデオの場合はRangeリクエストを許可
-	if strings.HasPrefix(contentType, "audio/") || strings.HasPrefix(contentType, "video/") {
-		w.Header().Set("Accept-Ranges", "bytes")
-	}
 
 	filename := filepath.Base(path)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
 
-	rangeHeader := r.Header.Get("Range")
-	if rangeHeader == "" {
-		w.Header().Set("Content-Length", strconv.FormatInt(stat.Size(), 10))
-		io.Copy(w, file)
-		return
-	}
-
-	var start, end int64
-	if strings.HasPrefix(rangeHeader, "bytes=") {
-		rangeStr := rangeHeader[6:]
-		ranges := strings.Split(rangeStr, "-")
-		if len(ranges) == 2 {
-			start, _ = strconv.ParseInt(ranges[0], 10, 64)
-			if ranges[1] != "" {
-				end, _ = strconv.ParseInt(ranges[1], 10, 64)
-			} else {
-				end = stat.Size() - 1
-			}
-		}
-	}
-
-	if end >= stat.Size() {
-		end = stat.Size() - 1
-	}
-	contentLength := end - start + 1
-
-	w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, stat.Size()))
-	w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
-	w.WriteHeader(http.StatusPartialContent)
-
-	file.Seek(start, 0)
-	io.CopyN(w, file, contentLength)
+	// http.ServeContentを使用してsendfile最適化とRange/If-Modified-Since自動処理
+	http.ServeContent(w, r, filename, stat.ModTime(), file)
 }
 
+// GetFileContent - 画像はhttp.ServeFileで最適化、テキストはキャッシュ使用
 func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	if path == "" {
@@ -455,19 +686,12 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 画像ファイルの場合は直接サーブ
 	mimeType := mime.TypeByExtension(filepath.Ext(path))
-	if mimeType != "" && strings.HasPrefix(mimeType, "image/") {
-		file, err := os.Open(fullPath)
-		if err != nil {
-			h.respondError(w, "Cannot open file", http.StatusNotFound)
-			return
-		}
-		defer file.Close()
 
-		w.Header().Set("Content-Type", mimeType)
+	// 画像ファイルの場合はhttp.ServeFileで最適化
+	if mimeType != "" && strings.HasPrefix(mimeType, "image/") {
 		w.Header().Set("Cache-Control", "max-age=3600")
-		io.Copy(w, file)
+		http.ServeFile(w, r, fullPath)
 		return
 	}
 
@@ -476,18 +700,42 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	content, err := os.ReadFile(fullPath)
-	if err != nil {
-		h.respondError(w, "Cannot read file", http.StatusInternalServerError)
-		return
+	// キャッシュチェック
+	cacheKey := "content:" + path + ":" + strconv.FormatInt(stat.ModTime().Unix(), 10)
+	if cached, found := h.cache.Get(cacheKey); found {
+		if content, ok := cached.(string); ok {
+			h.respondSuccess(w, map[string]string{
+				"content": content,
+				"path":    path,
+			})
+			return
+		}
 	}
 
-	h.respondSuccess(w, map[string]string{
-		"content": string(content),
-		"path":    path,
+	// 並列処理でファイル読み込み
+	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+		content, err := os.ReadFile(fullPath)
+		if err != nil {
+			return nil
+		}
+		return string(content)
 	})
+
+	result := <-resultChan
+	if contentStr, ok := result.(string); ok {
+		// コンテンツをキャッシュ（TTL付き）
+		h.cache.Set(cacheKey, contentStr, stat.Size(), CacheTTL)
+
+		h.respondSuccess(w, map[string]string{
+			"content": contentStr,
+			"path":    path,
+		})
+	} else {
+		h.respondError(w, "Cannot read file", http.StatusInternalServerError)
+	}
 }
 
+// DownloadZip - 並列処理でZIPストリーミング配信
 func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 	var req models.BatchPathsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -504,116 +752,151 @@ func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=\"files.zip\"")
 	w.Header().Set("Transfer-Encoding", "chunked")
 
+	// io.Pipeでストリーミング
+	pr, pw := io.Pipe()
+
+	// 並列処理でzip作成
+	go func() {
+		defer pw.Close()
+		h.createZipArchive(pw, req.Paths)
+	}()
+
+	// ストリーミング出力
+	io.Copy(w, pr)
+}
+
+func (h *Handler) createZipArchive(w io.Writer, paths []string) {
 	zipWriter := zip.NewWriter(w)
 	defer zipWriter.Close()
 
-	successfulFiles := 0
-	failedFiles := 0
+	var successfulFiles, failedFiles int64
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
-	for _, userPath := range req.Paths {
-		fullPath, err := h.convertToPhysicalPath(userPath)
-		if err != nil {
-			fmt.Printf("Skipping invalid path for zipping: %s (%v)\n", userPath, err)
-			failedFiles++
-			continue
-		}
+	// 並列処理でファイルをZIPに追加
+	for _, userPath := range paths {
+		wg.Add(1)
+		h.workerPool.Submit(func() {
+			defer wg.Done()
 
-		fileInfo, err := os.Stat(fullPath)
-		if err != nil {
-			fmt.Printf("Cannot stat file: %s (%v)\n", userPath, err)
-			failedFiles++
-			continue
-		}
+			fullPath, err := h.convertToPhysicalPath(userPath)
+			if err != nil {
+				atomic.AddInt64(&failedFiles, 1)
+				return
+			}
 
-		if fileInfo.IsDir() {
-			// ディレクトリの処理
-			err = filepath.Walk(fullPath, func(filePath string, info os.FileInfo, err error) error {
-				if err != nil {
-					return err
-				}
+			fileInfo, err := os.Stat(fullPath)
+			if err != nil {
+				atomic.AddInt64(&failedFiles, 1)
+				return
+			}
 
-				relPath, err := filepath.Rel(filepath.Dir(fullPath), filePath)
-				if err != nil {
-					return err
-				}
-
-				if fullPath == filePath {
-					relPath = filepath.Base(fullPath)
+			if fileInfo.IsDir() {
+				// ディレクトリの場合は並列WalkDir
+				h.addDirectoryToZip(zipWriter, fullPath, &successfulFiles, &failedFiles, &mu)
+			} else {
+				// 単一ファイルの処理
+				if h.addFileToZip(zipWriter, fullPath, filepath.Base(userPath), &mu) {
+					atomic.AddInt64(&successfulFiles, 1)
 				} else {
-					relPath = filepath.Join(filepath.Base(fullPath), relPath)
+					atomic.AddInt64(&failedFiles, 1)
 				}
-
-				header, err := zip.FileInfoHeader(info)
-				if err != nil {
-					return err
-				}
-
-				header.Name = filepath.ToSlash(relPath)
-				header.Method = zip.Deflate
-
-				writer, err := zipWriter.CreateHeader(header)
-				if err != nil {
-					return err
-				}
-
-				if !info.IsDir() {
-					file, err := os.Open(filePath)
-					if err != nil {
-						return err
-					}
-					defer file.Close()
-
-					buffer := make([]byte, 32*1024)
-					_, err = io.CopyBuffer(writer, file, buffer)
-					if err != nil {
-						return err
-					}
-					successfulFiles++
-				}
-				return nil
-			})
-
-			if err != nil {
-				fmt.Printf("Error during zipping path %s: %v\n", userPath, err)
-				failedFiles++
 			}
-		} else {
-			// 単一ファイルの処理
-			header, err := zip.FileInfoHeader(fileInfo)
-			if err != nil {
-				failedFiles++
-				continue
-			}
-
-			header.Name = filepath.Base(userPath)
-			header.Method = zip.Deflate
-
-			writer, err := zipWriter.CreateHeader(header)
-			if err != nil {
-				failedFiles++
-				continue
-			}
-
-			file, err := os.Open(fullPath)
-			if err != nil {
-				failedFiles++
-				continue
-			}
-			defer file.Close()
-
-			buffer := make([]byte, 32*1024)
-			_, err = io.CopyBuffer(writer, file, buffer)
-			if err != nil {
-				failedFiles++
-				continue
-			}
-			successfulFiles++
-		}
+		})
 	}
 
-	// レスポンスに統計情報を含める
-	w.Header().Set("X-Zip-Successful-Files", strconv.Itoa(successfulFiles))
-	w.Header().Set("X-Zip-Failed-Files", strconv.Itoa(failedFiles))
+	wg.Wait()
+}
+
+func (h *Handler) addDirectoryToZip(zipWriter *zip.Writer, dirPath string, successfulFiles, failedFiles *int64, mu *sync.Mutex) {
+	var wg sync.WaitGroup
+
+	filepath.WalkDir(dirPath, func(filePath string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(filepath.Dir(dirPath), filePath)
+		if err != nil {
+			return err
+		}
+
+		if dirPath == filePath {
+			relPath = filepath.Base(dirPath)
+		} else {
+			relPath = filepath.Join(filepath.Base(dirPath), relPath)
+		}
+
+		if d.IsDir() {
+			// ディレクトリエントリの作成
+			header := &zip.FileHeader{
+				Name:   filepath.ToSlash(relPath) + "/",
+				Method: zip.Store,
+			}
+			if info, err := d.Info(); err == nil {
+				header.Modified = info.ModTime()
+			}
+
+			mu.Lock()
+			zipWriter.CreateHeader(header)
+			mu.Unlock()
+			return nil
+		}
+
+		// 並列処理でファイルを追加
+		wg.Add(1)
+		h.workerPool.Submit(func() {
+			defer wg.Done()
+			if h.addFileToZip(zipWriter, filePath, relPath, mu) {
+				atomic.AddInt64(successfulFiles, 1)
+			} else {
+				atomic.AddInt64(failedFiles, 1)
+			}
+		})
+
+		return nil
+	})
+
+	wg.Wait()
+}
+
+func (h *Handler) addFileToZip(zipWriter *zip.Writer, filePath, zipPath string, mu *sync.Mutex) bool {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return false
+	}
+
+	header, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return false
+	}
+
+	header.Name = filepath.ToSlash(zipPath)
+	header.Method = zip.Deflate
+
+	mu.Lock()
+	writer, err := zipWriter.CreateHeader(header)
+	mu.Unlock()
+
+	if err != nil {
+		return false
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	// バッファサイズ最適化
+	bufferSize := getOptimalBufferSize(info.Size())
+	buffer := make([]byte, bufferSize)
+
+	mu.Lock()
+	_, err = io.CopyBuffer(writer, file, buffer)
+	mu.Unlock()
+
+	return err == nil
 }
 
 func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
@@ -634,11 +917,20 @@ func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = os.WriteFile(fullPath, []byte(req.Content), 0644)
-	if err != nil {
+	// 並列処理でファイル保存
+	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+		err := os.WriteFile(fullPath, []byte(req.Content), 0644)
+		return err
+	})
+
+	result := <-resultChan
+	if err, ok := result.(error); ok && err != nil {
 		h.respondError(w, "Cannot save file", http.StatusInternalServerError)
 		return
 	}
+
+	// キャッシュを無効化
+	h.invalidateFileCache(fullPath)
 
 	h.respondSuccess(w, map[string]string{"message": "File saved successfully"})
 }
@@ -650,19 +942,38 @@ func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 並列処理で削除
 	var errors []string
-	for _, path := range req.Paths {
-		fullPath, err := h.convertToPhysicalPath(path)
-		if err != nil {
-			errors = append(errors, fmt.Sprintf("Invalid path %s: %v", path, err))
-			continue
-		}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
-		err = os.RemoveAll(fullPath)
-		if err != nil {
-			errors = append(errors, fmt.Sprintf("Cannot delete %s: %v", path, err))
-		}
+	for _, path := range req.Paths {
+		wg.Add(1)
+		h.workerPool.Submit(func() {
+			defer wg.Done()
+
+			fullPath, err := h.convertToPhysicalPath(path)
+			if err != nil {
+				mu.Lock()
+				errors = append(errors, fmt.Sprintf("Invalid path %s: %v", path, err))
+				mu.Unlock()
+				return
+			}
+
+			err = os.RemoveAll(fullPath)
+			if err != nil {
+				mu.Lock()
+				errors = append(errors, fmt.Sprintf("Cannot delete %s: %v", path, err))
+				mu.Unlock()
+			} else {
+				// キャッシュを無効化
+				h.invalidateFileCache(fullPath)
+				h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(fullPath)))
+			}
+		})
 	}
+
+	wg.Wait()
 
 	if len(errors) > 0 {
 		h.respondError(w, strings.Join(errors, "\n"), http.StatusInternalServerError)
@@ -691,11 +1002,19 @@ func (h *Handler) CreateDirectory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = os.MkdirAll(newDirPath, 0755)
-	if err != nil {
+	// 並列処理でディレクトリ作成
+	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+		return os.MkdirAll(newDirPath, 0755)
+	})
+
+	result := <-resultChan
+	if err, ok := result.(error); ok && err != nil {
 		h.respondError(w, "Cannot create directory", http.StatusInternalServerError)
 		return
 	}
+
+	// 親ディレクトリのキャッシュを無効化
+	h.cache.InvalidateByPrefix("list:" + h.convertToVirtualPath(parentPath))
 
 	h.respondSuccess(w, map[string]string{"message": "Directory created successfully"})
 }
@@ -729,18 +1048,28 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ターゲットディレクトリが存在するか確認
-	if _, err := os.Stat(filepath.Dir(targetFullPath)); os.IsNotExist(err) {
-		h.respondError(w, "Target directory does not exist", http.StatusBadRequest)
-		return
-	}
+	// 並列処理でファイル移動
+	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+		// ターゲットディレクトリが存在するか確認
+		if _, err := os.Stat(filepath.Dir(targetFullPath)); os.IsNotExist(err) {
+			return fmt.Errorf("target directory does not exist")
+		}
 
-	// ファイル移動
-	err = os.Rename(sourceFullPath, targetFullPath)
-	if err != nil {
+		// ファイル移動
+		return os.Rename(sourceFullPath, targetFullPath)
+	})
+
+	result := <-resultChan
+	if err, ok := result.(error); ok && err != nil {
 		h.respondError(w, "Cannot move file: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// キャッシュを無効化
+	h.invalidateFileCache(sourceFullPath)
+	h.invalidateFileCache(targetFullPath)
+	h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(sourceFullPath)))
+	h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(targetFullPath)))
 
 	h.respondSuccess(w, map[string]string{"message": "File moved successfully"})
 }
@@ -780,23 +1109,34 @@ func (h *Handler) CreateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ファイルが既に存在するか確認
-	if _, err := os.Stat(newFilePath); err == nil {
-		h.respondError(w, "File already exists", http.StatusBadRequest)
+	// 並列処理でファイル作成
+	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+		// ファイルが既に存在するか確認
+		if _, err := os.Stat(newFilePath); err == nil {
+			return fmt.Errorf("file already exists")
+		}
+
+		// デフォルトコンテンツ
+		content := req.Content
+		if content == "" {
+			content = "# " + strings.TrimSuffix(req.Name, filepath.Ext(req.Name)) + "\n\n"
+		}
+
+		return os.WriteFile(newFilePath, []byte(content), 0644)
+	})
+
+	result := <-resultChan
+	if err, ok := result.(error); ok && err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			h.respondError(w, "File already exists", http.StatusBadRequest)
+		} else {
+			h.respondError(w, "Cannot create file", http.StatusInternalServerError)
+		}
 		return
 	}
 
-	// デフォルトコンテンツ
-	content := req.Content
-	if content == "" {
-		content = "# " + strings.TrimSuffix(req.Name, filepath.Ext(req.Name)) + "\n\n"
-	}
-
-	err = os.WriteFile(newFilePath, []byte(content), 0644)
-	if err != nil {
-		h.respondError(w, "Cannot create file", http.StatusInternalServerError)
-		return
-	}
+	// 親ディレクトリのキャッシュを無効化
+	h.cache.InvalidateByPrefix("list:" + h.convertToVirtualPath(parentPath))
 
 	// 仮想パスを返す
 	virtualPath := h.convertToVirtualPath(newFilePath)
@@ -811,6 +1151,7 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	h.respondSuccess(w, h.config)
 }
 
+// SearchFiles - 並列処理と細かいキャッシュキー使用
 func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Term          string `json:"term"`
@@ -831,25 +1172,60 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.MaxResults == 0 {
+		req.MaxResults = 1000
+	}
+
+	// 細かいキャッシュキーを生成
+	cacheKey := h.generateSearchCacheKey(req.Term, req.Path, req.Scope, req.UseRegex, req.CaseSensitive, req.MaxResults)
+	if cached, found := h.cache.Get(cacheKey); found {
+		if results, ok := cached.([]models.FileInfo); ok {
+			h.respondSuccess(w, results)
+			return
+		}
+	}
+
 	basePath, err := h.convertToPhysicalPath(req.Path)
 	if err != nil {
 		h.respondError(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
-	var results []models.FileInfo
+	// 並列処理で検索実行
+	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+		return h.performSearch(req, basePath)
+	})
+
+	result := <-resultChan
+	if results, ok := result.([]models.FileInfo); ok {
+		// 結果をキャッシュ（検索結果は短めのTTL）
+		h.cache.Set(cacheKey, results, int64(len(results)*200), time.Minute*2)
+		h.respondSuccess(w, results)
+	} else {
+		h.respondError(w, "Search failed", http.StatusInternalServerError)
+	}
+}
+
+func (h *Handler) performSearch(req struct {
+	Term          string `json:"term"`
+	Path          string `json:"path"`
+	Scope         string `json:"scope"`
+	UseRegex      bool   `json:"useRegex"`
+	CaseSensitive bool   `json:"caseSensitive"`
+	MaxResults    int    `json:"maxResults"`
+}, basePath string) []models.FileInfo {
 	var searchFunc func(string) bool
 
 	if req.UseRegex {
 		var regex *regexp.Regexp
+		var err error
 		if req.CaseSensitive {
 			regex, err = regexp.Compile(req.Term)
 		} else {
 			regex, err = regexp.Compile("(?i)" + req.Term)
 		}
 		if err != nil {
-			h.respondError(w, "Invalid regex pattern", http.StatusBadRequest)
-			return
+			return []models.FileInfo{}
 		}
 		searchFunc = func(name string) bool {
 			return regex.MatchString(name)
@@ -868,115 +1244,311 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Scope == "recursive" {
-		results = h.searchRecursive(basePath, searchFunc, req.MaxResults)
+		return h.searchRecursiveParallel(basePath, searchFunc, req.MaxResults)
 	} else {
-		results = h.searchCurrent(basePath, searchFunc, req.MaxResults)
+		return h.searchCurrentParallel(basePath, searchFunc, req.MaxResults)
 	}
-
-	h.respondSuccess(w, results)
 }
 
-func (h *Handler) searchCurrent(path string, matchFunc func(string) bool, maxResults int) []models.FileInfo {
+// searchCurrentParallel - 並列処理で現在ディレクトリ検索
+func (h *Handler) searchCurrentParallel(path string, matchFunc func(string) bool, maxResults int) []models.FileInfo {
 	var results []models.FileInfo
+	var mu sync.Mutex
 
-	files, err := os.ReadDir(path)
+	entries, err := os.ReadDir(path)
 	if err != nil {
 		return results
 	}
 
-	for _, file := range files {
-		if matchFunc(file.Name()) {
-			info, _ := file.Info()
-			mimeType := mime.TypeByExtension(filepath.Ext(file.Name()))
-			if mimeType == "" {
-				mimeType = "application/octet-stream"
-			}
+	var wg sync.WaitGroup
+	resultCount := int64(0)
 
-			fullPath := filepath.Join(path, file.Name())
-
-			// 物理パスを仮想パスに変換
-			virtualPath := h.convertToVirtualPath(fullPath)
-
-			results = append(results, models.FileInfo{
-				Name:       file.Name(),
-				Path:       virtualPath,
-				Size:       info.Size(),
-				ModTime:    info.ModTime().Format(time.RFC3339),
-				IsDir:      file.IsDir(),
-				MimeType:   mimeType,
-				IsEditable: utils.IsTextFile(mimeType) || utils.IsEditableByExtension(file.Name()),
-			})
-
-			if len(results) >= maxResults {
-				break
-			}
+	for _, entry := range entries {
+		if atomic.LoadInt64(&resultCount) >= int64(maxResults) {
+			break
 		}
+
+		wg.Add(1)
+		h.workerPool.Submit(func() {
+			defer wg.Done()
+
+			if atomic.LoadInt64(&resultCount) >= int64(maxResults) {
+				return
+			}
+
+			if matchFunc(entry.Name()) {
+				var size int64
+				var modTime time.Time
+
+				if entry.Type().IsRegular() || entry.IsDir() {
+					if info, err := entry.Info(); err == nil {
+						size = info.Size()
+						modTime = info.ModTime()
+					}
+				}
+
+				mimeType := mime.TypeByExtension(filepath.Ext(entry.Name()))
+				if mimeType == "" {
+					mimeType = "application/octet-stream"
+				}
+
+				fullPath := filepath.Join(path, entry.Name())
+				virtualPath := h.convertToVirtualPath(fullPath)
+
+				fileInfo := models.FileInfo{
+					Name:       entry.Name(),
+					Path:       virtualPath,
+					Size:       size,
+					ModTime:    modTime.Format(time.RFC3339),
+					IsDir:      entry.IsDir(),
+					MimeType:   mimeType,
+					IsEditable: utils.IsTextFile(mimeType) || utils.IsEditableByExtension(entry.Name()),
+				}
+
+				mu.Lock()
+				if len(results) < maxResults {
+					results = append(results, fileInfo)
+					atomic.AddInt64(&resultCount, 1)
+				}
+				mu.Unlock()
+			}
+		})
 	}
 
+	wg.Wait()
 	return results
 }
 
-func (h *Handler) searchRecursive(path string, matchFunc func(string) bool, maxResults int) []models.FileInfo {
+// searchRecursiveParallel - 並列処理で再帰検索
+func (h *Handler) searchRecursiveParallel(path string, matchFunc func(string) bool, maxResults int) []models.FileInfo {
 	var results []models.FileInfo
+	var mu sync.Mutex
+	resultCount := int64(0)
 
-	err := filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+	var wg sync.WaitGroup
+
+	err := filepath.WalkDir(path, func(filePath string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			return nil // エラーをスキップして継続
 		}
 
-		if matchFunc(info.Name()) {
-			mimeType := mime.TypeByExtension(filepath.Ext(info.Name()))
-			if mimeType == "" {
-				mimeType = "application/octet-stream"
-			}
+		if atomic.LoadInt64(&resultCount) >= int64(maxResults) {
+			return filepath.SkipAll
+		}
 
-			// 物理パスを仮想パスに変換
-			virtualPath := h.convertToVirtualPath(filePath)
+		if matchFunc(d.Name()) {
+			wg.Add(1)
+			h.workerPool.Submit(func() {
+				defer wg.Done()
 
-			results = append(results, models.FileInfo{
-				Name:       info.Name(),
-				Path:       virtualPath,
-				Size:       info.Size(),
-				ModTime:    info.ModTime().Format(time.RFC3339),
-				IsDir:      info.IsDir(),
-				MimeType:   mimeType,
-				IsEditable: utils.IsTextFile(mimeType) || utils.IsEditableByExtension(info.Name()),
+				if atomic.LoadInt64(&resultCount) >= int64(maxResults) {
+					return
+				}
+
+				var size int64
+				var modTime time.Time
+
+				if d.Type().IsRegular() || d.IsDir() {
+					if info, err := d.Info(); err == nil {
+						size = info.Size()
+						modTime = info.ModTime()
+					}
+				}
+
+				mimeType := mime.TypeByExtension(filepath.Ext(d.Name()))
+				if mimeType == "" {
+					mimeType = "application/octet-stream"
+				}
+
+				virtualPath := h.convertToVirtualPath(filePath)
+
+				fileInfo := models.FileInfo{
+					Name:       d.Name(),
+					Path:       virtualPath,
+					Size:       size,
+					ModTime:    modTime.Format(time.RFC3339),
+					IsDir:      d.IsDir(),
+					MimeType:   mimeType,
+					IsEditable: utils.IsTextFile(mimeType) || utils.IsEditableByExtension(d.Name()),
+				}
+
+				mu.Lock()
+				if atomic.LoadInt64(&resultCount) < int64(maxResults) {
+					results = append(results, fileInfo)
+					atomic.AddInt64(&resultCount, 1)
+				}
+				mu.Unlock()
 			})
-
-			if len(results) >= maxResults {
-				return filepath.SkipAll
-			}
 		}
 
 		return nil
 	})
 
 	if err != nil {
-		fmt.Printf("Search error: %v\n", err)
+		fmt.Printf("Recursive search error: %v\n", err)
 	}
+
+	wg.Wait()
+
+	// 結果をソート
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Name < results[j].Name
+	})
 
 	return results
 }
 
 func (h *Handler) GetStorageInfo(w http.ResponseWriter, r *http.Request) {
-	var stat syscall.Statfs_t
+	// キャッシュチェック
+	cacheKey := "storage_info"
+	if cached, found := h.cache.Get(cacheKey); found {
+		if storageInfo, ok := cached.(map[string]interface{}); ok {
+			h.respondSuccess(w, storageInfo)
+			return
+		}
+	}
 
-	err := syscall.Statfs(h.config.StorageDir, &stat)
-	if err != nil {
+	// 並列処理でストレージ情報取得
+	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+		var stat syscall.Statfs_t
+
+		err := syscall.Statfs(h.config.StorageDir, &stat)
+		if err != nil {
+			return nil
+		}
+
+		total := stat.Blocks * uint64(stat.Bsize)
+		free := stat.Bfree * uint64(stat.Bsize)
+		used := total - free
+
+		return map[string]interface{}{
+			"total":         total,
+			"free":          free,
+			"used":          used,
+			"usage_percent": float64(used) / float64(total) * 100,
+		}
+	})
+
+	result := <-resultChan
+	if storageInfo, ok := result.(map[string]interface{}); ok {
+		// 5分間キャッシュ
+		h.cache.Set(cacheKey, storageInfo, 1024, CacheTTL)
+		h.respondSuccess(w, storageInfo)
+	} else {
 		h.respondError(w, "Cannot get storage info", http.StatusInternalServerError)
+	}
+}
+
+// キャッシュ無効化メソッド
+func (h *Handler) invalidateFileCache(filePath string) {
+	virtualPath := h.convertToVirtualPath(filePath)
+
+	// ファイル関連のキャッシュを無効化
+	h.cache.InvalidateByPrefix("content:" + virtualPath)
+	h.cache.InvalidateByPrefix("list:" + filepath.Dir(virtualPath))
+}
+
+// バッチ処理用の新しいメソッド
+func (h *Handler) ProcessBatch(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Operations []struct {
+			Type string                 `json:"type"`
+			Data map[string]interface{} `json:"data"`
+		} `json:"operations"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	total := stat.Blocks * uint64(stat.Bsize)
-	free := stat.Bfree * uint64(stat.Bsize)
-	used := total - free
+	results := make([]map[string]interface{}, len(req.Operations))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// 並列処理でバッチ操作を実行
+	for i, op := range req.Operations {
+		wg.Add(1)
+		h.workerPool.Submit(func() {
+			defer wg.Done()
+
+			result := h.processOperation(op.Type, op.Data)
+
+			mu.Lock()
+			results[i] = result
+			mu.Unlock()
+		})
+	}
+
+	wg.Wait()
 
 	h.respondSuccess(w, map[string]interface{}{
-		"total":         total,
-		"free":          free,
-		"used":          used,
-		"usage_percent": float64(used) / float64(total) * 100,
+		"results": results,
+		"total":   len(req.Operations),
 	})
+}
+
+func (h *Handler) processOperation(opType string, data map[string]interface{}) map[string]interface{} {
+	result := map[string]interface{}{
+		"type":    opType,
+		"success": false,
+	}
+
+	switch opType {
+	case "delete":
+		if path, ok := data["path"].(string); ok {
+			if fullPath, err := h.convertToPhysicalPath(path); err == nil {
+				if err := os.RemoveAll(fullPath); err == nil {
+					h.invalidateFileCache(fullPath)
+					result["success"] = true
+					result["message"] = "File deleted successfully"
+				} else {
+					result["error"] = err.Error()
+				}
+			} else {
+				result["error"] = "Invalid path"
+			}
+		}
+	case "move":
+		if src, srcOk := data["source"].(string); srcOk {
+			if dst, dstOk := data["destination"].(string); dstOk {
+				srcPath, srcErr := h.convertToPhysicalPath(src)
+				dstPath, dstErr := h.convertToPhysicalPath(dst)
+
+				if srcErr == nil && dstErr == nil {
+					if err := os.Rename(srcPath, dstPath); err == nil {
+						h.invalidateFileCache(srcPath)
+						h.invalidateFileCache(dstPath)
+						result["success"] = true
+						result["message"] = "File moved successfully"
+					} else {
+						result["error"] = err.Error()
+					}
+				} else {
+					result["error"] = "Invalid paths"
+				}
+			}
+		}
+	default:
+		result["error"] = "Unknown operation type"
+	}
+
+	return result
+}
+
+// ヘルスチェック用エンドポイント
+func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	status := map[string]interface{}{
+		"status":         "healthy",
+		"timestamp":      time.Now().Format(time.RFC3339),
+		"active_workers": h.workerPool.ActiveWorkers(),
+		"cache_stats": map[string]interface{}{
+			"entries": len(h.cache.entries),
+			"size":    h.cache.curSize,
+		},
+	}
+
+	h.respondSuccess(w, status)
 }
 
 func (h *Handler) respondSuccess(w http.ResponseWriter, data interface{}) {
