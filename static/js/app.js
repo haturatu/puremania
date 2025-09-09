@@ -575,8 +575,9 @@ class FileManagerApp {
             <div class="upload-icon">📁</div>
             <div class="upload-text">Drop files or folders here to upload</div>
             <div class="upload-subtext">or click to select files/folders</div>
-            <input type="file" class="upload-input" multiple webkitdirectory>
+            <input type="file" class="upload-input" multiple>
             <div class="upload-info">
+                <div class="upload-feature">• Select files or folders to upload</div>
                 <div class="upload-feature">• Folder upload will preserve directory structure</div>
                 <div class="upload-feature">• Files will be uploaded to: <span class="upload-path">${this.currentPath}</span></div>
             </div>
@@ -588,11 +589,6 @@ class FileManagerApp {
         
         uploadInput.addEventListener('change', (e) => {
             if (e.target.files && e.target.files.length > 0) {
-                const hasFolderStructure = !!e.target.files[0].webkitRelativePath;
-                if (hasFolderStructure) {
-                    const folderName = e.target.files[0].webkitRelativePath.split('/')[0];
-                    this.showToast('Info', `Uploading folder: ${folderName}`, 'info');
-                }
                 this.handleFileUpload(e.target.files);
             }
             e.target.value = '';
@@ -676,7 +672,6 @@ class FileManagerApp {
         `;
         table.appendChild(thead);
         
-        // ソート可能なヘッダーのクリックイベントを追加
         thead.querySelectorAll('.sortable').forEach(header => {
             header.addEventListener('click', (e) => {
                 this.setSort(e.currentTarget.dataset.sort);
@@ -1395,21 +1390,8 @@ class FileManagerApp {
         input.type = 'file';
         input.multiple = true;
         
-        // Enable folder selection
-        if ('webkitdirectory' in input || 'directory' in input || 'mozdirectory' in input) {
-            input.setAttribute('webkitdirectory', '');
-            input.setAttribute('directory', '');
-            input.setAttribute('mozdirectory', '');
-        }
-        
         input.addEventListener('change', (e) => {
             if (e.target.files && e.target.files.length > 0) {
-                // Show folder name if available
-                if (e.target.files[0].webkitRelativePath) {
-                    const folderName = e.target.files[0].webkitRelativePath.split('/')[0];
-                    this.showToast('Info', `Uploading folder: ${folderName}`, 'info');
-                }
-                
                 this.handleFileUpload(e.target.files);
             }
             e.target.value = '';
