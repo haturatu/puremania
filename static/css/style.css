@@ -499,7 +499,7 @@ body {
 
 .table-view th,
 .table-view td {
-  padding: 12px 15px;
+  padding: 3px 10px;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
 }
@@ -1817,4 +1817,15 @@ body {
     box-shadow: 0 0 0 3px rgba(0, 255, 65, 0.3);
 }
 
+/* モバイル端末ではリスト表示を最低限にする */
+@media (max-width: 768px) {
+    th[data-sort="modified"],
+    tr.file-item td:nth-child(3) {
+      display: none;
+    }
 
+    th[data-sort="type"],
+    tr.file-item td:nth-child(4) {
+        display: none;
+    }
+}
