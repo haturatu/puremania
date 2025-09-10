@@ -17,12 +17,103 @@ class SearchHandler {
         this.sortField = 'name'; // デフォルトソートフィールド
         this.sortDirection = 'asc'; // デフォルトソート方向
         
+        // 検索状態の管理
+        this.isInSearchMode = false;
+        this.originalViewMode = null; // 検索前のビューモードを保存
+        
         this.init();
     }
     
     init() {
         this.bindEvents();
         this.createSearchModal();
+        this.setupFileOperationListeners();
+    }
+    
+    // ファイル操作後の自動更新リスナーを設定
+    setupFileOperationListeners() {
+        // FileManagerのファイル操作メソッドをフック
+        const originalMethods = {
+            deleteFile: this.fileManager.deleteFile.bind(this.fileManager),
+            deleteSelectedFiles: this.fileManager.deleteSelectedFiles.bind(this.fileManager),
+            renameFile: this.fileManager.renameFile.bind(this.fileManager),
+            moveFile: this.fileManager.moveFile.bind(this.fileManager),
+            moveSelected: this.fileManager.moveSelected.bind(this.fileManager),
+            createNewFile: this.fileManager.createNewFile.bind(this.fileManager),
+            createNewFolder: this.fileManager.createNewFolder.bind(this.fileManager)
+        };
+
+        // ファイル削除操作のフック
+        this.fileManager.deleteFile = async (path) => {
+            const result = await originalMethods.deleteFile(path);
+            if (this.isInSearchMode && this.lastSearchTerm) {
+                setTimeout(() => this.refreshSearchResults(), 100);
+            }
+            return result;
+        };
+
+        this.fileManager.deleteSelectedFiles = async () => {
+            const result = await originalMethods.deleteSelectedFiles();
+            if (this.isInSearchMode && this.lastSearchTerm) {
+                setTimeout(() => this.refreshSearchResults(), 100);
+            }
+            return result;
+        };
+
+        // ファイル名変更操作のフック
+        this.fileManager.renameFile = async (path) => {
+            const result = await originalMethods.renameFile(path);
+            if (this.isInSearchMode && this.lastSearchTerm) {
+                setTimeout(() => this.refreshSearchResults(), 100);
+            }
+            return result;
+        };
+
+        // ファイル移動操作のフック
+        this.fileManager.moveFile = async (sourcePath) => {
+            const result = await originalMethods.moveFile(sourcePath);
+            if (this.isInSearchMode && this.lastSearchTerm) {
+                setTimeout(() => this.refreshSearchResults(), 100);
+            }
+            return result;
+        };
+
+        this.fileManager.moveSelected = async () => {
+            const result = await originalMethods.moveSelected();
+            if (this.isInSearchMode && this.lastSearchTerm) {
+                setTimeout(() => this.refreshSearchResults(), 100);
+            }
+            return result;
+        };
+
+        // 新規ファイル作成のフック
+        this.fileManager.createNewFile = async () => {
+            const result = await originalMethods.createNewFile();
+            if (this.isInSearchMode && this.lastSearchTerm) {
+                setTimeout(() => this.refreshSearchResults(), 100);
+            }
+            return result;
+        };
+
+        this.fileManager.createNewFolder = async () => {
+            const result = await originalMethods.createNewFolder();
+            if (this.isInSearchMode && this.lastSearchTerm) {
+                setTimeout(() => this.refreshSearchResults(), 100);
+            }
+            return result;
+        };
+
+        // FileManagerのsetViewModeをフック
+        const originalSetViewMode = this.fileManager.setViewMode.bind(this.fileManager);
+        this.fileManager.setViewMode = (mode) => {
+            if (this.isInSearchMode && this.lastSearchResults && this.lastSearchTerm) {
+                // 検索モード中の場合、ビュー切り替え後に検索結果を再表示
+                this.fileManager.viewMode = mode;
+                this.redisplayResults(this.currentPage);
+            } else {
+                originalSetViewMode(mode);
+            }
+        };
     }
     
     bindEvents() {
@@ -230,6 +321,12 @@ class SearchHandler {
             return;
         }
         
+        // 検索モードに入る際の状態保存
+        if (!this.isInSearchMode) {
+            this.isInSearchMode = true;
+            this.originalViewMode = this.fileManager.viewMode;
+        }
+        
         this.lastSearchTerm = searchTerm;
         this.currentPage = page;
         
@@ -282,6 +379,50 @@ class SearchHandler {
         }
     }
     
+    // 検索結果の自動更新
+    async refreshSearchResults() {
+        if (!this.isInSearchMode || !this.lastSearchTerm) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    term: this.lastSearchTerm,
+                    path: this.fileManager ? this.fileManager.currentPath : '/',
+                    useRegex: this.searchOptions.useRegex,
+                    caseSensitive: this.searchOptions.caseSensitive,
+                    scope: this.searchOptions.scope,
+                    maxResults: 10000,
+                    offset: 0,
+                    limit: this.pageSize
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result && result.success) {
+                this.lastSearchResults = Array.isArray(result.data) ? result.data : [];
+                this.lastSearchResults = this.sortResults(this.lastSearchResults, this.sortField, this.sortDirection);
+                this.totalResults = this.lastSearchResults.length;
+                
+                // 現在のページが結果数を超えている場合は最初のページに戻る
+                const totalPages = Math.ceil(this.lastSearchResults.length / this.pageSize);
+                if (this.currentPage >= totalPages) {
+                    this.currentPage = Math.max(0, totalPages - 1);
+                }
+                
+                this.displaySearchResults(this.lastSearchResults, this.lastSearchTerm, this.currentPage);
+            }
+        } catch (error) {
+            console.error('Error refreshing search results:', error);
+        }
+    }
+    
     displaySearchResults(results, searchTerm, page = 0) {
         const container = document.querySelector('.file-browser');
         if (!container) return;
@@ -323,14 +464,14 @@ class SearchHandler {
                 ${paginationInfo}
             </div>
             <div class="search-controls">
-                <button class="search-back-btn" onclick="window.fileManager.loadFiles(window.fileManager.currentPath)">
+                <button class="search-back-btn" onclick="window.fileManager.searchHandler.exitSearchMode()">
                     ← Back to Files
                 </button>
                 ${this.createPaginationControls(page, totalPages)}
         `;
         container.appendChild(header);
         
-        // ビューモード切り替えボタンを追加
+        // ビューモード切り替えボタンを追加（検索モード専用の処理）
         const viewToggle = document.createElement('div');
         viewToggle.className = 'view-toggle';
         viewToggle.innerHTML = `
@@ -369,6 +510,29 @@ class SearchHandler {
         }
         
         container.scrollTop = 0;
+    }
+    
+    // 検索モードを終了して通常表示に戻る
+    exitSearchMode() {
+        this.isInSearchMode = false;
+        this.lastSearchResults = null;
+        this.lastSearchTerm = '';
+        this.currentPage = 0;
+        
+        // 検索入力をクリア
+        const searchInput = document.querySelector('.search-input');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+        
+        // 元のビューモードに復元
+        if (this.originalViewMode) {
+            this.fileManager.viewMode = this.originalViewMode;
+            this.originalViewMode = null;
+        }
+        
+        // 通常のファイル一覧を再読み込み
+        this.fileManager.loadFiles(this.fileManager.currentPath);
     }
     
     // Grid表示のレンダリング
@@ -540,4 +704,3 @@ class SearchHandler {
         this.performSearch(0);
     }
 }
-
