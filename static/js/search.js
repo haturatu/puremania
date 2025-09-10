@@ -8,6 +8,9 @@ class SearchHandler {
         };
         this.lastSearchTerm = '';
         this.lastSearchResults = null;
+        this.currentPage = 0;
+        this.pageSize = 100;
+        this.totalResults = 0;
         
         this.init();
     }
@@ -142,7 +145,7 @@ class SearchHandler {
         }
     }
     
-    async performSearch() {
+    async performSearch(page = 0) {
         const searchInput = document.querySelector('.search-input');
         if (!searchInput) return;
         
@@ -156,11 +159,14 @@ class SearchHandler {
         }
         
         this.lastSearchTerm = searchTerm;
+        this.currentPage = page;
         
         try {
             if (window.fileManager && window.fileManager.showLoading) {
                 window.fileManager.showLoading();
             }
+            
+            const offset = page * this.pageSize;
             
             const response = await fetch('/api/search', {
                 method: 'POST',
@@ -173,15 +179,18 @@ class SearchHandler {
                     useRegex: this.searchOptions.useRegex,
                     caseSensitive: this.searchOptions.caseSensitive,
                     scope: this.searchOptions.scope,
-                    maxResults: 100
+                    maxResults: 10000, // より多くの結果を取得してクライアント側でページネーション
+                    offset: offset,
+                    limit: this.pageSize
                 })
             });
             
             const result = await response.json();
-            this.lastSearchResults = result;
             
             if (result && result.success) {
-                this.displaySearchResults(result.data, searchTerm);
+                this.lastSearchResults = Array.isArray(result.data) ? result.data : [];
+                this.totalResults = this.lastSearchResults.length;
+                this.displaySearchResults(this.lastSearchResults, searchTerm, page);
             } else {
                 if (window.fileManager && window.fileManager.showToast) {
                     window.fileManager.showToast('Search Error', result ? result.message : 'Unknown error', 'error');
@@ -199,7 +208,7 @@ class SearchHandler {
         }
     }
     
-    displaySearchResults(results, searchTerm) {
+    displaySearchResults(results, searchTerm, page = 0) {
         const container = document.querySelector('.file-browser');
         if (!container) return;
         
@@ -210,15 +219,45 @@ class SearchHandler {
             results = [];
         }
         
+        // ページネーション用の結果を計算
+        const startIndex = page * this.pageSize;
+        const endIndex = Math.min(startIndex + this.pageSize, results.length);
+        const pageResults = results.slice(startIndex, endIndex);
+        const totalPages = Math.ceil(results.length / this.pageSize);
+        
         const header = document.createElement('div');
         header.className = 'search-results-header';
+        
+        // ページネーション情報を含むヘッダー
+        let paginationInfo = '';
+        if (results.length > this.pageSize) {
+            paginationInfo = `<div class="pagination-info">
+                [${page + 1}/${totalPages}] Showing ${startIndex + 1}-${endIndex} of ${results.length} results
+            </div>`;
+        }
+        
+        // 検索オプション情報
+        let searchOptions = '';
+        if (this.searchOptions.useRegex || this.searchOptions.caseSensitive || this.searchOptions.scope === 'recursive') {
+            const options = [];
+            if (this.searchOptions.useRegex) options.push('REGEX');
+            if (this.searchOptions.caseSensitive) options.push('CASE-SENSITIVE');
+            if (this.searchOptions.scope === 'recursive') options.push('RECURSIVE');
+            searchOptions = `<div style="font-size: 0.8em; color: var(--accent-primary); margin-top: 3px;">[${options.join(', ')}]</div>`;
+        }
+        
         header.innerHTML = `
             <div class="search-results-count">
-                Search Results for "${searchTerm}" (${results.length} found)
+                <div>Search Results for "${searchTerm}" (${results.length} found)</div>
+                ${searchOptions}
+                ${paginationInfo}
             </div>
-            <button class="search-back-btn" onclick="window.fileManager.loadFiles(window.fileManager.currentPath)">
-                ← Back to Files
-            </button>
+            <div class="search-controls">
+                <button class="search-back-btn" onclick="window.fileManager.loadFiles(window.fileManager.currentPath)">
+                    ← Back to Files
+                </button>
+                ${this.createPaginationControls(page, totalPages)}
+            </div>
         `;
         container.appendChild(header);
         
@@ -237,11 +276,90 @@ class SearchHandler {
         const fileGrid = document.createElement('div');
         fileGrid.className = 'file-grid';
         
-        results.forEach(file => {
+        pageResults.forEach(file => {
             const fileItem = window.fileManager.createFileItem(file);
             fileGrid.appendChild(fileItem);
         });
         
         container.appendChild(fileGrid);
+        
+        // ページネーションコントロールを下部にも追加
+        if (totalPages > 1) {
+            const footerPagination = document.createElement('div');
+            footerPagination.className = 'search-pagination-footer';
+            footerPagination.innerHTML = this.createPaginationControls(page, totalPages);
+            container.appendChild(footerPagination);
+        }
+        
+        // 検索結果のスクロールを最上部にリセット
+        container.scrollTop = 0;
+    }
+    
+    createPaginationControls(currentPage, totalPages) {
+        if (totalPages <= 1) return '';
+        
+        const prevDisabled = currentPage === 0 ? 'disabled' : '';
+        const nextDisabled = currentPage === totalPages - 1 ? 'disabled' : '';
+        
+        let pageNumbers = '';
+        
+        // ページ番号ボタンの生成（最大5つ表示）
+        const startPage = Math.max(0, currentPage - 2);
+        const endPage = Math.min(totalPages - 1, currentPage + 2);
+        
+        // 最初のページ
+        if (startPage > 0) {
+            pageNumbers += `<button class="page-btn" onclick="window.searchHandler.performSearch(0)">1</button>`;
+            if (startPage > 1) {
+                pageNumbers += '<span class="page-ellipsis">...</span>';
+            }
+        }
+        
+        // 中央のページ番号
+        for (let i = startPage; i <= endPage; i++) {
+            const activeClass = i === currentPage ? 'active' : '';
+            pageNumbers += `<button class="page-btn ${activeClass}" onclick="window.searchHandler.performSearch(${i})">${i + 1}</button>`;
+        }
+        
+        // 最後のページ
+        if (endPage < totalPages - 1) {
+            if (endPage < totalPages - 2) {
+                pageNumbers += '<span class="page-ellipsis">...</span>';
+            }
+            pageNumbers += `<button class="page-btn" onclick="window.searchHandler.performSearch(${totalPages - 1})">${totalPages}</button>`;
+        }
+        
+        return `
+            <div class="pagination-controls">
+                <button class="pagination-btn ${prevDisabled}" 
+                        onclick="window.searchHandler.performSearch(${currentPage - 1})"
+                        ${prevDisabled}>
+                    ← Previous
+                </button>
+                <div class="page-numbers">
+                    ${pageNumbers}
+                </div>
+                <button class="pagination-btn ${nextDisabled}" 
+                        onclick="window.searchHandler.performSearch(${currentPage + 1})"
+                        ${nextDisabled}>
+                    Next →
+                </button>
+            </div>
+        `;
+    }
+    
+    // 検索結果の再表示（ページ変更時に使用）
+    redisplayResults(page) {
+        if (this.lastSearchResults && this.lastSearchTerm) {
+            this.displaySearchResults(this.lastSearchResults, this.lastSearchTerm, page);
+        }
+    }
+    
+    // 新しい検索を実行
+    newSearch() {
+        this.currentPage = 0;
+        this.performSearch(0);
     }
 }
+
+window.searchHandler = new SearchHandler();

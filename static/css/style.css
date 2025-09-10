@@ -172,6 +172,188 @@ body {
   color: var(--accent-primary);
 }
 
+.search-results-count {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.pagination-info {
+    font-size: 0.9em;
+    color: #6c757d;
+    margin-top: 5px;
+}
+
+.search-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+/* ページネーションコントロール */
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+
+.pagination-btn {
+    padding: 8px 16px;
+    border: 1px solid #dee2e6;
+    background: #ffffff;
+    color: #495057;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.pagination-btn:hover:not([disabled]) {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.pagination-btn:disabled {
+    background: #f8f9fa;
+    color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* ページ番号ボタン */
+.page-numbers {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.page-btn {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #dee2e6;
+    background: #ffffff;
+    color: #495057;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.page-btn:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.page-btn.active {
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+}
+
+.page-ellipsis {
+    padding: 0 5px;
+    color: #6c757d;
+    font-size: 14px;
+}
+
+/* 検索ページネーションフッター */
+.search-pagination-footer {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    justify-content: center;
+}
+
+/* Backボタンのスタイル */
+.search-back-btn {
+    padding: 8px 16px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s ease;
+}
+
+.search-back-btn:hover {
+    background: #5a6268;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .search-results-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 15px;
+    }
+
+    .search-controls {
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .pagination-controls {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .page-numbers {
+        order: 2;
+        justify-content: center;
+    }
+
+    .pagination-btn {
+        padding: 10px 16px;
+        font-size: 13px;
+    }
+
+    .search-back-btn {
+        width: 100%;
+        text-align: center;
+        margin-bottom: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .pagination-controls {
+        gap: 5px;
+    }
+
+    .page-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+    }
+
+    .pagination-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .page-numbers {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .pagination-info {
+        font-size: 0.8em;
+        text-align: center;
+    }
+
+    .search-results-count {
+        font-size: 0.9rem;
+        text-align: center;
+    }
+}
+
 /* File Browser Styles */
 .file-browser {
   flex: 1;

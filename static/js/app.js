@@ -340,7 +340,6 @@ class FileManagerApp {
         this.mediaPlayer = new MediaPlayer();
         this.imageViewer = new ImageViewer();
         this.router = new Router();
-        this.searchHandler = new SearchHandler();
         this.editor = new FileEditor();
         this.progressManager = new ProgressManager();
         
