@@ -21,13 +21,36 @@ class SearchHandler {
         this.isInSearchMode = false;
         this.originalViewMode = null; // 検索前のビューモードを保存
         
+        // cdコマンドとTab補完関連の状態
+        this.isCdMode = false;
+        this.cdCompletions = [];
+        this.selectedCompletionIndex = -1;
+        this.isShowingCompletions = false;
+        
         this.init();
     }
     
     init() {
         this.bindEvents();
         this.createSearchModal();
+        this.createCompletionDropdown();
         this.setupFileOperationListeners();
+    }
+    
+    // Tab補完用のドロップダウンを作成
+    createCompletionDropdown() {
+        const dropdown = document.createElement('div');
+        dropdown.className = 'cd-completion-dropdown';
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '<ul class="completion-list"></ul>';
+        
+        // 検索入力の親要素に追加
+        const searchContainer = document.querySelector('.search-container');
+        if (searchContainer) {
+            searchContainer.appendChild(dropdown);
+        }
+        
+        this.completionDropdown = dropdown;
     }
     
     // ファイル操作後の自動更新リスナーを設定
@@ -123,10 +146,24 @@ class SearchHandler {
                 this.showSearchOptions();
             });
             
-            searchInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    this.performSearch();
-                }
+            // キーボードイベントを強化
+            searchInput.addEventListener('keydown', (e) => {
+                this.handleKeyDown(e);
+            });
+            
+            // 入力変更イベント
+            searchInput.addEventListener('input', (e) => {
+                this.handleInput(e);
+            });
+            
+            // ブラー時に補完を隠す
+            searchInput.addEventListener('blur', (e) => {
+                // 補完リストをクリックした場合は隠さない
+                setTimeout(() => {
+                    if (!this.completionDropdown.contains(document.activeElement)) {
+                        this.hideCompletions();
+                    }
+                }, 200);
             });
         }
         
@@ -136,6 +173,331 @@ class SearchHandler {
                 this.toggleSearchOptions();
             });
         }
+    }
+    
+    // キーボードイベントハンドラ
+    handleKeyDown(e) {
+        const searchInput = e.target;
+        
+        if (this.isShowingCompletions) {
+            switch (e.key) {
+                case 'ArrowDown':
+                    e.preventDefault();
+                    this.navigateCompletion(1);
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    this.navigateCompletion(-1);
+                    break;
+                case 'Tab':
+                    e.preventDefault();
+                    this.navigateCompletion(1);
+                    this.applyCompletion();
+                    break;
+                case 'Enter':
+                    e.preventDefault();
+                    if (this.selectedCompletionIndex >= 0) {
+                        this.applyCompletion();
+                    } else {
+                        this.handleEnter(searchInput);
+                    }
+                    break;
+                case 'Escape':
+                    e.preventDefault();
+                    this.hideCompletions();
+                    break;
+                default:
+                    // 他のキーが押された場合は補完を隠す
+                    if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') {
+                        this.hideCompletions();
+                    }
+            }
+        } else {
+            switch (e.key) {
+                case 'Enter':
+                    e.preventDefault();
+                    this.handleEnter(searchInput);
+                    break;
+                case 'Tab':
+                    if (this.isCdMode) {
+                        e.preventDefault();
+                        this.showCompletions(searchInput.value);
+                    }
+                    break;
+            }
+        }
+    }
+    
+    // 入力変更ハンドラ
+    handleInput(e) {
+        const value = e.target.value;
+        this.isCdMode = value.startsWith('cd ');
+        
+        if (this.isCdMode && this.isShowingCompletions) {
+            const path = value.slice(3); // 'cd ' を除去
+            this.updateCompletions(path);
+        }
+    }
+    
+    // Enterキーハンドラ
+    handleEnter(searchInput) {
+        const value = searchInput.value.trim();
+        
+        if (this.isCdMode) {
+            this.executeCdCommand(value);
+        } else {
+            this.performSearch();
+        }
+    }
+    
+    // cdコマンドの実行
+    async executeCdCommand(command) {
+        const path = command.slice(2).trim(); // 'cd' を除去
+        
+        try {
+            let targetPath;
+            
+            if (!path || path === '') {
+                // 'cd' のみの場合はルートに移動
+                targetPath = '/';
+            } else if (path === '..') {
+                // 親ディレクトリに移動
+                targetPath = this.getParentPath(this.fileManager.currentPath);
+            } else if (path.startsWith('/')) {
+                // 絶対パス
+                targetPath = path;
+            } else {
+                // 相対パス
+                targetPath = this.joinPaths(this.fileManager.currentPath, path);
+            }
+            
+            // パスの正規化
+            targetPath = this.normalizePath(targetPath);
+            
+            // フォルダの存在確認と移動
+            await this.navigateToFolder(targetPath);
+            
+        } catch (error) {
+            console.error('cd command error:', error);
+            if (this.fileManager && this.fileManager.showToast) {
+                this.fileManager.showToast('cd Error', `Cannot change directory: ${error.message}`, 'error');
+            }
+        }
+    }
+    
+    // フォルダへの移動
+    async navigateToFolder(path) {
+        try {
+            // APIを使ってフォルダの存在確認
+            const encodedPath = encodeURIComponent(path);
+            const response = await fetch(`/api/files?path=${encodedPath}`);
+            const result = await response.json();
+            
+            if (result.success) {
+                // フォルダが存在する場合、移動
+                await this.fileManager.loadFiles(path);
+                
+                // 検索入力をクリア
+                const searchInput = document.querySelector('.search-input');
+                if (searchInput) {
+                    searchInput.value = '';
+                }
+                
+                this.isCdMode = false;
+                this.hideCompletions();
+                
+                if (this.fileManager && this.fileManager.showToast) {
+                    this.fileManager.showToast('cd', `Changed directory to: ${path}`, 'success');
+                }
+            } else {
+                throw new Error(result.message || 'Directory not found');
+            }
+        } catch (error) {
+            throw new Error(`Directory '${path}' not found or inaccessible`);
+        }
+    }
+    
+    // Tab補完の表示
+    async showCompletions(command) {
+        const path = command.slice(3); // 'cd ' を除去
+        
+        try {
+            const completions = await this.getCompletions(path);
+            this.displayCompletions(completions);
+        } catch (error) {
+            console.error('Completion error:', error);
+        }
+    }
+    
+    // 補完候補の取得
+    async getCompletions(partialPath) {
+        try {
+            let searchPath, prefix;
+            
+            if (partialPath.startsWith('/')) {
+                // 絶対パス
+                const lastSlashIndex = partialPath.lastIndexOf('/');
+                searchPath = lastSlashIndex === 0 ? '/' : partialPath.substring(0, lastSlashIndex);
+                prefix = partialPath.substring(lastSlashIndex + 1);
+            } else {
+                // 相対パス
+                searchPath = this.fileManager.currentPath;
+                prefix = partialPath;
+            }
+            
+            // APIからフォルダ一覧を取得
+            const encodedPath = encodeURIComponent(searchPath);
+            const response = await fetch(`/api/files?path=${encodedPath}`);
+            const result = await response.json();
+            
+            if (!result.success) {
+                return [];
+            }
+            
+            // フォルダのみをフィルタリングし、プレフィックスに一致するものを取得
+            const folders = result.data.filter(item => 
+                item.is_dir && 
+                item.name.toLowerCase().startsWith(prefix.toLowerCase())
+            );
+            
+            // 最大10個まで
+            return folders.slice(0, 10).map(folder => ({
+                name: folder.name,
+                fullPath: this.joinPaths(searchPath, folder.name)
+            }));
+            
+        } catch (error) {
+            console.error('Error getting completions:', error);
+            return [];
+        }
+    }
+    
+    // 補完候補の更新
+    async updateCompletions(path) {
+        const completions = await this.getCompletions(path);
+        this.displayCompletions(completions);
+    }
+    
+    // 補完候補の表示
+    displayCompletions(completions) {
+        if (!this.completionDropdown) return;
+        
+        this.cdCompletions = completions;
+        this.selectedCompletionIndex = -1;
+        
+        const list = this.completionDropdown.querySelector('.completion-list');
+        list.innerHTML = '';
+        
+        if (completions.length === 0) {
+            this.hideCompletions();
+            return;
+        }
+        
+        completions.forEach((completion, index) => {
+            const li = document.createElement('li');
+            li.className = 'completion-item';
+            li.innerHTML = `
+                <div class="completion-icon">📁</div>
+                <div class="completion-text">
+                    <div class="completion-name">${completion.name}</div>
+                    <div class="completion-path">${completion.fullPath}</div>
+                </div>
+            `;
+            
+            li.addEventListener('click', () => {
+                this.selectedCompletionIndex = index;
+                this.applyCompletion();
+            });
+            
+            list.appendChild(li);
+        });
+        
+        this.showCompletionsDropdown();
+    }
+    
+    // 補完ナビゲーション
+    navigateCompletion(direction) {
+        if (this.cdCompletions.length === 0) return;
+        
+        const newIndex = this.selectedCompletionIndex + direction;
+        
+        if (newIndex >= 0 && newIndex < this.cdCompletions.length) {
+            this.selectedCompletionIndex = newIndex;
+            this.updateCompletionSelection();
+        }
+    }
+    
+    // 補完選択の更新
+    updateCompletionSelection() {
+        const items = this.completionDropdown.querySelectorAll('.completion-item');
+        items.forEach((item, index) => {
+            if (index === this.selectedCompletionIndex) {
+                item.classList.add('selected');
+            } else {
+                item.classList.remove('selected');
+            }
+        });
+    }
+    
+    // 補完の適用
+    applyCompletion() {
+        if (this.selectedCompletionIndex >= 0 && this.selectedCompletionIndex < this.cdCompletions.length) {
+            const completion = this.cdCompletions[this.selectedCompletionIndex];
+            const searchInput = document.querySelector('.search-input');
+            
+            if (searchInput) {
+                searchInput.value = `cd ${completion.fullPath}`;
+                searchInput.focus();
+            }
+            
+            this.hideCompletions();
+        }
+    }
+    
+    // 補完ドロップダウンの表示
+    showCompletionsDropdown() {
+        if (this.completionDropdown) {
+            this.completionDropdown.style.display = 'block';
+            this.isShowingCompletions = true;
+        }
+    }
+    
+    // 補完の非表示
+    hideCompletions() {
+        if (this.completionDropdown) {
+            this.completionDropdown.style.display = 'none';
+            this.isShowingCompletions = false;
+            this.selectedCompletionIndex = -1;
+        }
+    }
+    
+    // パスユーティリティ関数
+    getParentPath(path) {
+        if (path === '/' || path === '') return '/';
+        const parts = path.split('/').filter(part => part !== '');
+        parts.pop();
+        return '/' + parts.join('/');
+    }
+    
+    joinPaths(basePath, relativePath) {
+        const base = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+        const relative = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+        return base + '/' + relative;
+    }
+    
+    normalizePath(path) {
+        const parts = path.split('/').filter(part => part !== '' && part !== '.');
+        const normalized = [];
+        
+        for (const part of parts) {
+            if (part === '..') {
+                normalized.pop();
+            } else {
+                normalized.push(part);
+            }
+        }
+        
+        return '/' + normalized.join('/');
     }
     
     createSearchModal() {
@@ -524,6 +886,11 @@ class SearchHandler {
         if (searchInput) {
             searchInput.value = '';
         }
+        
+        // cdモード関連の状態をリセット
+        this.isCdMode = false;
+        this.tabPressCount = 0;
+        this.hideCompletions();
         
         // 元のビューモードに復元
         if (this.originalViewMode) {
