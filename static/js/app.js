@@ -321,27 +321,43 @@ class FileManagerApp {
         const btnSelectFiles = uploadArea.querySelector('.btn-select-files');
         const btnSelectFolders = uploadArea.querySelector('.btn-select-folders');
     
-        const handleFiles = (files) => {
+        const handleFiles = (files, isFolder = false) => {
             if (files && files.length > 0) {
+                this.progressManager.show('Processing Files');
+                this.progressManager.safeUpdateProgress({
+                    currentFile: 'Preparing files...',
+                    percentage: 0,
+                    processed: 0,
+                    total: files.length,
+                    status: `Processing ${files.length} files`
+                });
+    
                 const hasFolderStructure = !!files[0].webkitRelativePath;
-                if (hasFolderStructure) {
-                    const folderName = files[0].webkitRelativePath.split('/')[0];
+                if (hasFolderStructure || isFolder) {
+                    const folderName = files[0].webkitRelativePath ? 
+                        files[0].webkitRelativePath.split('/')[0] : 
+                        'selected folder';
                     this.showToast('Info', `Uploading folder: ${folderName}`, 'info');
                 }
-                return this.handleFileUpload(files); // Promise を返す想定
+                
+                return this.handleFileUpload(files);
             }
             return Promise.resolve();
         };
     
         // ファイル選択
         uploadFilesInput.addEventListener('change', (e) => {
-            handleFiles(e.target.files);
+            if (e.target.files && e.target.files.length > 0) {
+                handleFiles(e.target.files, false);
+            }
             e.target.value = '';
         });
     
         // フォルダ選択
         uploadFoldersInput.addEventListener('change', (e) => {
-            handleFiles(e.target.files);
+            if (e.target.files && e.target.files.length > 0) {
+                handleFiles(e.target.files, true);
+            }
             e.target.value = '';
         });
     
