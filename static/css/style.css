@@ -1669,6 +1669,38 @@ body {
     color: var(--text-secondary);
 }
 
+/* スマホ対応のスタイル */
+@media (max-width: 768px) {
+    .progress-overlay {
+        padding: 10px;
+    }
+
+    .progress-modal {
+        width: 95% !important;
+        max-width: 95% !important;
+        margin: 10px;
+        font-size: 14px;
+    }
+
+    .progress-bar-container {
+        height: 20px;
+    }
+
+    .progress-details {
+        flex-direction: column;
+        gap: 5px;
+    }
+}
+
+/* タッチデバイス用のスタイル */
+@media (hover: none) and (pointer: coarse) {
+    .progress-close {
+        min-width: 44px;
+        min-height: 44px;
+        font-size: 24px;
+    }
+}
+
 /* アップロードエリアの改善 */
 .upload-area.dragover {
     border-color: var(--accent-primary);
