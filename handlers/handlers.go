@@ -380,20 +380,31 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 
 	// 並列処理でファイルリストを取得
 	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
-		return h.getFileList(path)
+		fileInfos, err := h.getFileList(path)
+		if err != nil {
+			return err
+		}
+		return fileInfos
 	})
 
 	result := <-resultChan
-	if fileInfos, ok := result.([]models.FileInfo); ok {
+	switch res := result.(type) {
+	case []models.FileInfo:
 		// 結果をキャッシュ（TTL付き）
-		h.cache.Set(cacheKey, fileInfos, int64(len(fileInfos)*200), CacheTTL)
-		h.respondSuccess(w, fileInfos)
-	} else {
-		h.respondError(w, "Cannot read directory", http.StatusInternalServerError)
+		h.cache.Set(cacheKey, res, int64(len(res)*200), CacheTTL)
+		h.respondSuccess(w, res)
+	case error:
+		if os.IsNotExist(res) {
+			h.respondError(w, "Directory not found", http.StatusNotFound)
+		} else {
+			h.respondError(w, "Cannot read directory", http.StatusInternalServerError)
+		}
+	default:
+		h.respondError(w, "Unexpected error", http.StatusInternalServerError)
 	}
 }
 
-func (h *Handler) getFileList(path string) []models.FileInfo {
+func (h *Handler) getFileList(path string) ([]models.FileInfo, error) {
 	var fileInfos []models.FileInfo
 
 	// 特別なディレクトリのマッピング
@@ -408,16 +419,26 @@ func (h *Handler) getFileList(path string) []models.FileInfo {
 	// 特別なディレクトリへのアクセスを処理
 	if dirName, exists := specialDirs[path]; exists {
 		fullPath := filepath.Join(h.config.StorageDir, dirName)
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			return nil, err
+		}
 		if entries, err := os.ReadDir(fullPath); err == nil {
 			fileInfos = h.processDirectoryEntries(entries, fullPath)
+			return fileInfos, nil
+		} else {
+			return nil, err
 		}
-		return fileInfos
 	}
 
 	// 通常のパス処理
 	fullPath, err := h.convertToPhysicalPath(path)
 	if err != nil {
-		return fileInfos
+		return nil, err
+	}
+
+	// パスが存在するか確認
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		return nil, err
 	}
 
 	// ルートディレクトリの場合はマウントポイントも表示
@@ -440,9 +461,10 @@ func (h *Handler) getFileList(path string) []models.FileInfo {
 	if entries, err := os.ReadDir(fullPath); err == nil {
 		directoryFileInfos := h.processDirectoryEntries(entries, fullPath)
 		fileInfos = append(fileInfos, directoryFileInfos...)
+		return fileInfos, nil
+	} else {
+		return nil, err
 	}
-
-	return fileInfos
 }
 
 func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string) []models.FileInfo {
