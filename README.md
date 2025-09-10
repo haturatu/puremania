@@ -1,3 +1,26 @@
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+
+- [Pure Mania](#pure-mania)
+- [Why did I make this?](#why-did-i-make-this)
+  - [Features](#features)
+  - [Getting Started](#getting-started)
+    - [IP Address Firewall Configuration](#ip-address-firewall-configuration)
+    - [Prerequisites](#prerequisites)
+    - [Installation & Building](#installation--building)
+    - [Configuration](#configuration)
+    - [Running the Application](#running-the-application)
+    - [Supervisor (Optional)](#supervisor-optional)
+  - [Usage](#usage)
+  - [Configuration](#configuration-1)
+  - [What We Won't Do](#what-we-wont-do)
+  - [API Endpoints](#api-endpoints)
+  - [License](#license)
+- [Preview](#preview)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 # Pure Mania  
   
 <img width="1366" height="621" alt="image" src="https://github.com/user-attachments/assets/b4b24f9f-c5eb-40fc-b512-3f5d4341afbc" />  
@@ -138,6 +161,21 @@ The following environment variables can be configured in the `.env` file:
 | `ZIP_TIMEOUT`      | Timeout in seconds for ZIP file creation.       | `300`                |  
 | `MAX_ZIP_SIZE`     | Maximum size in MB for files to be zipped.      | `1024`               |  
   
+## What We Won't Do
+- Duplicate Upload Check
+  - We won't implement this because it can be inconvenient when uploading large numbers of files.
+  - Works like `mv` or `cp`.
+- PDF Viewing
+  - The browser's built-in functionality is sufficient.
+- Authentication
+  - Not needed.
+- User Management
+  - Not needed. Managing by Linux's default user accounts is sufficient.
+  - If separation is desired, we expect running separate daemons per user type (e.g., one for images, one for videos, one for music) and hosting them on different ports.
+- HTTPS
+  - Not needed.
+  - If needed, handle HTTPS at the HTTP server application level via local or internal reverse proxy.
+
 ## API Endpoints  
   
 Pure Mania exposes the following RESTful API endpoints under the `/api` prefix:  
