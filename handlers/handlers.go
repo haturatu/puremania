@@ -291,7 +291,8 @@ func (h *Handler) convertToVirtualPath(physicalPath string) string {
 	if strings.HasPrefix(physicalPath, h.config.StorageDir) {
 		relPath, err := filepath.Rel(h.config.StorageDir, physicalPath)
 		if err == nil {
-			return "/" + filepath.ToSlash(relPath)
+			virtualPath := "/" + filepath.ToSlash(relPath)
+			return virtualPath
 		}
 	}
 
@@ -301,7 +302,11 @@ func (h *Handler) convertToVirtualPath(physicalPath string) string {
 			relPath, err := filepath.Rel(mountDir, physicalPath)
 			if err == nil {
 				mountName := filepath.Base(mountDir)
-				return "/" + mountName + "/" + filepath.ToSlash(relPath)
+				virtualPath := "/" + mountName
+				if relPath != "." {
+					virtualPath += "/" + filepath.ToSlash(relPath)
+				}
+				return virtualPath
 			}
 		}
 	}
@@ -475,6 +480,15 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 			physicalFilepath := filepath.Join(basePath, entry.Name())
 			virtualPath := h.convertToVirtualPath(physicalFilepath)
 
+			// マウントポイントかどうかを判定
+			isMount := false
+			for _, mountDir := range h.config.MountDirs {
+				if physicalFilepath == mountDir {
+					isMount = true
+					break
+				}
+			}
+
 			fileInfo := models.FileInfo{
 				Name:       entry.Name(),
 				Path:       virtualPath,
@@ -483,6 +497,7 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 				IsDir:      entry.IsDir(),
 				MimeType:   mimeType,
 				IsEditable: isEditable,
+				IsMount:    isMount, // マウントポイントフラグを設定
 			}
 
 			mu.Lock()
