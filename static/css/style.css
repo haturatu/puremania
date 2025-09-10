@@ -870,18 +870,6 @@ body {
   width: 70%;
 }
 
-.volume-handle {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: var(--accent-primary);
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
 .volume-slider:hover .volume-handle {
   opacity: 1;
 }
@@ -1403,6 +1391,20 @@ body {
 }
 
 /* Responsive Design */
+@media (max-width: 480px) {
+    .upload-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .btn-select-files,
+    .btn-select-folders {
+        width: 100%;
+        max-width: 250px;
+        justify-content: center;
+    }
+}
+
 @media (max-width: 768px) {
     .header {
         flex-direction: column; /* 縦並びにする */
@@ -1683,3 +1685,104 @@ body {
     border-color: var(--accent-primary);
     background-color: rgba(0, 255, 65, 0.1);
 }
+
+/* 検索スコープのスタイル */
+#search-scope {
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-left: 10px;
+}
+
+#search-scope:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+#search-scope:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.2);
+}
+
+/* 検索バックボタンのスタイル */
+.search-back-btn {
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 15px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.search-back-btn:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    background-color: rgba(0, 255, 65, 0.1);
+}
+
+.search-back-btn:active {
+    transform: translateY(1px);
+}
+
+/* アップロードボタンエリアのスタイル */
+.upload-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* ファイル選択ボタンの基本スタイル */
+.btn-select-files,
+.btn-select-folders {
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ホバー時のスタイル */
+.btn-select-files:hover,
+.btn-select-folders:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    background-color: rgba(0, 255, 65, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* アクティブ時のスタイル */
+.btn-select-files:active,
+.btn-select-folders:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* フォーカス時のスタイル */
+.btn-select-files:focus,
+.btn-select-folders:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(0, 255, 65, 0.3);
+}
+
+

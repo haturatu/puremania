@@ -25,7 +25,7 @@ func Load() *Config {
 	}
 
 	config := &Config{
-		StorageDir:  getEnv("STORAGE_DIR", "/mnt/storage"),
+		StorageDir:  getEnv("STORAGE_DIR", ""),
 		Port:        getEnvAsInt("PORT", 8080),
 		MaxFileSize: getEnvAsInt64("MAX_FILE_SIZE_MB", 100),
 		ZipTimeout:  getEnvAsInt("ZIP_TIMEOUT", 300),      // デフォルト5分
