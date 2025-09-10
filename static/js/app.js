@@ -666,10 +666,10 @@ class FileManagerApp {
 
     setFileItemData(element, file) {
         element.dataset.path = file.path;
-        element.dataset.isDir = file.is_dir;
+        element.dataset.isDir = file.is_dir ? "true" : "false";
         element.dataset.mimeType = file.mime_type || '';
-        element.dataset.isEditable = file.is_editable || false;
-        element.dataset.isMount = file.is_mount || false;
+        element.dataset.isEditable = file.is_editable ? "true" : "false";
+        element.dataset.isMount = file.is_mount ? "true" : "false";
     }
 
     getFileIconClass(file) {
