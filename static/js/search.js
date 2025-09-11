@@ -306,6 +306,8 @@ class SearchHandler {
                 this.isCdMode = false;
                 this.hideCompletions();
                 
+                this.exitSearchMode();
+                
                 if (this.fileManager && this.fileManager.showToast) {
                     this.fileManager.showToast('cd', `Changed directory to: ${path}`, 'success');
                 }
