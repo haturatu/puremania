@@ -1,18 +1,27 @@
+import { EditorView } from "@codemirror/view";
+import { basicSetup } from "codemirror";
+import { EditorState } from "@codemirror/state";
+import { javascript } from "@codemirror/lang-javascript";
+import { autocompletion } from "@codemirror/autocomplete";
+import { oneDark } from '@codemirror/theme-one-dark';
+
+
 export class FileEditor {
     constructor() {
         this.currentFile = null;
+        this.editorView = null;
         this.init();
     }
-    
+
     init() {
         this.createEditorElement();
     }
-    
+
     createEditorElement() {
         const editor = document.createElement('div');
         editor.className = 'modal-overlay editor-modal';
         editor.style.display = 'none';
-        
+
         editor.innerHTML = `
             <div class="modal">
                 <div class="modal-header">
@@ -26,17 +35,16 @@ export class FileEditor {
                 </div>
                 <div class="modal-body">
                     <div class="editor-container">
-                        <textarea class="editor-textarea" placeholder="File content..."></textarea>
                     </div>
                 </div>
             </div>
         `;
-        
+
         document.body.appendChild(editor);
         this.editorElement = editor;
-        this.textarea = editor.querySelector('.editor-textarea');
+        this.editorContainer = editor.querySelector('.editor-container');
         this.filenameElement = editor.querySelector('.editor-filename');
-        
+
         this.bindEvents();
     }
 
@@ -44,42 +52,65 @@ export class FileEditor {
         this.editorElement.querySelector('#editor-cancel').addEventListener('click', () => {
             this.close();
         });
-        
+
         this.editorElement.querySelector('#editor-save').addEventListener('click', () => {
             this.save();
         });
-        
-        this.textarea.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 's') {
-                e.preventDefault();
-                this.save();
-            } else if (e.key === 'Escape') {
-                this.close();
-            }
-        });
     }
-    
+
     open(filePath, content) {
         this.currentFile = filePath;
         this.filenameElement.textContent = filePath.split('/').pop();
-        this.textarea.value = content;
+
+        if (this.editorView) {
+            this.editorView.destroy();
+        }
+
+        const state = EditorState.create({
+            doc: content,
+            extensions: [
+                basicSetup,
+                javascript(),
+                autocompletion(),
+                oneDark,
+                EditorView.theme({
+                    "&": {
+                        height: "100%"
+                    },
+                    ".cm-scroller": {
+                        overflow: "auto"
+                    }
+                }),
+                EditorView.lineWrapping
+            ]
+        });
+
+        this.editorView = new EditorView({
+            state,
+            parent: this.editorContainer
+        });
+
         this.editorElement.style.display = 'flex';
-        this.textarea.focus();
-        
+        this.editorView.focus();
+
         document.body.style.overflow = 'hidden';
     }
-    
+
     close() {
         this.editorElement.style.display = 'none';
         this.currentFile = null;
+        if (this.editorView) {
+            this.editorView.destroy();
+            this.editorView = null;
+        }
         document.body.style.overflow = '';
     }
-    
+
     async save() {
-        if (!this.currentFile) return;
-        
-        const content = this.textarea.value;
-        
+        if (!this.currentFile || !this.editorView) return;
+
+        const content = this.editorView.state.doc.toString();
+
         try {
             const response = await fetch('/api/files/save', {
                 method: 'POST',
@@ -91,9 +122,9 @@ export class FileEditor {
                     content: content
                 })
             });
-            
+
             const result = await response.json();
-            
+
             if (result.success) {
                 this.showToast('File saved successfully', 'success');
                 this.close();
@@ -105,21 +136,21 @@ export class FileEditor {
             console.error('Error saving file:', error);
         }
     }
-    
+
     showToast(message, type) {
         if (window.fileManager && window.fileManager.showToast) {
             window.fileManager.showToast('Editor', message, type);
             return;
         }
-        
+
         // Fallback toast implementation
         const toast = document.createElement('div');
         toast.className = 'toast-message';
         toast.textContent = message;
         toast.style.background = type === 'success' ? 'var(--success)' : 'var(--error)';
-        
+
         document.body.appendChild(toast);
-        
+
         setTimeout(() => {
             toast.remove();
         }, 3000);

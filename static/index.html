@@ -6,6 +6,9 @@
     <title>Pure Mania</title>
     <link rel="stylesheet" href="/static/css/style.css?=v0.0.1">
     <link rel="stylesheet" href="/static/css/masonry.css?=v0.0.1">
+    <style>
+    .cm-editor { border: 1px solid #ddd; }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -84,6 +87,18 @@
     </div>
     
     <!-- Scripts -->
+    <script type="importmap">
+    {
+      "imports": {
+        "codemirror": "https://esm.sh/codemirror",
+        "@codemirror/view": "https://esm.sh/@codemirror/view",
+        "@codemirror/state": "https://esm.sh/@codemirror/state",
+        "@codemirror/lang-javascript": "https://esm.sh/@codemirror/lang-javascript",
+        "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete",
+        "@codemirror/theme-one-dark": "https://esm.sh/@codemirror/theme-one-dark"
+      }
+    }
+    </script>
     <script type="module" src="/static/js/app.js?=v0.0.1"></script>
 </body>
 </html>

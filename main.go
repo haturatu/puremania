@@ -13,6 +13,8 @@ import (
 )
 
 func main() {
+	
+
 	// 設定を読み込み
 	cfg := config.Load()
 
@@ -44,8 +46,13 @@ func main() {
 	api.HandleFunc("/storage-info", handler.GetStorageInfo).Methods("GET")
 
 	// 静的ファイルのサービス
-	fs := http.FileServer(http.Dir("./static"))
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
+	staticFileHandler := http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".js") {
+			w.Header().Set("Content-Type", "application/javascript")
+		}
+		http.ServeFile(w, r, "./static/"+r.URL.Path)
+	}))
+	r.PathPrefix("/static/").Handler(staticFileHandler)
 
 	// その他のリクエストはindex.htmlを返す
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
