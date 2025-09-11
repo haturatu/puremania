@@ -49,9 +49,11 @@
             </div>
             
             <div class="storage-info">
-                <div class="storage-text">Loading storage info...</div>
+                <div class="storage-text">
+                    <span id="storage-used">0 B</span> / <span id="storage-total">0 B</span>
+                </div>
                 <div class="storage-progress">
-                    <div class="storage-progress-inner" style="width: 0%"></div>
+                    <div id="storage-bar-inner" style="width: 0%"></div>
                 </div>
             </div>
         </div>
@@ -79,10 +81,10 @@
     <!-- Will be created by JavaScript -->
     
     <!-- Toast Container -->
-    <div class="toast-container"></div>
+    <div id="toast-container"></div>
     
     <!-- Loading Overlay -->
-    <div class="loading-overlay" style="display: none;">
+    <div id="loading-overlay" style="display: none;">
         <div class="loading-spinner"></div>
     </div>
     
