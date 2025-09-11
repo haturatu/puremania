@@ -1,0 +1,361 @@
+.search-container {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-color);
+}
+
+.search-container:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.2);
+}
+
+.search-input {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  padding: 5px;
+  width: 20rem;
+  outline: none;
+  font-family: 'Courier New', monospace;
+}
+
+.search-options {
+  display: flex;
+  align-items: center;
+  margin-left: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.search-options:hover {
+  color: var(--accent-primary);
+}
+
+.search-results-count {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.pagination-info {
+    font-size: 0.9em;
+    color: #6c757d;
+    margin-top: 5px;
+}
+
+.search-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+/* ページネーションコントロール */
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+
+.pagination-btn {
+    padding: 8px 16px;
+    border: 1px solid #dee2e6;
+    background: #ffffff;
+    color: #495057;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.pagination-btn:hover:not([disabled]) {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.pagination-btn:disabled {
+    background: #f8f9fa;
+    color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* ページ番号ボタン */
+.page-numbers {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.page-btn {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #dee2e6;
+    background: #ffffff;
+    color: #495057;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.page-btn:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.page-btn.active {
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+}
+
+.page-ellipsis {
+    padding: 0 5px;
+    color: #6c757d;
+    font-size: 14px;
+}
+
+/* 検索ページネーションフッター */
+.search-pagination-footer {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    justify-content: center;
+}
+
+/* Backボタンのスタイル */
+.search-back-btn {
+    padding: 8px 16px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s ease;
+}
+
+.search-back-btn:hover {
+    background: #5a6268;
+}
+
+/* 検索スコープのスタイル */
+#search-scope {
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-left: 10px;
+}
+
+#search-scope:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+#search-scope:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.2);
+}
+
+/* 検索バックボタンのスタイル */
+.search-back-btn {
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 15px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.search-back-btn:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    background-color: rgba(0, 255, 65, 0.1);
+}
+
+.search-back-btn:active {
+    transform: translateY(1px);
+}
+
+/* cdコマンドとTab補完のスタイル */
+.search-container {
+    position: relative;
+}
+
+/* Tab補完ドロップダウン */
+.cd-completion-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 2px;
+}
+
+.completion-list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+}
+
+.completion-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 4px;
+    margin: 0 4px;
+    transition: background-color 0.15s ease;
+}
+
+.completion-item:hover,
+.completion-item.selected {
+    background-color: var(--accent-primary);
+    color: var(--text-primary);
+}
+
+.completion-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.completion-name {
+    font-weight: 500;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.completion-path {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+}
+
+/* 補完ドロップダウンのスクロールバー */
+.cd-completion-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.cd-completion-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.cd-completion-dropdown::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.cd-completion-dropdown::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* 検索入力フィールドのスタイル強化 */
+.search-input {
+    position: relative;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+/* cdモード時のプレースホルダー */
+.search-input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+/* cdモード時のヒント表示 */
+.search-container.cd-mode::after {
+    content: "Type 'cd ' followed by folder name, then press Tab for completion";
+    position: absolute;
+    bottom: -20px;
+    left: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+    pointer-events: none;
+}
+
+/* 検索結果ヘッダーのスタイル強化 */
+.search-results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 16px;
+    border-radius: 6px;
+}
+
+.search-results-count {
+    flex: 1;
+}
+
+.search-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.search-back-btn {
+    padding: 6px 12px;
+    background: var(--accent-secondary);
+    color: var(--text-primary);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.15s ease;
+}
+
+.search-back-btn:hover {
+    background: var(--accent-primary);
+}
+
+/* ページネーション */
+.pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 0;
+}
+
+.pagination-btn {
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s ease;
+}

@@ -1,0 +1,220 @@
+/* Responsive Design */
+@media (max-width: 480px) {
+    .upload-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .btn-select-files,
+    .btn-select-folders {
+        width: 100%;
+        max-width: 250px;
+        justify-content: center;
+    }
+
+    .pagination-controls {
+        gap: 5px;
+    }
+
+    .page-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+    }
+
+    .pagination-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .page-numbers {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .pagination-info {
+        font-size: 0.8em;
+        text-align: center;
+    }
+
+    .search-results-count {
+        font-size: 0.9rem;
+        text-align: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column; /* 縦並びにする */
+        align-items: stretch;   /* 横幅いっぱいに */
+    }
+
+    .header .search-input,
+    .header .file-path {
+        width: 100%; /* 横幅いっぱいに */
+        margin-bottom: 5px;
+    }
+
+    .image-viewer .modal {
+        max-width: 100vw;
+        max-height: 100vh;
+        margin: 0;
+        border-radius: 0;
+    }
+    
+    .image-nav {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
+    
+    .image-nav.prev {
+        left: 10px;
+    }
+    
+    .image-nav.next {
+        right: 10px;
+    }
+    
+    .image-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .image-name {
+        max-width: 100%;
+    }
+
+  .app-container {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .search-container {
+    width: 100%;
+    margin-top: 15px;
+  }
+  
+  .file-list,
+  .file-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+  
+  .media-player {
+    flex-direction: column;
+    height: auto;
+    padding: 10px;
+  }
+  
+  .media-info,
+  .media-controls,
+  .media-volume {
+    max-width: 100%;
+    margin-bottom: 10px;
+  }
+  .media-player.minimized {
+    height: 50px;
+    padding: 5px 10px;
+  }
+  
+  .minimized-title {
+    max-width: 50%;
+    font-size: 0.8rem;
+  }
+
+    .search-results-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 15px;
+    }
+
+    .search-controls {
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .pagination-controls {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .page-numbers {
+        order: 2;
+        justify-content: center;
+    }
+
+    .pagination-btn {
+        padding: 10px 16px;
+        font-size: 13px;
+    }
+
+    .search-back-btn {
+        width: 100%;
+        text-align: center;
+        margin-bottom: 10px;
+    }
+
+    .progress-overlay {
+        padding: 10px;
+    }
+
+    .progress-modal {
+        width: 95% !important;
+        max-width: 95% !important;
+        margin: 10px;
+        font-size: 14px;
+    }
+
+    .progress-bar-container {
+        height: 20px;
+    }
+
+    .progress-details {
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    th[data-sort="modified"],
+    tr.file-item td:nth-child(3) {
+      display: none;
+    }
+
+    th[data-sort="type"],
+    tr.file-item td:nth-child(4) {
+        display: none;
+    }
+}
+
+@media (max-width: 968px) {
+  .editor-modal .modal {
+    max-width: 95%;
+    max-height: 95%;
+  }
+
+  .editor-textarea {
+    min-height: 40rem;
+    min-width: 20rem;
+    font-size: 10px;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+/* タッチデバイス用のスタイル */
+@media (hover: none) and (pointer: coarse) {
+    .progress-close {
+        min-width: 44px;
+        min-height: 44px;
+        font-size: 24px;
+    }
+}

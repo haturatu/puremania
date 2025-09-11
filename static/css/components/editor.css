@@ -1,0 +1,53 @@
+/* エディタモーダル */
+.editor-modal .modal {
+  max-width: 80%;
+  max-height: 80%;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.editor-filename {
+  font-family: 'Courier New', monospace;
+  font-size: 1.1rem;
+  color: var(--accent-primary);
+}
+
+.editor-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.editor-container {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 15px;
+}
+
+.editor-textarea {
+  width: 100%;
+  min-height: 400px;
+  min-width: 900px;
+  padding: 15px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border: none;
+  resize: vertical;
+  font-family: 'Courier New', monospace;
+  line-height: 1.6;
+}
+
+.editor-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+/* Editor Enhancements */
+.editor-modal .modal {
+  max-width: 90vw;
+}
