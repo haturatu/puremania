@@ -542,10 +542,12 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseMultipartForm(h.config.MaxFileSize << 20); err != nil {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
 		h.respondError(w, "File is too large", http.StatusBadRequest)
 		return
 	}
-
 	defer func() {
 		if r.MultipartForm != nil {
 			_ = r.MultipartForm.RemoveAll()
@@ -582,6 +584,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	for i, fileHeader := range files {
 		wg.Add(1)
+		index := i
 		h.workerPool.Submit(func() {
 			defer wg.Done()
 
@@ -592,7 +595,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			}
 			defer file.Close()
 
-			relativePath := relativePaths[i]
+			relativePath := relativePaths[index]
 			normalizedRelativePath := filepath.FromSlash(relativePath)
 			targetPath := filepath.Join(fullPath, normalizedRelativePath)
 			targetDir := filepath.Dir(targetPath)
@@ -608,6 +611,9 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 				resultChan <- uploadResult{path: relativePath, success: false}
 				return
 			}
+			defer func() {
+				_ = dst.Close()
+			}()
 
 			// ファイルサイズに応じた最適な保存方法を選択
 			const MiB = 1 << 20
@@ -615,7 +621,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			var saveErr error
 
 			if fileHeader.Size > Threshold {
-				// 大きいファイル（500MiB以上）はストリームコピー
+				// 大きいファイルはストリームコピー
 				_, saveErr = io.Copy(dst, file)
 			} else {
 				// 小さいファイルは一括読み込み
@@ -627,11 +633,8 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			// 書き込み後すぐにクローズ
-			closeErr := dst.Close()
-
 			// エラーチェック
-			if saveErr != nil || closeErr != nil {
+			if saveErr != nil {
 				// エラー時は作成したファイルを削除
 				os.Remove(targetPath)
 				resultChan <- uploadResult{path: relativePath, success: false}
@@ -641,7 +644,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			virtualPath := h.convertToVirtualPath(targetPath)
 			resultChan <- uploadResult{path: virtualPath, success: true}
 
-			// 関連キャッシュをクリア
+			// キャッシュクリア
 			h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(targetDir)))
 		})
 	}
