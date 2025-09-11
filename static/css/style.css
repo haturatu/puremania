@@ -189,101 +189,7 @@ body {
     gap: 15px;
 }
 
-/* ページネーションコントロール */
-.pagination-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 0;
-}
 
-.pagination-btn {
-    padding: 8px 16px;
-    border: 1px solid #dee2e6;
-    background: #ffffff;
-    color: #495057;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-}
-
-.pagination-btn:hover:not([disabled]) {
-    background: #e9ecef;
-    border-color: #adb5bd;
-}
-
-.pagination-btn:disabled {
-    background: #f8f9fa;
-    color: #6c757d;
-    cursor: not-allowed;
-    opacity: 0.6;
-}
-
-/* ページ番号ボタン */
-.page-numbers {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.page-btn {
-    width: 32px;
-    height: 32px;
-    border: 1px solid #dee2e6;
-    background: #ffffff;
-    color: #495057;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
-}
-
-.page-btn:hover {
-    background: #e9ecef;
-    border-color: #adb5bd;
-}
-
-.page-btn.active {
-    background: #007bff;
-    color: white;
-    border-color: #007bff;
-}
-
-.page-ellipsis {
-    padding: 0 5px;
-    color: #6c757d;
-    font-size: 14px;
-}
-
-/* 検索ページネーションフッター */
-.search-pagination-footer {
-    margin-top: 20px;
-    padding-top: 15px;
-    border-top: 1px solid #e9ecef;
-    display: flex;
-    justify-content: center;
-}
-
-/* Backボタンのスタイル */
-.search-back-btn {
-    padding: 8px 16px;
-    background: #6c757d;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background-color 0.2s ease;
-}
-
-.search-back-btn:hover {
-    background: #5a6268;
-}
 
 /* レスポンシブ対応 */
 @media (max-width: 768px) {
@@ -1747,19 +1653,18 @@ body {
     box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.2);
 }
 
-/* 検索バックボタンのスタイル */
 .search-back-btn {
     background-color: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
-    padding: 8px 16px;
+    padding: 6px 12px;
     border-radius: 4px;
     font-family: 'Courier New', monospace;
     cursor: pointer;
     transition: all 0.3s ease;
-    margin-bottom: 15px;
     display: inline-flex;
     align-items: center;
+    font-size: 13px;
 }
 
 .search-back-btn:hover {
@@ -1964,28 +1869,13 @@ body {
     align-items: center;
 }
 
-.search-back-btn {
-    padding: 6px 12px;
-    background: var(--accent-secondary);
-    color: var(--text-primary);
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: background-color 0.15s ease;
-}
 
-.search-back-btn:hover {
-    background: var(--accent-primary);
-}
 
 /* ページネーション */
 .pagination-controls {
     display: flex;
-    justify-content: center;
     align-items: center;
     gap: 8px;
-    padding: 16px 0;
 }
 
 .pagination-btn {
