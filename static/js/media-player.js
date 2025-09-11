@@ -1,4 +1,4 @@
-class MediaPlayer {
+export class MediaPlayer {
     constructor() {
         this.audioElement = null;
         this.videoElement = null;

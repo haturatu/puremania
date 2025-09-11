@@ -1,4 +1,4 @@
-class FileEditor {
+export class FileEditor {
     constructor() {
         this.currentFile = null;
         this.init();

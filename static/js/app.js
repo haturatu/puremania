@@ -1,3 +1,10 @@
+import { Router } from './router.js';
+import { ProgressManager } from './progress.js';
+import { FileEditor } from './file-editor.js';
+import { MediaPlayer } from './media-player.js';
+import { ImageViewer } from './gallery.js';
+import { SearchHandler } from './search.js';
+
 class FileManagerApp {
     constructor() {
         this.currentPath = '/';

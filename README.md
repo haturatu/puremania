@@ -156,7 +156,8 @@ The following environment variables can be configured in the `.env` file:
 | ------------------ | ----------------------------------------------- | -------------------- |  
 | `STORAGE_DIR`      | The main storage directory for your files.      | `/home/$USER`        |  
 | `MOUNT_DIRS`       | Comma-separated list of additional directories. | (empty)              |  
-| `MAX_FILE_SIZE_MB` | Maximum file size for uploads in megabytes.     | `100`                |  
+| `MAX_FILE_SIZE_MB` | Maximum file size for uploads in megabytes.     | `10000
+`                |  
 | `PORT`             | The port on which the server will run.          | `8844`               |  
 | `ZIP_TIMEOUT`      | Timeout in seconds for ZIP file creation.       | `300`                |  
 | `MAX_ZIP_SIZE`     | Maximum size in MB for files to be zipped.      | `1024`               |  
