@@ -6,6 +6,9 @@
     <title>Pure Mania</title>
     <link rel="stylesheet" href="/static/css/style.css?=v0.0.2">
     <link rel="stylesheet" href="/static/css/masonry.css?=v0.0.1">
+    <style>
+    .cm-editor { border: 1px solid #ddd; }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -84,6 +87,33 @@
     </div>
     
     <!-- Scripts -->
+    <script type="importmap">
+    {
+      "imports": {
+        "codemirror": "https://esm.sh/codemirror",
+        "@codemirror/view": "https://esm.sh/@codemirror/view",
+        "@codemirror/state": "https://esm.sh/@codemirror/state",
+        "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete",
+        "@codemirror/commands": "https://esm.sh/@codemirror/commands",
+        "@codemirror/theme-one-dark": "https://esm.sh/@codemirror/theme-one-dark",
+        "@codemirror/lang-javascript": "https://esm.sh/@codemirror/lang-javascript",
+        "@codemirror/lang-cpp": "https://esm.sh/@codemirror/lang-cpp",
+        "@codemirror/lang-csharp": "https://esm.sh/@codemirror/lang-csharp",
+        "@codemirror/lang-go": "https://esm.sh/@codemirror/lang-go",
+        "@codemirror/lang-java": "https://esm.sh/@codemirror/lang-java",
+        "@codemirror/lang-kotlin": "https://esm.sh/@codemirror/lang-kotlin",
+        "@codemirror/lang-php": "https://esm.sh/@codemirror/lang-php",
+        "@codemirror/lang-python": "https://esm.sh/@codemirror/lang-python",
+        "@codemirror/lang-ruby": "https://esm.sh/@codemirror/lang-ruby",
+        "@codemirror/lang-rust": "https://esm.sh/@codemirror/lang-rust",
+        "@codemirror/lang-scala": "https://esm.sh/@codemirror/lang-scala",
+        "@codemirror/lang-html": "https://esm.sh/@codemirror/lang-html",
+        "@codemirror/lang-css": "https://esm.sh/@codemirror/lang-css",
+        "@codemirror/lang-xml": "https://esm.sh/@codemirror/lang-xml",
+        "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown"
+      }
+    }
+    </script>
     <script type="module" src="/static/js/app.js?=v0.0.1"></script>
 </body>
 </html>
