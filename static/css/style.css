@@ -155,7 +155,7 @@ body {
   border: none;
   color: var(--text-primary);
   padding: 5px;
-  width: 200px;
+  width: 20rem;
   outline: none;
   font-family: 'Courier New', monospace;
 }
