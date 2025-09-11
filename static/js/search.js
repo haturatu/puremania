@@ -396,7 +396,6 @@ class SearchHandler {
             const li = document.createElement('li');
             li.className = 'completion-item';
             li.innerHTML = `
-                <div class="completion-icon">📁</div>
                 <div class="completion-text">
                     <div class="completion-name">${completion.name}</div>
                     <div class="completion-path">${completion.fullPath}</div>
