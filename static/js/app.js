@@ -331,7 +331,6 @@ class FileManagerApp {
             </div>
     
             <div class="upload-info">
-                <div class="upload-feature">• Folder upload will preserve directory structure</div>
                 <div class="upload-feature">• Files will be uploaded to: <span class="upload-path">${this.currentPath}</span></div>
             </div>
         `;
