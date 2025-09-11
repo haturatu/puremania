@@ -1197,220 +1197,281 @@ class FileManagerApp {
 
     async handleFileUpload(files) {
         if (!files || files.length === 0) return;
-        
+    
         try {
-            // プログレス表示開始
-            if (!this.progressManager.progressOverlay || 
+            if (!this.progressManager.progressOverlay ||
                 this.progressManager.progressOverlay.style.display === 'none') {
                 this.progressManager.show('Uploading Files');
             }
-            
+    
             this.progressManager.safeUpdateProgress({
-                currentFile: 'Preparing batch upload...',
+                currentFile: 'Preparing parallel batch upload...',
                 percentage: 0,
                 processed: 0,
                 total: files.length,
-                status: `Preparing ${files.length} files for batch processing`
+                status: `Preparing ${files.length} files for parallel processing`
             });
     
             const uploadArea = document.querySelector('.upload-area');
-            if (uploadArea) {
-                uploadArea.classList.add('uploading');
-            }
+            if (uploadArea) uploadArea.classList.add('uploading');
     
-            // バッチサイズの設定（サーバー負荷に応じて調整可能）
-            const BATCH_SIZE = 50; // 1回のリクエストで処理するファイル数
+            const BATCH_SIZE = 50;
+            const MAX_PARALLEL_BATCHES = 5; // 最大2並列
             const batches = [];
-            
-            // ファイルをバッチに分割
+    
             for (let i = 0; i < files.length; i += BATCH_SIZE) {
                 batches.push(Array.from(files).slice(i, i + BATCH_SIZE));
             }
     
-            console.log(`Processing ${files.length} files in ${batches.length} batches`);
+            console.log(`Processing ${files.length} files in ${batches.length} batches (max ${MAX_PARALLEL_BATCHES} parallel)`);
     
             let totalProcessed = 0;
             let totalSuccessful = 0;
             let totalFailed = 0;
             const allResults = [];
     
-            // バッチを順次処理
-            for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-                const batch = batches[batchIndex];
-                const batchStartIndex = batchIndex * BATCH_SIZE;
-                
-                this.progressManager.safeUpdateProgress({
-                    currentFile: `Processing batch ${batchIndex + 1}/${batches.length}...`,
-                    percentage: (batchIndex / batches.length) * 90, // 90%までをバッチ処理に使用
-                    processed: totalProcessed,
-                    total: files.length,
-                    status: `Batch ${batchIndex + 1}/${batches.length}: ${batch.length} files`
-                });
+            let batchIndex = 0;
+            const inFlight = [];
     
-                try {
-                    const batchResult = await this.uploadBatch(batch, batchIndex + 1, batches.length);
-                    
-                    totalSuccessful += batchResult.successful;
-                    totalFailed += batchResult.failed;
-                    totalProcessed += batch.length;
-                    allResults.push(batchResult);
+            while (batchIndex < batches.length || inFlight.length > 0) {
+                // 最大2バッチ投入
+                while (batchIndex < batches.length && inFlight.length < MAX_PARALLEL_BATCHES) {
+                    const currentBatchIndex = batchIndex;
+                    const batch = batches[currentBatchIndex];
     
-                    // バッチ完了後の進捗更新
                     this.progressManager.safeUpdateProgress({
-                        currentFile: `Batch ${batchIndex + 1} completed`,
-                        percentage: ((batchIndex + 1) / batches.length) * 90,
+                        currentFile: `Starting batch ${currentBatchIndex + 1}/${batches.length}...`,
+                        percentage: (totalProcessed / files.length) * 90,
                         processed: totalProcessed,
                         total: files.length,
-                        status: `Completed: ${totalSuccessful} successful, ${totalFailed} failed`
+                        status: `Batch ${currentBatchIndex + 1}/${batches.length}: ${batch.length} files (10 parallel)`
                     });
     
-                    // バッチ間の短い待機時間（サーバー負荷軽減）
-                    if (batchIndex < batches.length - 1) {
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                    }
+                    const promise = this.uploadBatch(batch, currentBatchIndex + 1, batches.length)
+                        .then(result => {
+                            totalSuccessful += result.successful;
+                            totalFailed += result.failed;
+                            totalProcessed += batch.length;
+                            allResults.push(result);
     
-                } catch (error) {
-                    console.error(`Batch ${batchIndex + 1} failed:`, error);
-                    totalFailed += batch.length;
-                    totalProcessed += batch.length;
-                    
-                    // エラーが発生しても続行
-                    this.progressManager.safeUpdateProgress({
-                        currentFile: `Batch ${batchIndex + 1} failed`,
-                        percentage: ((batchIndex + 1) / batches.length) * 90,
-                        processed: totalProcessed,
-                        total: files.length,
-                        status: `Batch error occurred, continuing...`
-                    });
+                            this.progressManager.safeUpdateProgress({
+                                currentFile: `Batch ${currentBatchIndex + 1} completed`,
+                                percentage: (totalProcessed / files.length) * 90,
+                                processed: totalProcessed,
+                                total: files.length,
+                                status: `Completed: ${totalSuccessful} successful, ${totalFailed} failed`
+                            });
+                        })
+                        .catch(error => {
+                            console.error(`Batch ${currentBatchIndex + 1} failed:`, error);
+                            totalFailed += batch.length;
+                            totalProcessed += batch.length;
+    
+                            this.progressManager.safeUpdateProgress({
+                                currentFile: `Batch ${currentBatchIndex + 1} failed`,
+                                percentage: (totalProcessed / files.length) * 90,
+                                processed: totalProcessed,
+                                total: files.length,
+                                status: `Batch error occurred, continuing...`
+                            });
+                        })
+                        .finally(() => {
+                            // 終了したら inFlight から除外
+                            const idx = inFlight.indexOf(promise);
+                            if (idx > -1) inFlight.splice(idx, 1);
+                        });
+    
+                    inFlight.push(promise);
+                    batchIndex++;
                 }
+    
+                // いずれかのバッチが終わるのを待つ
+                await Promise.race(inFlight);
             }
     
-            // 最終結果の処理
+            // 全部終わったらまとめ
             const finalResult = {
                 successful: totalSuccessful,
                 failedCount: totalFailed,
                 total: files.length,
-                message: `Batch upload completed: ${totalSuccessful} files uploaded successfully`
+                message: `Parallel batch upload completed: ${totalSuccessful} files uploaded successfully`
             };
     
             this.progressManager.safeUpdateProgress({
-                currentFile: 'Upload complete!',
+                currentFile: 'Parallel upload complete!',
                 percentage: 100,
                 processed: totalSuccessful,
                 total: files.length,
                 status: `Completed: ${totalSuccessful} successful${totalFailed > 0 ? `, ${totalFailed} failed` : ''}`
             });
     
-            // 結果の表示
             if (totalFailed > 0) {
-                this.showToast('Upload Complete', 
-                    `${finalResult.message}, ${totalFailed} failed`, 
+                this.showToast('Upload Complete',
+                    `${finalResult.message}, ${totalFailed} failed`,
                     'warning');
             } else {
                 this.showToast('Success', finalResult.message, 'success');
             }
     
-            // 完了ダイアログの表示
             this.showUploadCompleteDialog(finalResult).then(() => {
                 this.progressManager.hide();
                 this.loadFiles(this.currentPath);
             });
     
         } catch (error) {
-            console.error('Error in batch upload:', error);
-            this.handleUploadError('Batch upload failed: ' + error.message);
+            console.error('Error in parallel batch upload:', error);
+            this.handleUploadError('Parallel batch upload failed: ' + error.message);
         } finally {
             const uploadArea = document.querySelector('.upload-area');
-            if (uploadArea) {
-                uploadArea.classList.remove('uploading');
-            }
+            if (uploadArea) uploadArea.classList.remove('uploading');
         }
     }
+    
 
     async uploadBatch(batchFiles, batchNumber, totalBatches) {
+        const CONCURRENT_UPLOADS = 50; // Number of files to upload in parallel
+        
         return new Promise((resolve, reject) => {
-            const formData = new FormData();
-            formData.append('path', this.currentPath);
+            let completedFiles = 0;
+            let successfulFiles = 0;
+            let failedFiles = 0;
+            const results = [];
             
-            // バッチ内のファイルを FormData に追加
-            batchFiles.forEach(file => {
-                const relativePath = file.webkitRelativePath || file.name;
-                formData.append('file', file);
-                formData.append('relativePath[]', relativePath);
-            });
-    
-            const xhr = new XMLHttpRequest();
+            // Process files in chunks of CONCURRENT_UPLOADS
+            const processFileChunk = async (fileChunk, chunkIndex) => {
+                const uploadPromises = fileChunk.map((file, fileIndex) => {
+                    return new Promise((fileResolve) => {
+                        const formData = new FormData();
+                        formData.append('path', this.currentPath);
+                        formData.append('file', file);
+                        
+                        const relativePath = file.webkitRelativePath || file.name;
+                        formData.append('relativePath[]', relativePath);
+                        
+                        const xhr = new XMLHttpRequest();
+                        
+                        // Individual file upload progress
+                        xhr.upload.addEventListener('progress', (e) => {
+                            if (e.lengthComputable) {
+                                const fileProgress = (e.loaded / e.total) * 100;
+                                const overallFileIndex = chunkIndex * CONCURRENT_UPLOADS + fileIndex;
+                                
+                                // Update progress for this specific file
+                                const overallProgress = ((batchNumber - 1) / totalBatches) * 90 + 
+                                                      ((completedFiles + (fileProgress / 100)) / batchFiles.length) * (90 / totalBatches);
+                                
+                                this.progressManager.safeUpdateProgress({
+                                    currentFile: `Batch ${batchNumber}: Uploading ${file.name} (${Math.round(fileProgress)}%)`,
+                                    percentage: overallProgress,
+                                    processed: completedFiles,
+                                    total: batchFiles.length,
+                                    status: `Batch ${batchNumber}/${totalBatches}: ${completedFiles}/${batchFiles.length} completed`
+                                });
+                            }
+                        });
+                        
+                        xhr.addEventListener('load', () => {
+                            completedFiles++;
+                            
+                            if (xhr.status >= 200 && xhr.status < 300) {
+                                try {
+                                    const response = JSON.parse(xhr.responseText);
+                                    if (response.success || (response.data && response.data.successful > 0)) {
+                                        successfulFiles++;
+                                        results.push({ file: file.name, status: 'success', response });
+                                    } else {
+                                        failedFiles++;
+                                        results.push({ file: file.name, status: 'failed', error: response.message });
+                                    }
+                                } catch (error) {
+                                    failedFiles++;
+                                    results.push({ file: file.name, status: 'failed', error: 'Parse error' });
+                                }
+                            } else {
+                                failedFiles++;
+                                results.push({ file: file.name, status: 'failed', error: `HTTP ${xhr.status}` });
+                            }
+                            
+                            fileResolve();
+                        });
+                        
+                        xhr.addEventListener('error', () => {
+                            completedFiles++;
+                            failedFiles++;
+                            results.push({ file: file.name, status: 'failed', error: 'Network error' });
+                            fileResolve();
+                        });
+                        
+                        xhr.addEventListener('timeout', () => {
+                            completedFiles++;
+                            failedFiles++;
+                            results.push({ file: file.name, status: 'failed', error: 'Timeout' });
+                            fileResolve();
+                        });
+                        
+                        xhr.timeout = 60000; // 1 minute per file
+                        xhr.open('POST', '/api/files/upload');
+                        xhr.send(formData);
+                    });
+                });
+                
+                // Wait for all files in this chunk to complete
+                await Promise.all(uploadPromises);
+            };
             
-            // アップロード進捗のハンドリング
-            xhr.upload.addEventListener('progress', (e) => {
-                if (e.lengthComputable) {
-                    // バッチ内での進捗を全体の進捗に反映
-                    const batchProgress = (e.loaded / e.total) * 100;
-                    const overallProgress = ((batchNumber - 1) / totalBatches) * 90 + 
-                                          (batchProgress / 100) * (90 / totalBatches);
+            // Split batch into chunks for parallel processing
+            const processAllChunks = async () => {
+                const chunks = [];
+                for (let i = 0; i < batchFiles.length; i += CONCURRENT_UPLOADS) {
+                    chunks.push(batchFiles.slice(i, i + CONCURRENT_UPLOADS));
+                }
+                
+                // Process chunks sequentially (but files within each chunk in parallel)
+                for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+                    const chunk = chunks[chunkIndex];
                     
                     this.progressManager.safeUpdateProgress({
-                        currentFile: `Batch ${batchNumber}: ${Math.round(batchProgress)}%`,
-                        percentage: overallProgress,
-                        processed: Math.floor(overallProgress / 90 * batchFiles.length),
+                        currentFile: `Batch ${batchNumber}: Processing chunk ${chunkIndex + 1}/${chunks.length}`,
+                        percentage: ((batchNumber - 1) / totalBatches) * 90 + (chunkIndex / chunks.length) * (90 / totalBatches),
+                        processed: completedFiles,
                         total: batchFiles.length,
-                        status: `Uploading batch ${batchNumber}/${totalBatches}`
+                        status: `Batch ${batchNumber}/${totalBatches}: Starting parallel uploads`
                     });
-                }
-            });
-    
-            xhr.addEventListener('load', () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        const data = response.data || response;
-                        
-                        resolve({
-                            successful: this.getSafeNumber(data.successful, data.uploaded ? data.uploaded.length : batchFiles.length),
-                            failed: this.getSafeNumber(data.failed_count, data.failed ? data.failed.length : 0),
-                            response: response
-                        });
-                    } catch (error) {
-                        console.error('Error parsing batch response:', error);
-                        resolve({
-                            successful: 0,
-                            failed: batchFiles.length,
-                            response: null
-                        });
+                    
+                    await processFileChunk(chunk, chunkIndex);
+                    
+                    // Small delay between chunks to prevent overwhelming the server
+                    if (chunkIndex < chunks.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
                     }
-                } else {
-                    console.error(`Batch ${batchNumber} HTTP error:`, xhr.status, xhr.statusText);
-                    resolve({
-                        successful: 0,
-                        failed: batchFiles.length,
-                        response: null
-                    });
                 }
-            });
-    
-            xhr.addEventListener('error', (e) => {
-                console.error(`Batch ${batchNumber} network error:`, e);
+                
+                // Final batch completion update
+                this.progressManager.safeUpdateProgress({
+                    currentFile: `Batch ${batchNumber} completed`,
+                    percentage: (batchNumber / totalBatches) * 90,
+                    processed: completedFiles,
+                    total: batchFiles.length,
+                    status: `Batch ${batchNumber} completed: ${successfulFiles} successful, ${failedFiles} failed`
+                });
+                
                 resolve({
-                    successful: 0,
-                    failed: batchFiles.length,
+                    successful: successfulFiles,
+                    failed: failedFiles,
+                    results: results,
+                    response: { success: successfulFiles > 0, data: { successful: successfulFiles, failed_count: failedFiles } }
+                });
+            };
+            
+            processAllChunks().catch(error => {
+                console.error(`Batch ${batchNumber} processing error:`, error);
+                resolve({
+                    successful: successfulFiles,
+                    failed: batchFiles.length - successfulFiles,
+                    results: results,
                     response: null
                 });
             });
-    
-            xhr.addEventListener('timeout', () => {
-                console.error(`Batch ${batchNumber} timeout`);
-                resolve({
-                    successful: 0,
-                    failed: batchFiles.length,
-                    response: null
-                });
-            });
-    
-            // タイムアウト設定（大量ファイル用に延長）
-            xhr.timeout = 300000; // 5分
-    
-            xhr.open('POST', '/api/files/upload');
-            xhr.send(formData);
         });
     }
 
