@@ -202,20 +202,42 @@ class FileManagerApp {
     }
 
     bindDragDropEvents(fileBrowser) {
+        let dragCounter = 0;
+        
+        fileBrowser.addEventListener('dragenter', (e) => {
+            // Only handle if not over upload area
+            if (!e.target.closest('.upload-area')) {
+                e.preventDefault();
+                dragCounter++;
+                fileBrowser.classList.add('dragover');
+            }
+        });
+    
         fileBrowser.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            fileBrowser.classList.add('dragover');
+            if (!e.target.closest('.upload-area')) {
+                e.preventDefault();
+            }
         });
-
+    
         fileBrowser.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            fileBrowser.classList.remove('dragover');
+            if (!e.target.closest('.upload-area')) {
+                e.preventDefault();
+                dragCounter--;
+                if (dragCounter <= 0) {
+                    dragCounter = 0;
+                    fileBrowser.classList.remove('dragover');
+                }
+            }
         });
-
+    
         fileBrowser.addEventListener('drop', (e) => {
-            e.preventDefault();
-            fileBrowser.classList.remove('dragover');
-            this.handleFileDrop(e);
+            // Only handle if not dropped on upload area
+            if (!e.target.closest('.upload-area')) {
+                e.preventDefault();
+                dragCounter = 0;
+                fileBrowser.classList.remove('dragover');
+                this.handleFileDrop(e);
+            }
         });
     }
 
@@ -323,6 +345,12 @@ class FileManagerApp {
     
         const handleFiles = (files, isFolder = false) => {
             if (files && files.length > 0) {
+                // Clear the input immediately to prevent re-processing
+                const input = event.target;
+                if (input) {
+                    input.value = '';
+                }
+                
                 this.progressManager.show('Processing Files');
                 this.progressManager.safeUpdateProgress({
                     currentFile: 'Preparing files...',
@@ -345,36 +373,73 @@ class FileManagerApp {
             return Promise.resolve();
         };
     
-        // ファイル選択
+        // ファイル選択 - Use 'change' event and clear input after processing
         uploadFilesInput.addEventListener('change', (e) => {
             if (e.target.files && e.target.files.length > 0) {
-                handleFiles(e.target.files, false);
+                const files = Array.from(e.target.files); // Convert to array immediately
+                e.target.value = ''; // Clear immediately
+                handleFiles(files, false);
             }
-            e.target.value = '';
-        });
+        }, { once: false }); // Ensure we don't accidentally use 'once: true'
     
-        // フォルダ選択
+        // フォルダ選択 - Use 'change' event and clear input after processing
         uploadFoldersInput.addEventListener('change', (e) => {
             if (e.target.files && e.target.files.length > 0) {
-                handleFiles(e.target.files, true);
+                const files = Array.from(e.target.files); // Convert to array immediately
+                e.target.value = ''; // Clear immediately
+                handleFiles(files, true);
             }
-            e.target.value = '';
-        });
+        }, { once: false });
     
         // ボタンクリックで input を開く
-        btnSelectFiles.addEventListener('click', () => uploadFilesInput.click());
-        btnSelectFolders.addEventListener('click', () => uploadFoldersInput.click());
-    
-        // ドラッグ&ドロップ対応
-        uploadArea.addEventListener('dragover', (e) => {
+        btnSelectFiles.addEventListener('click', (e) => {
             e.preventDefault();
+            e.stopPropagation();
+            uploadFilesInput.click();
+        });
+        
+        btnSelectFolders.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            uploadFoldersInput.click();
+        });
+    
+        // ドラッグ&ドロップ対応 - ONLY on upload area, not duplicating browser-wide handlers
+        let dragCounter = 0; // Prevent dragLeave from firing incorrectly
+        
+        uploadArea.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragCounter++;
             uploadArea.classList.add('dragover');
         });
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        
         uploadArea.addEventListener('dragleave', (e) => {
             e.preventDefault();
-            uploadArea.classList.remove('dragover');
+            e.stopPropagation();
+            dragCounter--;
+            if (dragCounter <= 0) {
+                dragCounter = 0;
+                uploadArea.classList.remove('dragover');
+            }
         });
-        uploadArea.addEventListener('drop', (e) => this.handleFileDrop(e));
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragCounter = 0;
+            uploadArea.classList.remove('dragover');
+            
+            // Only handle drop if it happened on the upload area specifically
+            if (e.target.closest('.upload-area')) {
+                this.handleFileDrop(e);
+            }
+        });
     
         // 現在のパス表示
         this.updateUploadPath = () => {
@@ -1216,7 +1281,7 @@ class FileManagerApp {
             if (uploadArea) uploadArea.classList.add('uploading');
     
             const BATCH_SIZE = 50;
-            const MAX_PARALLEL_BATCHES = 5; // 最大2並列
+            const MAX_PARALLEL_BATCHES = 5; // 最大5並列
             const batches = [];
     
             for (let i = 0; i < files.length; i += BATCH_SIZE) {
@@ -1234,7 +1299,7 @@ class FileManagerApp {
             const inFlight = [];
     
             while (batchIndex < batches.length || inFlight.length > 0) {
-                // 最大2バッチ投入
+                // 最大5バッチ投入
                 while (batchIndex < batches.length && inFlight.length < MAX_PARALLEL_BATCHES) {
                     const currentBatchIndex = batchIndex;
                     const batch = batches[currentBatchIndex];
@@ -1244,7 +1309,7 @@ class FileManagerApp {
                         percentage: (totalProcessed / files.length) * 90,
                         processed: totalProcessed,
                         total: files.length,
-                        status: `Batch ${currentBatchIndex + 1}/${batches.length}: ${batch.length} files (10 parallel)`
+                        status: `Batch ${currentBatchIndex + 1}/${batches.length}: ${batch.length} files`
                     });
     
                     const promise = this.uploadBatch(batch, currentBatchIndex + 1, batches.length)
@@ -1572,46 +1637,53 @@ class FileManagerApp {
         };
     }
 
-    handleFileDrop(e) {
-        e.preventDefault();
-        const uploadArea = document.querySelector('.upload-area');
-        if (uploadArea) uploadArea.classList.remove('dragover');
-    
-        // Start single progress session
-        this.progressManager.show('Processing Files');
-        this.progressManager.safeUpdateProgress({
-            currentFile: 'Analyzing dropped items...',
-            percentage: 0,
-            processed: 0,
-            total: 0,
-            status: 'Scanning files and folders'
-        });
-    
-        this.processDroppedItems(e.dataTransfer)
-            .then(allFiles => {
-                if (allFiles.length > 0) {
-                    // Update progress to show total files found
-                    this.progressManager.safeUpdateProgress({
-                        currentFile: 'Starting upload...',
-                        percentage: 0,
-                        processed: 0,
-                        total: allFiles.length,
-                        status: `Found ${allFiles.length} files to upload`
-                    });
-                    
-                    // Unified upload for all files
-                    return this.handleFileUpload(allFiles);
-                } else {
-                    this.progressManager.hide();
-                    this.showToast('Info', 'No files found to upload', 'info');
-                }
-            })
-            .catch(error => {
-                console.error('Error processing dropped items:', error);
-                this.progressManager.showError('Failed to process dropped items');
+    async handleFileDrop(e) {
+        // Ensure we only process once
+        if (this._processingDrop) {
+            return;
+        }
+        this._processingDrop = true;
+        
+        try {
+            e.preventDefault();
+            
+            // Start single progress session
+            this.progressManager.show('Processing Files');
+            this.progressManager.safeUpdateProgress({
+                currentFile: 'Analyzing dropped items...',
+                percentage: 0,
+                processed: 0,
+                total: 0,
+                status: 'Scanning files and folders'
             });
-    }
     
+            const allFiles = await this.processDroppedItems(e.dataTransfer);
+            
+            if (allFiles.length > 0) {
+                // Update progress to show total files found
+                this.progressManager.safeUpdateProgress({
+                    currentFile: 'Starting upload...',
+                    percentage: 0,
+                    processed: 0,
+                    total: allFiles.length,
+                    status: `Found ${allFiles.length} files to upload`
+                });
+                
+                // Unified upload for all files
+                await this.handleFileUpload(allFiles);
+            } else {
+                this.progressManager.hide();
+                this.showToast('Info', 'No files found to upload', 'info');
+            }
+        } catch (error) {
+            console.error('Error processing dropped items:', error);
+            this.progressManager.showError('Failed to process dropped items');
+        } finally {
+            this._processingDrop = false;
+        }
+    }
+
+   
     async processDroppedItems(dataTransfer) {
         const allFiles = [];
         const processingPromises = [];
