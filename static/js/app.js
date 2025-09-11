@@ -1299,7 +1299,7 @@ class FileManagerApp {
             const inFlight = [];
     
             while (batchIndex < batches.length || inFlight.length > 0) {
-                // 最大5バッチ投入
+                // バッチ投入
                 while (batchIndex < batches.length && inFlight.length < MAX_PARALLEL_BATCHES) {
                     const currentBatchIndex = batchIndex;
                     const batch = batches[currentBatchIndex];
@@ -1474,7 +1474,7 @@ class FileManagerApp {
                             fileResolve();
                         });
                         
-                        xhr.timeout = 60000; // 1 minute per file
+                        // xhr.timeout = 600000; // 10 minute per file
                         xhr.open('POST', '/api/files/upload');
                         xhr.send(formData);
                     });

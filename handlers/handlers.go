@@ -602,18 +602,38 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			// ファイル作成
 			dst, err := os.Create(targetPath)
 			if err != nil {
 				resultChan <- uploadResult{path: relativePath, success: false}
 				return
 			}
-			defer dst.Close()
 
-			// バッファサイズ最適化
-			buffer := make([]byte, getOptimalBufferSize(fileHeader.Size))
-			_, err = io.CopyBuffer(dst, file, buffer)
+			// ファイルサイズに応じた最適な保存方法を選択
+			const MiB = 1 << 20
+			const Threshold = 500 * MiB
+			var saveErr error
 
-			if err != nil {
+			if fileHeader.Size > Threshold {
+				// 大きいファイル（500MiB以上）はストリームコピー
+				_, saveErr = io.Copy(dst, file)
+			} else {
+				// 小さいファイルは一括読み込み
+				data, err := io.ReadAll(file)
+				if err != nil {
+					saveErr = err
+				} else {
+					_, saveErr = dst.Write(data)
+				}
+			}
+
+			// 書き込み後すぐにクローズ
+			closeErr := dst.Close()
+
+			// エラーチェック
+			if saveErr != nil || closeErr != nil {
+				// エラー時は作成したファイルを削除
+				os.Remove(targetPath)
 				resultChan <- uploadResult{path: relativePath, success: false}
 				return
 			}
