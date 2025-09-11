@@ -284,6 +284,7 @@ export class ApiClient {
 
             if (result.success) {
                 this.app.ui.showToast('Success', 'File deleted successfully', 'success');
+                this.app.clearSelection();
                 this.app.loadFiles(this.app.currentPath);
             } else {
                 this.app.ui.showToast('Error', result.message, 'error');

@@ -481,27 +481,26 @@ export class UIManager {
         toast.className = `toast toast-${type}`;
 
         toast.innerHTML = `
-            <div class="toast-header">
-                <strong class="mr-auto">${title}</strong>
-                <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button>
+            <div class="toast-content">
+                <div class="toast-title">${title}</div>
+                <div class="toast-message">${message}</div>
             </div>
-            <div class="toast-body">
-                ${message}
-            </div>
+            <button class="toast-close">&times;</button>
         `;
 
         toastContainer.appendChild(toast);
 
-        // Super basic toast removal
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            setTimeout(() => toast.remove(), 300);
-        }, 5000);
+        const closeButton = toast.querySelector('.toast-close');
 
-        toast.querySelector('.close').addEventListener('click', () => {
+        const removeToast = () => {
             toast.style.opacity = '0';
+            // Add a transition for the fade-out effect
+            toast.style.transition = 'opacity 0.3s ease';
             setTimeout(() => toast.remove(), 300);
-        });
+        };
+
+        closeButton.addEventListener('click', removeToast);
+        setTimeout(removeToast, 5000);
     }
 
     showLoading() {

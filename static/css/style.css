@@ -93,7 +93,7 @@ body {
   overflow: hidden;
 }
 
-.storage-progress-inner {
+#storage-progress-inner {
   height: 100%;
   background-color: var(--accent-primary);
   border-radius: 3px;
@@ -1015,16 +1015,20 @@ body {
   animation: slideIn 0.3s ease;
 }
 
-.toast.success {
+.toast.toast-success {
   border-left: 4px solid var(--success);
 }
 
-.toast.error {
+.toast.toast-error {
   border-left: 4px solid var(--error);
 }
 
-.toast.warning {
+.toast.toast-warning {
   border-left: 4px solid var(--warning);
+}
+
+.toast.toast-info {
+  border-left: 4px solid var(--accent-secondary);
 }
 
 .toast-content {

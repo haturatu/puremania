@@ -41,6 +41,7 @@ class FileManagerApp {
 
     init() {
         this.events.bindEvents();
+        this.searchHandler.init();
         this.loadFiles(this.currentPath);
         this.updateStorageInfo();
 
@@ -55,11 +56,10 @@ class FileManagerApp {
     }
 
     // Wrapper for API method to allow central control
-    loadFiles(path) {
-        this.api.loadFiles(path).then(() => {
-            // After files are loaded and UI is rendered, bind events to the new elements
-            this.uploader.bindUploadEvents();
-        });
+    async loadFiles(path) {
+        await this.api.loadFiles(path);
+        // After files are loaded and UI is rendered, bind events to the new elements
+        this.uploader.bindUploadEvents();
     }
 
     navigateToPath(path) {
@@ -119,7 +119,7 @@ class FileManagerApp {
                 const usagePercentage = (info.used / info.total) * 100;
                 document.getElementById('storage-used').textContent = this.ui.formatFileSize(info.used);
                 document.getElementById('storage-total').textContent = this.ui.formatFileSize(info.total);
-                document.getElementById('storage-bar-inner').style.width = `${usagePercentage}%`;
+                document.getElementById('storage-progress-inner').style.width = `${usagePercentage}%`;
             } else {
                 console.error('Could not update storage info', result.message);
             }
