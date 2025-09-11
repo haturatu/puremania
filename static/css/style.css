@@ -2112,12 +2112,6 @@ body {
     color: var(--text-primary);
 }
 
-.view-toggle-btn.active {
-    background: var(--accent-primary);
-    color: var(--text-primary);
-    border-color: var(--accent-primary);
-}
-
 /* ダークモードでの調整 */
 @media (prefers-color-scheme: dark) {
     .cd-completion-dropdown {
@@ -2197,13 +2191,3 @@ body {
     outline-offset: -2px;
 }
 
-/* 高コントラスト対応 */
-@media (prefers-contrast: high) {
-    .completion-item:hover {
-        border: 2px solid var(--accent-primary);
-    }
-
-    .cd-completion-dropdown {
-        border-width: 2px;
-    }
-}
