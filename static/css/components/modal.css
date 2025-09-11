@@ -1,0 +1,90 @@
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  max-width: 90%;
+  max-height: 90%;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    background-color: var(--bg-primary, #222);
+    color: white;
+}
+
+.modal-title {
+    font-size: 1rem;
+    font-weight: bold;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 8px; /* ボタン間のスペース */
+}
+
+.modal-actions > button {
+    background-color: rgba(0,0,0,0.6);
+    border: none;
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.modal-actions > button:hover {
+    background-color: rgba(255,255,255,0.2);
+    transform: scale(1.1);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+}
+
+.modal-close:hover {
+  color: var(--accent-primary);
+}
+
+.modal-body {
+  padding: 10px;
+  overflow: auto;
+}
+
+.modal-footer {
+  padding: 15px 20px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

@@ -1,0 +1,206 @@
+/* Media Player Styles */
+.media-player {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  padding: 15px 20px;
+  z-index: 900;
+  display: flex;
+  /* align-items: center; */
+  justify-content: space-between;
+}
+
+.media-info {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  max-width: 30%;
+}
+
+.media-thumbnail {
+  width: 56px;
+  height: 56px;
+  border-radius: 4px;
+  margin-right: 15px;
+  object-fit: cover;
+  background-color: var(--bg-tertiary);
+}
+
+.media-details {
+  overflow: hidden;
+}
+
+.media-title {
+  font-size: 0.9rem;
+  margin-bottom: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-artist {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.media-controls {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 40%;
+}
+
+.control-buttons {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.control-btn {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 5px;
+  margin: 0 5px;
+}
+
+.control-btn:hover {
+  color: var(--accent-primary);
+}
+
+.control-btn.play-pause {
+  font-size: 1.8rem;
+}
+
+.progress-container {
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.progress-time {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  min-width: 40px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 4px;
+  background-color: var(--bg-tertiary);
+  border-radius: 2px;
+  margin: 0 10px;
+  cursor: pointer;
+  position: relative;
+}
+
+.progress-filled {
+  height: 100%;
+  background-color: var(--accent-primary);
+  border-radius: 2px;
+  width: 0%;
+}
+
+.progress-bar:hover .progress-handle {
+  opacity: 1;
+}
+
+.media-volume {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: 30%;
+}
+
+.volume-btn {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 5px;
+  margin-right: 10px;
+}
+
+.volume-btn:hover {
+  color: var(--accent-primary);
+}
+
+.volume-slider {
+  width: 80px;
+  height: 4px;
+  background-color: var(--bg-tertiary);
+  border-radius: 2px;
+  position: relative;
+  cursor: pointer;
+}
+
+.volume-filled {
+  height: 100%;
+  background-color: var(--accent-primary);
+  border-radius: 2px;
+  width: 70%;
+}
+
+.volume-slider:hover .volume-handle {
+  opacity: 1;
+}
+
+/* メディアプレイヤーの最小化 */
+.media-player.minimized {
+  height: 60px;
+}
+
+.media-player.minimized .media-info,
+.media-player.minimized .media-controls,
+.media-player.minimized .media-volume {
+  display: none;
+}
+
+.media-player.minimized .media-minimized-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.media-minimized-info {
+  display: none;
+}
+
+.media-player.minimized .media-minimized-info {
+  display: flex;
+}
+
+.minimized-title {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+
+.minimized-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.minimize-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+
+.minimize-btn:hover {
+  color: var(--accent-primary);
+}

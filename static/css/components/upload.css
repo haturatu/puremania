@@ -1,0 +1,48 @@
+/* アップロードエリア */
+.upload-area {
+  border: 2px dashed var(--border-color);
+  border-radius: 4px;
+  padding: 30px;
+  text-align: center;
+  margin-bottom: 20px;
+  cursor: pointer;
+  transition: border-color 0.3s ease;
+}
+
+.upload-area:hover {
+  border-color: var(--accent-primary);
+}
+
+.upload-area.dragover {
+  border-color: var(--accent-primary);
+  background-color: rgba(0, 255, 65, 0.1);
+}
+
+.upload-text {
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.upload-input {
+  display: none;
+}
+
+/* アップロードエリアの改善 */
+.upload-area.dragover {
+    border-color: var(--accent-primary);
+    background-color: rgba(0, 255, 65, 0.1);
+}
+
+.upload-area.uploading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/* アップロードボタンエリアのスタイル */
+.upload-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+}

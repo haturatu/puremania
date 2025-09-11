@@ -1,0 +1,293 @@
+.search-container {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-color);
+  position: relative; /* For cd completion dropdown */
+}
+
+.search-container:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.2);
+}
+
+.search-input {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  padding: 5px;
+  width: 20rem;
+  outline: none;
+  font-family: 'Courier New', monospace;
+}
+
+.search-options {
+  display: flex;
+  align-items: center;
+  margin-left: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.search-options:hover {
+  color: var(--accent-primary);
+}
+
+/* Search Results Header */
+.search-results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 16px;
+    border-radius: 6px;
+}
+
+.search-results-count {
+    flex: 1 1 300px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.search-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 1 1 50%;
+}
+
+/* Back to Files Button */
+.search-back-btn {
+    padding: 6px 12px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: 'Courier New', monospace;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.search-back-btn:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    background-color: rgba(0, 255, 65, 0.1);
+}
+
+/* Pagination Container */
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Prev/Next Buttons */
+.pagination-btn {
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.pagination-btn:hover:not([disabled]) {
+    background: var(--accent-primary);
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+}
+
+.pagination-btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Numbered Page Buttons Container */
+.page-numbers {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+/* Individual Numbered Page Button */
+.page-btn {
+    padding: 6px 10px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    min-width: 32px;
+    text-align: center;
+    transition: all 0.15s ease;
+}
+
+.page-btn:hover {
+    background: var(--accent-secondary);
+    border-color: var(--accent-secondary);
+}
+
+.page-btn.active {
+    background: var(--accent-primary);
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+    font-weight: 500;
+}
+
+/* Ellipsis (...) */
+.page-ellipsis {
+    color: var(--text-secondary);
+    padding: 0 4px;
+    font-size: 13px;
+}
+
+/* Footer Pagination */
+.search-pagination-footer {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: center;
+}
+
+/* Info text (Showing 1-100 of 123) */
+.pagination-info {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* No Results Message */
+.no-search-results {
+    text-align: center;
+    padding: 48px 16px;
+    color: var(--text-secondary);
+}
+
+.no-search-results-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.no-search-results-text {
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+
+.no-search-results-subtext {
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+/* CD command completion dropdown */
+.cd-completion-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 2px;
+    animation: slideDown 0.15s ease-out;
+}
+
+.completion-list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+}
+
+.completion-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 4px;
+    margin: 0 4px;
+    transition: all 0.15s ease;
+}
+
+.completion-item:hover,
+.completion-item.selected {
+    background-color: var(--accent-primary);
+    color: var(--text-primary);
+}
+
+.completion-item.selected {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: -2px;
+}
+
+.completion-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.completion-name {
+    font-weight: 500;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.completion-path {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+}
+
+.cd-completion-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.cd-completion-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.cd-completion-dropdown::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.cd-completion-dropdown::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

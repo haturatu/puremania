@@ -1,0 +1,106 @@
+/* Button Styles */
+.btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.3s ease;
+}
+
+.btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.btn-primary {
+  background-color: var(--accent-primary);
+  color: var(--bg-primary);
+  border-color: var(--accent-primary);
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-secondary);
+  border-color: var(--accent-secondary);
+  color: var(--bg-primary);
+}
+
+.btn-danger {
+  background-color: var(--error);
+  color: white;
+  border-color: var(--error);
+}
+
+.btn-danger:hover {
+  background-color: #ff6666;
+  border-color: #ff6666;
+}
+
+/* ツールバー */
+.toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 10px;
+  background-color: var(--bg-secondary);
+  border-radius: 4px;
+}
+
+.toolbar-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  transition: all 0.3s ease;
+}
+
+.toolbar-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+/* ファイル選択ボタンの基本スタイル */
+.btn-select-files,
+.btn-select-folders {
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ホバー時のスタイル */
+.btn-select-files:hover,
+.btn-select-folders:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    background-color: rgba(0, 255, 65, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* アクティブ時のスタイル */
+.btn-select-files:active,
+.btn-select-folders:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* フォーカス時のスタイル */
+.btn-select-files:focus,
+.btn-select-folders:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(0, 255, 65, 0.3);
+}
