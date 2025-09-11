@@ -308,9 +308,6 @@ class SearchHandler {
                 
                 this.exitSearchMode();
                 
-                if (this.fileManager && this.fileManager.showToast) {
-                    this.fileManager.showToast('cd', `Changed directory to: ${path}`, 'success');
-                }
             } else {
                 throw new Error(result.message || 'Directory not found');
             }
