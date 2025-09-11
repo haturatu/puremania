@@ -1,4 +1,4 @@
-class SearchHandler {
+export class SearchHandler {
     constructor(fileManager) {
         this.fileManager = fileManager;
         this.isSearchOpen = false;

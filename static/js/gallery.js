@@ -1,4 +1,4 @@
-class ImageViewer {
+export class ImageViewer {
     constructor() {
         this.currentImageIndex = 0;
         this.images = [];

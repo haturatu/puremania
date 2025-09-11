@@ -1,4 +1,4 @@
-class ProgressManager {
+export class ProgressManager {
     constructor() {
         this.progressOverlay = null;
         this.currentUpload = null;
