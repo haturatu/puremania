@@ -653,7 +653,7 @@ body {
 }
 
 .modal-body {
-  padding: 20px;
+  padding: 10px;
   overflow: auto;
 }
 
@@ -1088,7 +1088,7 @@ body {
 .editor-textarea {
   width: 100%;
   min-height: 400px;
-  min-width: 800px;
+  min-width: 900px;
   padding: 15px;
   background-color: var(--bg-primary);
   color: var(--text-primary);
@@ -1494,12 +1494,13 @@ body {
 @media (max-width: 968px) {
   .editor-modal .modal {
     max-width: 95%;
-    max-height: 85%;
+    max-height: 95%;
   }
 
   .editor-textarea {
-    min-height: 300px;
-    min-width: 800px;
+    min-height: 40rem;
+    min-width: 20rem;
+    font-size: 10px;
   }
 
   .toolbar {
