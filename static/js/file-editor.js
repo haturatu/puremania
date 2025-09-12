@@ -1,6 +1,6 @@
 import { EditorView, lineNumbers, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Compartment } from "@codemirror/state";
 import { autocompletion } from "@codemirror/autocomplete";
 import { oneDark } from '@codemirror/theme-one-dark';
 import { indentWithTab, toggleComment } from "@codemirror/commands";
@@ -76,31 +76,28 @@ export class FileEditor {
         this.app = app;
         this.currentFile = null;
         this.editorView = null;
-        this.init();
-        this.handleEsc = this.handleEsc.bind(this);
+        this.isPC = !/Mobi|Android/i.test(navigator.userAgent);
+        this.vimCompartment = new Compartment();
 
-        // Define custom VIM commands
-        const isPC = !/Mobi|Android/i.test(navigator.userAgent);
-        if (isPC) {
+        // Initialize Vim mode state from localStorage
+        this.vimModeEnabled = this.isPC ? JSON.parse(localStorage.getItem('vimModeEnabled')) ?? true : false;
+
+        this.init();
+
+        // Define custom VIM commands if on PC
+        if (this.isPC) {
             this.defineVimCommands();
         }
     }
 
     defineVimCommands() {
-        Vim.defineEx("w", "w", () => {
-            this.save();
-        });
-        Vim.defineEx("q", "q", () => {
-            this.close();
-        });
+        Vim.defineEx("w", "w", () => { this.save(); });
+        Vim.defineEx("q", "q", () => { this.close(); });
         Vim.defineEx("wq", "wq", async () => {
             await this.save();
             this.close();
         });
-        Vim.defineEx("q!", "q!", () => {
-            this.close();
-        });
-        // ZZ is mapped to :wq by default in codemirror-vim
+        Vim.defineEx("q!", "q!", () => { this.close(); });
     }
 
     init() {
@@ -111,6 +108,13 @@ export class FileEditor {
         const editor = document.createElement('div');
         editor.className = 'modal-overlay editor-modal';
         editor.style.display = 'none';
+
+        const vimToggleHTML = this.isPC ? `
+            <div class="vim-toggle">
+                <label for="vim-mode-toggle" class="vim-toggle-label">Vim</label>
+                <input type="checkbox" id="vim-mode-toggle" class="vim-toggle-checkbox">
+            </div>
+        ` : '';
 
         editor.innerHTML = `
             <div class="modal">
@@ -130,6 +134,7 @@ export class FileEditor {
                         <span id="status-selection"></span>
                     </div>
                     <div class="status-right">
+                        ${vimToggleHTML}
                         <span id="status-lines">1 Lines</span>
                         <span id="status-lang">Plain Text</span>
                     </div>
@@ -147,6 +152,9 @@ export class FileEditor {
             lines: editor.querySelector('#status-lines'),
             lang: editor.querySelector('#status-lang'),
         };
+        if (this.isPC) {
+            this.vimToggle = editor.querySelector('#vim-mode-toggle');
+        }
 
         this.bindEvents();
     }
@@ -154,32 +162,32 @@ export class FileEditor {
     bindEvents() {
         this.editorElement.querySelector('#editor-cancel').addEventListener('click', () => this.close());
         this.editorElement.querySelector('#editor-save').addEventListener('click', () => this.save());
-    }
-    
-    handleEsc(e) {
-        if (e.key === 'Escape') {
-            this.close();
+        if (this.isPC) {
+            this.vimToggle.addEventListener('change', () => this.toggleVimMode());
         }
     }
 
-    open(filePath, content) {
-        this.currentFile = filePath;
-        this.filenameElement.textContent = filePath.split('/').pop();
+    toggleVimMode() {
+        if (!this.isPC || !this.editorView) return;
 
-        if (this.editorView) {
-            this.editorView.destroy();
-        }
+        this.vimModeEnabled = !this.vimModeEnabled;
+        localStorage.setItem('vimModeEnabled', JSON.stringify(this.vimModeEnabled));
+        this.vimToggle.checked = this.vimModeEnabled;
 
-        const langExtension = getLanguageExtension(filePath);
-        const langName = getLanguageName(filePath);
+        this.editorView.dispatch({
+            effects: this.vimCompartment.reconfigure(this.vimModeEnabled ? vim() : [])
+        });
+        this.editorView.focus();
+    }
 
+    getInitialExtensions(langExtension) {
         const updateListener = EditorView.updateListener.of((update) => {
             if (update.docChanged || update.selectionSet) {
                 this.updateStatusBar();
             }
         });
 
-        const extensions = [
+        return [
             basicSetup,
             lineNumbers(),
             langExtension,
@@ -196,18 +204,32 @@ export class FileEditor {
                 { key: "Mod-s", run: () => { this.save(); return true; } },
                 { key: "Ctrl-/", run: toggleComment },
                 { key: "Mod-/", run: toggleComment },
+                { key: "Mod-Alt-v", run: () => { this.toggleVimMode(); return true; } },
                 indentWithTab,
-            ])
+            ]),
+            this.vimCompartment.of(this.vimModeEnabled ? vim() : [])
         ];
+    }
 
-        const isPC = !/Mobi|Android/i.test(navigator.userAgent);
-        if (isPC) {
-            extensions.unshift(vim());
+    open(filePath, content) {
+        this.currentFile = filePath;
+        this.filenameElement.textContent = filePath.split('/').pop();
+
+        if (this.editorView) {
+            this.editorView.destroy();
+        }
+
+        const langExtension = getLanguageExtension(filePath);
+        const langName = getLanguageName(filePath);
+
+        if (this.isPC) {
+            this.vimToggle.checked = this.vimModeEnabled;
+            this.vimToggle.parentElement.style.display = 'flex';
         }
 
         const state = EditorState.create({
             doc: content,
-            extensions: extensions
+            extensions: this.getInitialExtensions(langExtension)
         });
 
         this.editorView = new EditorView({
@@ -218,8 +240,7 @@ export class FileEditor {
         this.editorElement.style.display = 'flex';
         this.editorView.focus();
         document.body.style.overflow = 'hidden';
-        document.addEventListener('keydown', this.handleEsc);
-        
+
         this.statusBar.lang.textContent = langName;
         this.updateStatusBar();
     }
@@ -230,7 +251,7 @@ export class FileEditor {
         const state = this.editorView.state;
         const cursor = state.selection.main.head;
         const line = state.doc.lineAt(cursor);
-        
+
         this.statusBar.cursor.textContent = `Ln ${line.number}, Col ${cursor - line.from + 1}`;
         this.statusBar.lines.textContent = `${state.doc.lines} Lines`;
 
@@ -244,6 +265,9 @@ export class FileEditor {
     }
 
     close() {
+        if (this.editorElement.style.display === 'none') {
+            return;
+        }
         this.editorElement.style.display = 'none';
         this.currentFile = null;
         if (this.editorView) {
@@ -251,7 +275,6 @@ export class FileEditor {
             this.editorView = null;
         }
         document.body.style.overflow = '';
-        document.removeEventListener('keydown', this.handleEsc);
     }
 
     async save() {
