@@ -1,53 +1,77 @@
-/* エディタモーダル */
-.editor-modal .modal {
-  max-width: 80%;
-  max-height: 80%;
+/* Editor Modal */
+.editor-modal {
+    /* Uses .modal-overlay styles for backdrop */
 }
 
-.editor-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 15px;
+.editor-modal .modal {
+    width: 90vw;
+    height: 90vh;
+    max-width: 1600px; /* Add a max-width for very large screens */
+    max-height: 95vh;
+    padding: 0; /* Remove padding to have content flush to edges */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Prevent modal itself from scrolling */
+}
+
+/* Editor Header */
+.editor-modal .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0; /* Prevent header from shrinking */
 }
 
 .editor-filename {
-  font-family: 'Courier New', monospace;
-  font-size: 1.1rem;
-  color: var(--accent-primary);
+    font-family: 'SF Mono', 'Courier New', monospace;
+    font-size: 1rem;
+    color: var(--text-primary);
+    font-weight: 500;
 }
 
 .editor-actions {
-  display: flex;
-  gap: 10px;
+    display: flex;
+    gap: 15px;
+}
+
+/* Editor Body */
+.editor-modal .modal-body {
+    padding: 0;
+    flex-grow: 1; /* Allow body to fill available space */
+    overflow: hidden; /* CM scroller will handle scrolling */
 }
 
 .editor-container {
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 15px;
+    height: 100%;
+    width: 100%;
 }
 
-.editor-textarea {
-  width: 100%;
-  min-height: 400px;
-  min-width: 900px;
-  padding: 15px;
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  border: none;
-  resize: vertical;
-  font-family: 'Courier New', monospace;
-  line-height: 1.6;
+/* This is set in JS, but good to have in CSS for clarity */
+.cm-editor {
+    height: 100%;
 }
 
-.editor-textarea:focus {
-  outline: none;
-  border-color: var(--accent-primary);
+/* Status Bar */
+.editor-status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 20px;
+    background-color: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    font-family: 'SF Mono', 'Courier New', monospace;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    flex-shrink: 0; /* Prevent footer from shrinking */
 }
 
-/* Editor Enhancements */
-.editor-modal .modal {
-  max-width: 90vw;
+.status-left, .status-right {
+    display: flex;
+    gap: 15px;
+}
+
+#status-selection {
+    color: var(--text-muted);
 }
