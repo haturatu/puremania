@@ -264,6 +264,12 @@ func (p *WorkerPool) Close() {
 	close(p.resultChan)
 }
 
+// SpecificDirInfo は、フロントエンドに渡すための特定のディレクトリ情報です。
+type SpecificDirInfo struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
 type Handler struct {
 	config     *config.Config
 	cache      *TTLCache
@@ -320,25 +326,20 @@ func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
 		return h.config.StorageDir, nil
 	}
 
-	// 特別なディレクトリのマッピング
-	specialDirs := map[string]string{
-		"/documents": filepath.Join(h.config.StorageDir, "Documents"),
-		"/images":    filepath.Join(h.config.StorageDir, "Images"),
-		"/music":     filepath.Join(h.config.StorageDir, "Music"),
-		"/videos":    filepath.Join(h.config.StorageDir, "Videos"),
-		"/downloads": filepath.Join(h.config.StorageDir, "Downloads"),
-	}
+	// SpecificDirs のチェック
+	for _, specificDir := range h.config.SpecificDirs {
+		dirName := filepath.Base(specificDir)
+		// Note: 仮想パスはURLなので、常にスラッシュを使うべき
+		virtualDirPrefix := "/" + dirName
 
-	// 特別なディレクトリのチェック
-	if physicalPath, exists := specialDirs[virtualPath]; exists {
-		return physicalPath, nil
-	}
-
-	// 特別なディレクトリ内のファイル/サブディレクトリ
-	for specialPath, physicalBase := range specialDirs {
-		if strings.HasPrefix(virtualPath, specialPath+"/") {
-			relPath := strings.TrimPrefix(virtualPath, specialPath+"/")
-			return filepath.Join(physicalBase, relPath), nil
+		if virtualPath == virtualDirPrefix {
+			return specificDir, nil
+		}
+		if strings.HasPrefix(virtualPath, virtualDirPrefix+"/") {
+			// TrimPrefixは /dirName/ を取り除く
+			relPath := strings.TrimPrefix(virtualPath, virtualDirPrefix+"/")
+			// filepath.JoinはOS依存のセパレータを使うので正しい
+			return filepath.Join(specificDir, relPath), nil
 		}
 	}
 
@@ -407,30 +408,7 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getFileList(path string) ([]models.FileInfo, error) {
 	var fileInfos []models.FileInfo
 
-	// 特別なディレクトリのマッピング
-	specialDirs := map[string]string{
-		"/documents": "Documents",
-		"/images":    "Images",
-		"/music":     "Music",
-		"/videos":    "Videos",
-		"/downloads": "Downloads",
-	}
-
-	// 特別なディレクトリへのアクセスを処理
-	if dirName, exists := specialDirs[path]; exists {
-		fullPath := filepath.Join(h.config.StorageDir, dirName)
-		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-			return nil, err
-		}
-		if entries, err := os.ReadDir(fullPath); err == nil {
-			fileInfos = h.processDirectoryEntries(entries, fullPath)
-			return fileInfos, nil
-		} else {
-			return nil, err
-		}
-	}
-
-	// 通常のパス処理
+	// 通常のパス処理 (convertToPhysicalPathがすべてを処理する)
 	fullPath, err := h.convertToPhysicalPath(path)
 	if err != nil {
 		return nil, err
@@ -1615,6 +1593,24 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.respondSuccess(w, status)
+}
+
+// GetSpecificDirs は、設定された特定のディレクトリのリストを返します。
+func (h *Handler) GetSpecificDirs(w http.ResponseWriter, r *http.Request) {
+	dirs := h.config.SpecificDirs
+	dirInfos := make([]SpecificDirInfo, 0, len(dirs))
+
+	for _, dirPath := range dirs {
+		// フォルダが存在するかどうかを確認
+		if info, err := os.Stat(dirPath); err == nil && info.IsDir() {
+			dirInfos = append(dirInfos, SpecificDirInfo{
+				Name: filepath.Base(dirPath),
+				Path: "/" + filepath.Base(dirPath), // フロントには仮想パスを渡す
+			})
+		}
+	}
+
+	h.respondSuccess(w, dirInfos)
 }
 
 func (h *Handler) respondSuccess(w http.ResponseWriter, data interface{}) {

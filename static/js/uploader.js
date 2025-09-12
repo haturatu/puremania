@@ -212,7 +212,7 @@ export class Uploader {
     
             this.showUploadCompleteDialog(finalResult).then(() => {
                 this.app.progressManager.hide();
-                this.app.loadFiles(this.app.currentPath);
+                this.app.loadFiles(this.app.router.getCurrentPath());
             });
     
         } catch (error) {
@@ -236,7 +236,7 @@ export class Uploader {
                 const uploadPromises = fileChunk.map((file, fileIndex) => {
                     return new Promise((fileResolve) => {
                         const formData = new FormData();
-                        formData.append('path', this.app.currentPath);
+                        formData.append('path', this.app.router.getCurrentPath());
                         formData.append('file', file);
                         
                         const relativePath = file.webkitRelativePath || file.name;

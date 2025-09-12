@@ -44,6 +44,7 @@ func main() {
 	api.HandleFunc("/config", handler.GetConfig).Methods("GET")
 	api.HandleFunc("/search", handler.SearchFiles).Methods("POST")
 	api.HandleFunc("/storage-info", handler.GetStorageInfo).Methods("GET")
+	api.HandleFunc("/specific-dirs", handler.GetSpecificDirs).Methods("GET")
 
 	// 静的ファイルのサービス
 	    staticFileHandler := http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

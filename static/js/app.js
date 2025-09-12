@@ -38,10 +38,14 @@ class FileManagerApp {
         this.init();
     }
 
-    init() {
+    async init() {
         this.events.bindEvents();
         this.searchHandler.init();
         this.updateStorageInfo();
+
+        // Load and display specific dirs
+        const specificDirs = await this.api.getSpecificDirs();
+        this.ui.updateSpecificDirs(specificDirs);
 
         this.router.onChange((path) => {
             this.navigateToPath(path);
