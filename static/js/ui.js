@@ -3,6 +3,7 @@ export class UIManager {
         this.app = app;
         this.viewMode = 'grid';
         this.previousPath = null;
+        this.currentFiles = [];
         this.sortState = {
             field: 'type',
             direction: 'desc'
@@ -10,6 +11,7 @@ export class UIManager {
     }
 
     displayFiles(files) {
+        this.currentFiles = files;
         const container = document.querySelector('.file-browser');
         if (!container) return;
 
@@ -175,7 +177,7 @@ export class UIManager {
             this.sortState.field = field;
             this.sortState.direction = 'asc';
         }
-        this.app.loadFiles(this.app.router.getCurrentPath());
+        this.displayFiles(this.currentFiles);
     }
 
     sortFiles(files) {
@@ -484,7 +486,7 @@ export class UIManager {
 
     setViewMode(mode) {
         this.viewMode = mode;
-        this.app.loadFiles(this.app.router.getCurrentPath());
+        this.displayFiles(this.currentFiles);
     }
 
     showToast(title, message, type = 'info') {
