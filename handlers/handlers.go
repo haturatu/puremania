@@ -504,6 +504,22 @@ func (h *Handler) getFileList(path string) ([]models.FileInfo, error) {
 	if entries, err := os.ReadDir(fullPath); err == nil {
 		directoryFileInfos := h.processDirectoryEntries(entries, fullPath)
 		fileInfos = append(fileInfos, directoryFileInfos...)
+
+		// 音楽ファイルの数をカウント
+		musicFileCount := 0
+		for _, fileInfo := range fileInfos {
+			if strings.HasPrefix(fileInfo.MimeType, "audio/") {
+				musicFileCount++
+			}
+		}
+
+		// 音楽ファイルが10以上の場合、名前でソート
+		if musicFileCount >= 10 {
+			sort.Slice(fileInfos, func(i, j int) bool {
+				return fileInfos[i].Name < fileInfos[j].Name
+			})
+		}
+
 		return fileInfos, nil
 	} else {
 		return nil, err
