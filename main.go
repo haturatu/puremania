@@ -4,28 +4,90 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"puremania/config"
+	"os"
+	"path/filepath"
 	"puremania/handlers"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 )
 
-func main() {
-	
+// Config はアプリケーションの設定を保持します。
+type Config struct {
+	StorageDir      string
+	MountDirs       []string
+	MaxFileSize     int64
+	Port            int
+	ZipTimeout      int
+	MaxZipSize      int64
+	SpecificDirs    []string
+}
 
+func (c *Config) GetStorageDir() string {
+	return c.StorageDir
+}
+
+func (c *Config) GetMountDirs() []string {
+	return c.MountDirs
+}
+
+func (c *Config) GetMaxFileSize() int64 {
+	return c.MaxFileSize
+}
+
+func (c *Config) GetSpecificDirs() []string {
+	return c.SpecificDirs
+}
+
+// Load は.envファイルから設定を読み込みます。
+func LoadConfig() *Config {
+	_ = godotenv.Load() // .envファイルが見つからなくてもエラーにしない
+
+	// デフォルト値
+	config := &Config{
+		StorageDir:      getEnv("STORAGE_DIR", "/home/"+os.Getenv("USER")),
+		MountDirs:       getEnvAsStringSlice("MOUNT_DIRS", []string{}),
+		MaxFileSize:     getEnvAsInt64("MAX_FILE_SIZE_MB", 10000),
+		Port:            getEnvAsInt("PORT", 8844),
+		ZipTimeout:      getEnvAsInt("ZIP_TIMEOUT", 300),
+		MaxZipSize:      getEnvAsInt64("MAX_ZIP_SIZE", 1024),
+		SpecificDirs:    getEnvAsStringSlice("SPECIFIC_DIRS", []string{}),
+	}
+
+	// SpecificDirsが空の場合のデフォルト値設定
+	if len(config.SpecificDirs) == 0 {
+		home := os.Getenv("HOME")
+		defaultDirs := []string{"Documents", "Downloads", "Pictures", "Videos", "Music"}
+		for _, dir := range defaultDirs {
+			fullPath := filepath.Join(home, dir)
+			if info, err := os.Stat(fullPath); err == nil && info.IsDir() {
+				config.SpecificDirs = append(config.SpecificDirs, fullPath)
+			}
+		}
+	}
+
+	return config
+}
+
+func main() {
 	// 設定を読み込み
-	cfg := config.Load()
+	cfg := LoadConfig()
 
 	fmt.Printf("Server starting on port %d\n", cfg.Port)
 	fmt.Printf("Storage directory: %s\n", cfg.StorageDir)
 	if len(cfg.MountDirs) > 0 {
 		fmt.Printf("Mount directories: %v\n", cfg.MountDirs)
 	}
+	if len(cfg.SpecificDirs) > 0 {
+		fmt.Printf("Specific directories: %v\n", cfg.SpecificDirs)
+	}
 
 	// ハンドラーを初期化
 	handler := handlers.NewHandler(cfg)
+
 
 	r := mux.NewRouter()
 
@@ -45,6 +107,7 @@ func main() {
 	api.HandleFunc("/search", handler.SearchFiles).Methods("POST")
 	api.HandleFunc("/storage-info", handler.GetStorageInfo).Methods("GET")
 	api.HandleFunc("/specific-dirs", handler.GetSpecificDirs).Methods("GET")
+	api.HandleFunc("/health", handler.HealthCheck).Methods("GET")
 
 	// 静的ファイルのサービス
 	    staticFileHandler := http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -100,4 +163,43 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// getEnv は環境変数を読み込み、見つからない場合はデフォルト値を返します。
+func getEnv(key, fallback string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return fallback
+}
+
+// getEnvAsInt は環境変数を整数として読み込みます。
+func getEnvAsInt(key string, fallback int) int {
+	if value, exists := os.LookupEnv(key); exists {
+		if i, err := strconv.Atoi(value); err == nil {
+			return i
+		}
+	}
+	return fallback
+}
+
+// getEnvAsInt64 は環境変数をint64として読み込みます。
+func getEnvAsInt64(key string, fallback int64) int64 {
+	if value, exists := os.LookupEnv(key); exists {
+		if i, err := strconv.ParseInt(value, 10, 64); err == nil {
+			return i
+		}
+	}
+	return fallback
+}
+
+// getEnvAsStringSlice はカンマ区切りの環境変数を文字列スライスとして読み込みます。
+func getEnvAsStringSlice(key string, fallback []string) []string {
+	if value, exists := os.LookupEnv(key); exists {
+		if value == "" {
+			return []string{}
+		}
+		return strings.Split(value, ",")
+	}
+	return fallback
 }
