@@ -23,6 +23,29 @@
   font-family: 'Courier New', monospace;
 }
 
+#search-scope {
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-left: 10px;
+}
+
+#search-scope:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+#search-scope:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.2);
+}
+
 .search-options {
   display: flex;
   align-items: center;
