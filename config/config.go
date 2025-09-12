@@ -12,6 +12,7 @@ import (
 type Config struct {
 	StorageDir   string   `json:"storage_dir"`
 	MountDirs    []string `json:"mount_dirs"`
+	SpecificDirs []string `json:"specific_dirs"`
 	Port         int      `json:"port"`
 	MaxFileSize  int64    `json:"max_file_size"` // MB
 	ZipTimeout   int      `json:"zip_timeout"`   // 秒
@@ -39,6 +40,30 @@ func Load() *Config {
 		// 前後の空白を削除
 		for i, dir := range config.MountDirs {
 			config.MountDirs[i] = strings.TrimSpace(dir)
+		}
+	}
+
+	// 特定のディレクトリの設定（カンマ区切り）
+	specificDirsStr := getEnv("SPECIFIC_DIRS", "")
+	if specificDirsStr != "" {
+		config.SpecificDirs = strings.Split(specificDirsStr, ",")
+		// 前後の空白を削除
+		for i, dir := range config.SpecificDirs {
+			config.SpecificDirs[i] = strings.TrimSpace(dir)
+		}
+	} else {
+		// デフォルトのディレクトリを設定
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Printf("Warning: Could not get user home directory: %v", err)
+			config.SpecificDirs = []string{}
+		} else {
+			defaultDirs := []string{"Documents", "Images", "Music", "Videos", "Downloads"}
+			config.SpecificDirs = make([]string, 0, len(defaultDirs))
+			for _, dir := range defaultDirs {
+				fullPath := homeDir + "/" + dir
+				config.SpecificDirs = append(config.SpecificDirs, fullPath)
+			}
 		}
 	}
 

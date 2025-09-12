@@ -12,7 +12,6 @@ import { Util } from './util.js';
 
 class FileManagerApp {
     constructor() {
-        this.currentPath = '/';
         this.selectedFiles = new Set();
         this.lastSelectedIndex = -1;
 
@@ -39,20 +38,18 @@ class FileManagerApp {
         this.init();
     }
 
-    init() {
+    async init() {
         this.events.bindEvents();
         this.searchHandler.init();
-        this.loadFiles(this.currentPath);
         this.updateStorageInfo();
+
+        // Load and display specific dirs
+        const specificDirs = await this.api.getSpecificDirs();
+        this.ui.updateSpecificDirs(specificDirs);
 
         this.router.onChange((path) => {
             this.navigateToPath(path);
         });
-
-        const initialPath = this.router.getCurrentPath();
-        if (initialPath && initialPath !== '/') {
-            this.navigateToPath(initialPath);
-        }
     }
 
     // Wrapper for API method to allow central control
@@ -63,15 +60,15 @@ class FileManagerApp {
     }
 
     navigateToPath(path) {
-        this.currentPath = path;
         this.loadFiles(path);
         this.clearSelection();
     }
 
     navigateToParent() {
-        if (this.currentPath === '/') return;
-        const parentPath = this.util.getParentPath(this.currentPath);
-        this.navigateToPath(parentPath);
+        const currentPath = this.router.getCurrentPath();
+        if (currentPath === '/') return;
+        const parentPath = this.util.getParentPath(currentPath);
+        this.router.navigate(parentPath);
     }
 
     async editFile(path) {

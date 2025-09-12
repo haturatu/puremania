@@ -11,7 +11,6 @@ export class ApiClient {
             const result = await response.json();
             
             if (result.success) {
-                this.app.currentPath = path;
                 this.app.ui.displayFiles(result.data);
                 this.app.ui.updateBreadcrumb(path);
                 
@@ -56,7 +55,7 @@ export class ApiClient {
             
             if (result.success) {
                 this.app.ui.showToast('Success', 'File renamed successfully', 'success');
-                this.app.loadFiles(this.app.currentPath);
+                this.app.loadFiles(this.app.router.getCurrentPath());
             } else {
                 this.app.ui.showToast('Error', result.message, 'error');
             }
@@ -70,7 +69,8 @@ export class ApiClient {
 
     async moveFile(sourcePath) {
         const fileName = this.app.util.getBaseName(sourcePath);
-        const suggestedPath = this.app.currentPath !== '/' ? this.app.currentPath : this.app.util.getParentPath(sourcePath);
+        const currentPath = this.app.router.getCurrentPath();
+        const suggestedPath = currentPath !== '/' ? currentPath : this.app.util.getParentPath(sourcePath);
         
         const targetDir = prompt(`Move "${fileName}" to directory:`, suggestedPath);
         if (!targetDir) return;
@@ -107,7 +107,7 @@ export class ApiClient {
             
             if (result.success) {
                 this.app.ui.showToast('Success', `Moved "${fileName}" successfully`, 'success');
-                this.app.loadFiles(this.app.currentPath);
+                this.app.loadFiles(this.app.router.getCurrentPath());
             } else {
                 this.app.ui.showToast('Error', result.message, 'error');
             }
@@ -132,7 +132,8 @@ export class ApiClient {
 
     async moveMultipleFiles() {
         const firstFile = Array.from(this.app.selectedFiles)[0];
-        const suggestedPath = this.app.currentPath !== '/' ? this.app.currentPath : this.app.util.getParentPath(firstFile);
+        const currentPath = this.app.router.getCurrentPath();
+        const suggestedPath = currentPath !== '/' ? currentPath : this.app.util.getParentPath(firstFile);
         
         const targetDir = prompt(`Move ${this.app.selectedFiles.size} items to directory:`, suggestedPath);
         if (!targetDir) return;
@@ -189,7 +190,7 @@ export class ApiClient {
                 } else {
                     this.app.ui.showToast('Success', message, 'success');
                 }
-                this.app.loadFiles(this.app.currentPath);
+                this.app.loadFiles(this.app.router.getCurrentPath());
                 this.app.clearSelection();
             } else {
                 this.app.ui.showToast('Error', 'All items failed to move', 'error');
@@ -213,7 +214,7 @@ export class ApiClient {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    path: this.app.currentPath,
+                    path: this.app.router.getCurrentPath(),
                     name: folderName
                 })
             });
@@ -222,7 +223,7 @@ export class ApiClient {
             
             if (result.success) {
                 this.app.ui.showToast('Success', 'Folder created successfully', 'success');
-                this.app.loadFiles(this.app.currentPath);
+                this.app.loadFiles(this.app.router.getCurrentPath());
             } else {
                 this.app.ui.showToast('Error', result.message, 'error');
             }
@@ -243,7 +244,7 @@ export class ApiClient {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    path: this.app.currentPath,
+                    path: this.app.router.getCurrentPath(),
                     name: fileName
                 })
             });
@@ -252,7 +253,7 @@ export class ApiClient {
             
             if (result.success) {
                 this.app.ui.showToast('Success', 'File created successfully', 'success');
-                this.app.loadFiles(this.app.currentPath);
+                this.app.loadFiles(this.app.router.getCurrentPath());
                 
                 if (this.app.util.isEditableFile(result.data.path)) {
                     setTimeout(() => {
@@ -285,7 +286,7 @@ export class ApiClient {
             if (result.success) {
                 this.app.ui.showToast('Success', 'File deleted successfully', 'success');
                 this.app.clearSelection();
-                this.app.loadFiles(this.app.currentPath);
+                this.app.loadFiles(this.app.router.getCurrentPath());
             } else {
                 this.app.ui.showToast('Error', result.message, 'error');
             }
@@ -313,7 +314,7 @@ export class ApiClient {
             if (result.success) {
                 this.app.ui.showToast('Success', 'Files deleted successfully', 'success');
                 this.app.clearSelection();
-                this.app.loadFiles(this.app.currentPath);
+                this.app.loadFiles(this.app.router.getCurrentPath());
             } else {
                 this.app.ui.showToast('Error', result.message, 'error');
             }
@@ -456,6 +457,24 @@ export class ApiClient {
             return null;
         } finally {
             this.app.ui.hideLoading();
+        }
+    }
+
+    async getSpecificDirs() {
+        try {
+            const response = await fetch('/api/specific-dirs');
+            const result = await response.json();
+            
+            if (result.success) {
+                return result.data;
+            } else {
+                this.app.ui.showToast('Error', 'Failed to load specific directories', 'error');
+                return [];
+            }
+        } catch (error) {
+            this.app.ui.showToast('Error', 'Failed to load specific directories', 'error');
+            console.error('Error fetching specific dirs:', error);
+            return [];
         }
     }
 }

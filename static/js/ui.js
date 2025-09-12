@@ -526,4 +526,34 @@ export class UIManager {
     hideLoading() {
         document.getElementById('loading-overlay').style.display = 'none';
     }
+
+    updateSpecificDirs(dirs) {
+        const container = document.getElementById('specific-dirs-container');
+        if (!container) return;
+
+        container.innerHTML = ''; // Clear existing items
+
+        const iconMap = {
+            'Documents': '📄',
+            'Images': '🖼️',
+            'Music': '🎵',
+            'Videos': '🎬',
+            'Downloads': '📥',
+            'default': '📂' // Generic folder icon
+        };
+
+        dirs.forEach(dir => {
+            const navItem = document.createElement('div');
+            navItem.className = 'nav-item';
+            navItem.dataset.path = dir.path; // Use virtual path from API
+
+            const icon = iconMap[dir.name] || iconMap['default'];
+
+            navItem.innerHTML = `
+                <i>${icon}</i>
+                <span>${dir.name}</span>
+            `;
+            container.appendChild(navItem);
+        });
+    }
 }
