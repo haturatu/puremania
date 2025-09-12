@@ -2,6 +2,7 @@ export class UIManager {
     constructor(app) {
         this.app = app;
         this.viewMode = 'grid';
+        this.previousPath = null;
         this.sortState = {
             field: 'type',
             direction: 'desc'
@@ -11,6 +12,9 @@ export class UIManager {
     displayFiles(files) {
         const container = document.querySelector('.file-browser');
         if (!container) return;
+
+        const isNewFolder = this.app.currentPath !== this.previousPath;
+        this.previousPath = this.app.currentPath;
 
         container.innerHTML = '';
 
@@ -27,12 +31,23 @@ export class UIManager {
         const imageCount = sortedFiles.filter(file =>
             file.mime_type && file.mime_type.startsWith('image/')
         ).length;
+        
+        const hasMasonrySupport = imageCount >= 10;
 
-        if (imageCount >= 10 && this.viewMode !== 'list') {
+        // Default to masonry view when entering a new folder with enough images
+        if (isNewFolder && hasMasonrySupport) {
             this.viewMode = 'masonry';
+        }
+
+        // Fallback to grid if masonry is selected but there are no images
+        if (this.viewMode === 'masonry' && imageCount === 0) {
+            this.viewMode = 'grid';
+        }
+
+        if (this.viewMode === 'masonry') {
             this.renderMasonryView(sortedFiles, container);
         } else {
-            this.renderStandardView(sortedFiles, container);
+            this.renderStandardView(sortedFiles, container, hasMasonrySupport);
         }
     }
 
@@ -83,12 +98,13 @@ export class UIManager {
         container.appendChild(noFiles);
     }
 
-    renderStandardView(files, container) {
+    renderStandardView(files, container, hasMasonrySupport = false) {
         const viewToggle = document.createElement('div');
         viewToggle.className = 'view-toggle';
         viewToggle.innerHTML = `
             <button class="view-toggle-btn ${this.viewMode === 'grid' ? 'active' : ''}" data-view="grid">Grid</button>
             <button class="view-toggle-btn ${this.viewMode === 'list' ? 'active' : ''}" data-view="list">List</button>
+            ${hasMasonrySupport ? `<button class="view-toggle-btn" data-view="masonry">Masonry</button>` : ''}
         `;
         container.appendChild(viewToggle);
 
@@ -209,9 +225,9 @@ export class UIManager {
         const viewToggle = document.createElement('div');
         viewToggle.className = 'view-toggle';
         viewToggle.innerHTML = `
-            <button class="view-toggle-btn" data-view="grid">Grid</button>
-            <button class="view-toggle-btn" data-view="list">List</button>
-            <button class="view-toggle-btn active" data-view="masonry">Masonry</button>
+            <button class="view-toggle-btn ${this.viewMode === 'grid' ? 'active' : ''}" data-view="grid">Grid</button>
+            <button class="view-toggle-btn ${this.viewMode === 'list' ? 'active' : ''}" data-view="list">List</button>
+            <button class="view-toggle-btn ${this.viewMode === 'masonry' ? 'active' : ''}" data-view="masonry">Masonry</button>
         `;
         container.appendChild(viewToggle);
 
