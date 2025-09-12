@@ -82,7 +82,6 @@ export class Router {
         console.log('Navigating to:', cleanPath);
         
         this._updateBrowserHistory(cleanPath, 'push');
-        this.currentPath = cleanPath;
         this.handleRouteChange();
     }
 

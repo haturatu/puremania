@@ -295,20 +295,28 @@ export class SearchHandler {
             const result = await response.json();
             
             if (result.success) {
-                // フォルダが存在する場合、移動
-                await this.fileManager.loadFiles(path);
-                
-                // 検索入力をクリア
+                // 検索関連の状態をリセット
+                this.isInSearchMode = false;
+                this.lastSearchResults = null;
+                this.lastSearchTerm = '';
+                this.currentPage = 0;
+
                 const searchInput = document.querySelector('.search-input');
                 if (searchInput) {
                     searchInput.value = '';
                 }
-                
                 this.isCdMode = false;
                 this.hideCompletions();
+
+                if (this.originalViewMode) {
+                    this.fileManager.ui.viewMode = this.originalViewMode;
+                    this.originalViewMode = null;
+                }
                 
-                this.exitSearchMode();
-                
+                // ルーターを使ってナビゲーション
+                this.fileManager.api.directoryEtags.delete(path);
+                this.fileManager.router.navigate(path);
+
             } else {
                 throw new Error(result.message || 'Directory not found');
             }
@@ -936,7 +944,7 @@ export class SearchHandler {
                 }
                 
                 // フォルダに移動
-                this.fileManager.navigateToPath(path);
+                this.fileManager.router.navigate(path);
 
             } else {
                 throw new Error(result.message || 'Directory not found');

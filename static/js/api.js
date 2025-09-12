@@ -2,6 +2,7 @@ export class ApiClient {
     constructor(app) {
         this.app = app;
         this.directoryEtags = new Map(); // ETagを保存するマップ
+        this.directoryCache = new Map(); // ディレクトリの内容をキャッシュするマップ
     }
 
     async loadFiles(path) {
@@ -17,8 +18,15 @@ export class ApiClient {
             const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`, { headers });
 
             if (response.status === 304) {
-                // Content has not changed, do nothing.
                 console.log(`Content for ${path} not modified. Using cache.`);
+                if (this.directoryCache.has(path)) {
+                    const cachedData = this.directoryCache.get(path);
+                    this.app.ui.displayFiles(cachedData);
+                    this.app.ui.updateBreadcrumb(path);
+                    this.app.ui.updateSidebarActiveState(path);
+                    this.app.router.updatePath(path);
+                    this.app.ui.updateToolbar();
+                }
                 return;
             }
 
@@ -39,6 +47,7 @@ export class ApiClient {
             const result = await response.json();
             
             if (result.success) {
+                this.directoryCache.set(path, result.data); // キャッシュに保存
                 this.app.ui.displayFiles(result.data);
                 this.app.ui.updateBreadcrumb(path);
                 this.app.ui.updateSidebarActiveState(path);
