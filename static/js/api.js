@@ -13,6 +13,7 @@ export class ApiClient {
             if (result.success) {
                 this.app.ui.displayFiles(result.data);
                 this.app.ui.updateBreadcrumb(path);
+                this.app.ui.updateSidebarActiveState(path);
                 
                 this.app.router.updatePath(path);
                 this.app.ui.updateToolbar();

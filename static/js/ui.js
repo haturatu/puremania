@@ -557,4 +557,16 @@ export class UIManager {
             container.appendChild(navItem);
         });
     }
+
+    updateSidebarActiveState(path) {
+        const navItems = document.querySelectorAll('.sidebar .nav-item');
+        navItems.forEach(item => {
+            item.classList.remove('active');
+        });
+
+        const activeItem = document.querySelector(`.sidebar .nav-item[data-path="${path}"]`);
+        if (activeItem) {
+            activeItem.classList.add('active');
+        }
+    }
 }
