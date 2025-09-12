@@ -156,12 +156,47 @@ The following environment variables can be configured in the `.env` file:
 | ------------------ | ----------------------------------------------- | -------------------- |  
 | `STORAGE_DIR`      | The main storage directory for your files.      | `/home/$USER`        |  
 | `MOUNT_DIRS`       | Comma-separated list of additional directories. | (empty)              |  
-| `MAX_FILE_SIZE_MB` | Maximum file size for uploads in megabytes.     | `10000
-`                |  
+| `MAX_FILE_SIZE_MB` | Maximum file size for uploads in megabytes.     | `10000`              |  
 | `PORT`             | The port on which the server will run.          | `8844`               |  
 | `ZIP_TIMEOUT`      | Timeout in seconds for ZIP file creation.       | `300`                |  
 | `MAX_ZIP_SIZE`     | Maximum size in MB for files to be zipped.      | `1024`               |  
   
+### Switching Between Remote and Local JavaScript Libraries
+
+For convenience and rapid development, the default configuration loads JavaScript libraries from a remote CDN (`esm.sh`). However, for offline development or to ensure library versions are locked, you can switch to a local, bundled version of all JavaScript code.
+
+This project uses `npm` to manage frontend dependencies and `esbuild` to bundle them.
+
+**Prerequisites for Local Mode:**
+- [Node.js and npm](https://nodejs.org/en/download/) must be installed.
+
+**Switching to Local Mode:**
+
+To use the local, bundled version of the JavaScript libraries, run the following command in the project root:
+
+```bash
+./jsload.sh local
+```
+
+This command will automatically:
+1.  Install all necessary JavaScript packages using `npm install`.
+2.  Create a single, optimized bundle file (`static/dist/app.bundle.js`) using `npm run build`.
+3.  Update `static/index.html` to load this local bundle.
+
+After this, you can run the application offline.
+
+**Switching back to Remote (CDN) Mode:**
+
+To revert to loading libraries from the remote CDN, run:
+
+```bash
+./jsload.sh remote
+```
+
+This command will:
+1.  Update `static/index.html` to use the remote CDN URLs.
+2.  Clean up all local build artifacts, including the `node_modules` directory and the `static/dist` bundle.
+
 ## What We Won't Do
 - Duplicate Upload Check
   - We won't implement this because it can be inconvenient when uploading large numbers of files.
