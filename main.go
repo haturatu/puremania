@@ -46,11 +46,17 @@ func main() {
 	api.HandleFunc("/storage-info", handler.GetStorageInfo).Methods("GET")
 
 	// 静的ファイルのサービス
-	staticFileHandler := http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	    staticFileHandler := http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// --- START DEBUG LOGGING ---
+		// requestedPath := "./static/" + r.URL.Path
+		// log.Printf("Static file requested: %s", r.URL.Path)
+		// log.Printf("Serving from filesystem path: %s", requestedPath)
+		// --- END DEBUG LOGGING ---
+
 		if strings.HasSuffix(r.URL.Path, ".js") {
 			w.Header().Set("Content-Type", "application/javascript")
 		}
-		http.ServeFile(w, r, "./static/"+r.URL.Path)
+		http.ServeFile(w, r, requestedPath)
 	}))
 	r.PathPrefix("/static/").Handler(staticFileHandler)
 
