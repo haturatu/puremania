@@ -13,8 +13,9 @@ export class UIManager {
         const container = document.querySelector('.file-browser');
         if (!container) return;
 
-        const isNewFolder = this.app.currentPath !== this.previousPath;
-        this.previousPath = this.app.currentPath;
+        const currentPath = this.app.router.getCurrentPath();
+        const isNewFolder = currentPath !== this.previousPath;
+        this.previousPath = currentPath;
 
         container.innerHTML = '';
 
@@ -79,7 +80,7 @@ export class UIManager {
                 <button type="button" class="btn-select-folders">📂 Select Folder</button>
             </div>
             <div class="upload-info">
-                <div class="upload-feature">• Files will be uploaded to: <span class="upload-path">${this.app.currentPath}</span></div>
+                <div class="upload-feature">• Files will be uploaded to: <span class="upload-path">${this.app.router.getCurrentPath()}</span></div>
             </div>
         `;
         container.appendChild(uploadArea);
@@ -174,7 +175,7 @@ export class UIManager {
             this.sortState.field = field;
             this.sortState.direction = 'asc';
         }
-        this.app.loadFiles(this.app.currentPath);
+        this.app.loadFiles(this.app.router.getCurrentPath());
     }
 
     sortFiles(files) {
@@ -483,7 +484,7 @@ export class UIManager {
 
     setViewMode(mode) {
         this.viewMode = mode;
-        this.app.loadFiles(this.app.currentPath);
+        this.app.loadFiles(this.app.router.getCurrentPath());
     }
 
     showToast(title, message, type = 'info') {
