@@ -20,7 +20,7 @@ export class EventHandler {
             e.preventDefault();
             const path = e.target.dataset.path;
             if (path) {
-                this.app.navigateToPath(path);
+                this.app.router.navigate(path);
             }
             return;
         }
@@ -30,7 +30,7 @@ export class EventHandler {
             e.preventDefault();
             const path = e.target.dataset.path;
             if (path) {
-                this.app.navigateToPath(path);
+                this.app.router.navigate(path);
             }
             return;
         }
@@ -253,7 +253,7 @@ export class EventHandler {
         }
         
         if (isDir) {
-            this.app.navigateToPath(path);
+            this.app.router.navigate(path);
         } else {
             this.app.openFile(path, mimeType);
         }
