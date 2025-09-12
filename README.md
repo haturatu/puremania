@@ -213,7 +213,13 @@ The search bar doubles as a quick navigation tool using `cd` commands, similar t
 
 ### File Editor
 
-The web editor includes powerful keybindings for efficient text editing. Vim mode is enabled by default on non-mobile devices.
+The web editor includes powerful keybindings for efficient text editing. 
+
+Vim mode is enabled by default on non-mobile devices to provide a more powerful editing experience. You can toggle Vim mode on or off using:
+- **The toggle switch** located in the editor's status bar.
+- The keyboard shortcut `Ctrl` + `Alt` + `v` (or `Cmd` + `Alt` + `v` on macOS).
+
+Your preference for Vim mode is automatically saved in your browser's local storage and will be remembered across sessions.
 
 **Vim Mode Commands:**
 - `:w` - Save the current file.
@@ -225,9 +231,10 @@ The web editor includes powerful keybindings for efficient text editing. Vim mod
 **Standard Editor Shortcuts:**
 | Keybinding          | Action                               |
 | ------------------- | ------------------------------------ |
-| `Ctrl` + `s` / `Cmd` + `s` | Save the current file                |
-| `Ctrl` + `/` / `Cmd` + `/` | Toggle line comments                 |
-| `Escape`            | Close the editor                     |
+| `Ctrl` / `Cmd` + `s` | Save the current file                |
+| `Ctrl` / `Cmd` + `/` | Toggle line comments                 |
+| `Ctrl` / `Cmd` + `Alt` + `v` | Toggle Vim mode                      |
+| `Escape`            | Close the editor (in non-Vim mode)   |
   
 ## Configuration
   
