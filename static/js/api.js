@@ -47,8 +47,9 @@ export class ApiClient {
             const result = await response.json();
             
             if (result.success) {
-                this.directoryCache.set(path, result.data); // キャッシュに保存
-                this.app.ui.displayFiles(result.data);
+                const files = result.data || [];
+                this.directoryCache.set(path, files); // キャッシュに保存
+                this.app.ui.displayFiles(files);
                 this.app.ui.updateBreadcrumb(path);
                 this.app.ui.updateSidebarActiveState(path);
                 this.app.router.updatePath(path);
