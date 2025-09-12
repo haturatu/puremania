@@ -48,7 +48,7 @@ func main() {
 	// 静的ファイルのサービス
 	    staticFileHandler := http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// --- START DEBUG LOGGING ---
-		// requestedPath := "./static/" + r.URL.Path
+		requestedPath := "./static/" + r.URL.Path
 		// log.Printf("Static file requested: %s", r.URL.Path)
 		// log.Printf("Serving from filesystem path: %s", requestedPath)
 		// --- END DEBUG LOGGING ---
