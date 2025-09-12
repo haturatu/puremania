@@ -212,7 +212,9 @@ export class Uploader {
     
             this.showUploadCompleteDialog(finalResult).then(() => {
                 this.app.progressManager.hide();
-                this.app.loadFiles(this.app.router.getCurrentPath());
+                const currentPath = this.app.router.getCurrentPath();
+                this.app.api.directoryEtags.delete(currentPath); // Invalidate ETag
+                this.app.loadFiles(currentPath);
             });
     
         } catch (error) {
