@@ -67,16 +67,24 @@ That’s enough of my rambling.
 
 ## Recent Changes (2025-09-12 - 2025-09-13)
 
-Here are some of the notable changes from the last couple of days:
+Here's a summary of notable changes from the last couple of days, categorized for clarity.
 
-- `f41e408` - fix: Enhanced client-side caching for directory views to prevent unnecessary re-renders.
-- `b0f4ea7` - feat: Added the ability to switch between and display specific directories in the sidebar.
-- `2112ebd` - fix: Resolved an issue where the view would not update when switching between different display modes (grid, list, masonry).
-- `0f9ecb5` - feat: Implemented a mechanism (`jsload.sh`) to easily switch between loading JavaScript libraries from a remote CDN and a local bundle.
-- `dfc6d90` - feat: Added Vim mode to the web editor for improved text editing capabilities.
-- `6a071d5` - feat: Integrated CodeMirror 6, a modern and extensible code editor component.
-- `d4ae797` - refactor: Reorganized and separated CSS files into a more modular structure for better maintainability.
-- `a4ccc6a` - refactor: Converted JavaScript files to use ES modules, improving code organization and dependency management.
+### Features
+- **Music Auto-Sort (`14377b5`):** The file list now automatically sorts by name in ascending order when a directory contains 10 or more music files.
+- **Keyboard Shortcuts (`bfbafd5`):** Added a comprehensive "Keyboard Shortcuts" section to the README for improved usability and discoverability of features.
+- **Specific Directory Navigation (`b0f4ea7`):** Implemented a feature to display and navigate to user-defined specific directories from the sidebar.
+- **Vim Mode (`dfc6d90`):** Added Vim keybindings to the web editor for a more efficient text editing experience.
+- **JS Library Switching (`0f9ecb5`):** Created a script (`jsload.sh`) to easily switch between remote (CDN) and local bundled JavaScript libraries.
+
+### UI, Bug Fixes & UX Improvements
+- **Client-Side Caching (`f41e408`, `d178348`, `c53aaa8`):** Overhauled the front-end caching mechanism, fixing critical bugs where the view would not update after navigation. This ensures the UI correctly reflects the current directory's contents.
+- **Navigation Fixes (`d5bdcb0`):** Corrected folder click handling to ensure proper and reliable navigation.
+- **View Switching (`2112ebd`):** Resolved an issue where the UI would not visually update when switching between grid, list, and masonry views.
+
+### Code Refactoring
+- **CSS Restructuring (`d4ae797`):** Reorganized CSS files into a more modular, component-based structure for better maintainability.
+- **JavaScript Modules (`a4ccc6a`):** Converted the frontend JavaScript codebase to use modern ES modules, improving code organization and dependency management.
+- **CodeMirror 6 Integration (`6a071d5`):** Upgraded the web editor to use CodeMirror 6, a modern and more extensible code editor component.
 
 ## Getting Started  
   
