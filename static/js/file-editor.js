@@ -4,6 +4,7 @@ import { EditorState } from "@codemirror/state";
 import { autocompletion } from "@codemirror/autocomplete";
 import { oneDark } from '@codemirror/theme-one-dark';
 import { indentWithTab, toggleComment } from "@codemirror/commands";
+import { vim, Vim } from "@replit/codemirror-vim";
 
 // Language imports
 import { javascript } from "@codemirror/lang-javascript";
@@ -71,11 +72,35 @@ const getLanguageExtension = (filePath) => {
 };
 
 export class FileEditor {
-    constructor() {
+    constructor(app) {
+        this.app = app;
         this.currentFile = null;
         this.editorView = null;
         this.init();
         this.handleEsc = this.handleEsc.bind(this);
+
+        // Define custom VIM commands
+        const isPC = !/Mobi|Android/i.test(navigator.userAgent);
+        if (isPC) {
+            this.defineVimCommands();
+        }
+    }
+
+    defineVimCommands() {
+        Vim.defineEx("w", "w", () => {
+            this.save();
+        });
+        Vim.defineEx("q", "q", () => {
+            this.close();
+        });
+        Vim.defineEx("wq", "wq", async () => {
+            await this.save();
+            this.close();
+        });
+        Vim.defineEx("q!", "q!", () => {
+            this.close();
+        });
+        // ZZ is mapped to :wq by default in codemirror-vim
     }
 
     init() {
@@ -154,28 +179,35 @@ export class FileEditor {
             }
         });
 
+        const extensions = [
+            basicSetup,
+            lineNumbers(),
+            langExtension,
+            autocompletion(),
+            oneDark,
+            EditorView.theme({
+                "&": { height: "100%" },
+                ".cm-scroller": { overflow: "auto" }
+            }),
+            EditorView.lineWrapping,
+            updateListener,
+            keymap.of([
+                { key: "Ctrl-s", run: () => { this.save(); return true; } },
+                { key: "Mod-s", run: () => { this.save(); return true; } },
+                { key: "Ctrl-/", run: toggleComment },
+                { key: "Mod-/", run: toggleComment },
+                indentWithTab,
+            ])
+        ];
+
+        const isPC = !/Mobi|Android/i.test(navigator.userAgent);
+        if (isPC) {
+            extensions.unshift(vim());
+        }
+
         const state = EditorState.create({
             doc: content,
-            extensions: [
-                basicSetup,
-                lineNumbers(),
-                langExtension,
-                autocompletion(),
-                oneDark,
-                EditorView.theme({
-                    "&": { height: "100%" },
-                    ".cm-scroller": { overflow: "auto" }
-                }),
-                EditorView.lineWrapping,
-                updateListener,
-                keymap.of([
-                    { key: "Ctrl-s", run: () => { this.save(); return true; } },
-                    { key: "Mod-s", run: () => { this.save(); return true; } },
-                    { key: "Ctrl-/", run: toggleComment },
-                    { key: "Mod-/", run: toggleComment },
-                    indentWithTab,
-                ])
-            ]
+            extensions: extensions
         });
 
         this.editorView = new EditorView({
