@@ -5,6 +5,7 @@
   border-radius: 4px;
   padding: 5px 10px;
   border: 1px solid var(--border-color);
+  position: relative; /* For cd completion dropdown */
 }
 
 .search-container:focus-within {
@@ -22,132 +23,6 @@
   font-family: 'Courier New', monospace;
 }
 
-.search-options {
-  display: flex;
-  align-items: center;
-  margin-left: 10px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.search-options:hover {
-  color: var(--accent-primary);
-}
-
-.search-results-count {
-    font-weight: 500;
-    color: var(--text-primary);
-}
-
-.pagination-info {
-    font-size: 0.9em;
-    color: #6c757d;
-    margin-top: 5px;
-}
-
-.search-controls {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
-
-/* ページネーションコントロール */
-.pagination-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 0;
-}
-
-.pagination-btn {
-    padding: 8px 16px;
-    border: 1px solid #dee2e6;
-    background: #ffffff;
-    color: #495057;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-}
-
-.pagination-btn:hover:not([disabled]) {
-    background: #e9ecef;
-    border-color: #adb5bd;
-}
-
-.pagination-btn:disabled {
-    background: #f8f9fa;
-    color: #6c757d;
-    cursor: not-allowed;
-    opacity: 0.6;
-}
-
-/* ページ番号ボタン */
-.page-numbers {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.page-btn {
-    width: 32px;
-    height: 32px;
-    border: 1px solid #dee2e6;
-    background: #ffffff;
-    color: #495057;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
-}
-
-.page-btn:hover {
-    background: #e9ecef;
-    border-color: #adb5bd;
-}
-
-.page-btn.active {
-    background: #007bff;
-    color: white;
-    border-color: #007bff;
-}
-
-.page-ellipsis {
-    padding: 0 5px;
-    color: #6c757d;
-    font-size: 14px;
-}
-
-/* 検索ページネーションフッター */
-.search-pagination-footer {
-    margin-top: 20px;
-    padding-top: 15px;
-    border-top: 1px solid #e9ecef;
-    display: flex;
-    justify-content: center;
-}
-
-/* Backボタンのスタイル */
-.search-back-btn {
-    padding: 8px 16px;
-    background: #6c757d;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background-color 0.2s ease;
-}
-
-.search-back-btn:hover {
-    background: #5a6268;
-}
-
-/* 検索スコープのスタイル */
 #search-scope {
     background-color: var(--bg-tertiary);
     border: 1px solid var(--border-color);
@@ -171,19 +46,61 @@
     box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.2);
 }
 
-/* 検索バックボタンのスタイル */
-.search-back-btn {
-    background-color: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
+.search-options {
+  display: flex;
+  align-items: center;
+  margin-left: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.search-options:hover {
+  color: var(--accent-primary);
+}
+
+/* Search Results Header */
+.search-results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 16px;
+    border-radius: 6px;
+}
+
+.search-results-count {
+    flex: 1 1 300px;
+    font-weight: 500;
     color: var(--text-primary);
-    padding: 8px 16px;
+}
+
+.search-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 1 1 50%;
+}
+
+/* Back to Files Button */
+.search-back-btn {
+    padding: 6px 12px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    font-family: 'Courier New', monospace;
     cursor: pointer;
-    transition: all 0.3s ease;
-    margin-bottom: 15px;
+    font-size: 13px;
+    font-family: 'Courier New', monospace;
+    transition: all 0.15s ease;
     display: inline-flex;
     align-items: center;
+    white-space: nowrap;
 }
 
 .search-back-btn:hover {
@@ -192,16 +109,118 @@
     background-color: rgba(0, 255, 65, 0.1);
 }
 
-.search-back-btn:active {
-    transform: translateY(1px);
+/* Pagination Container */
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-/* cdコマンドとTab補完のスタイル */
-.search-container {
-    position: relative;
+/* Prev/Next Buttons */
+.pagination-btn {
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s ease;
+    white-space: nowrap;
 }
 
-/* Tab補完ドロップダウン */
+.pagination-btn:hover:not([disabled]) {
+    background: var(--accent-primary);
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+}
+
+.pagination-btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Numbered Page Buttons Container */
+.page-numbers {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+/* Individual Numbered Page Button */
+.page-btn {
+    padding: 6px 10px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    min-width: 32px;
+    text-align: center;
+    transition: all 0.15s ease;
+}
+
+.page-btn:hover {
+    background: var(--accent-secondary);
+    border-color: var(--accent-secondary);
+}
+
+.page-btn.active {
+    background: var(--accent-primary);
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+    font-weight: 500;
+}
+
+/* Ellipsis (...) */
+.page-ellipsis {
+    color: var(--text-secondary);
+    padding: 0 4px;
+    font-size: 13px;
+}
+
+/* Footer Pagination */
+.search-pagination-footer {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: center;
+}
+
+/* Info text (Showing 1-100 of 123) */
+.pagination-info {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* No Results Message */
+.no-search-results {
+    text-align: center;
+    padding: 48px 16px;
+    color: var(--text-secondary);
+}
+
+.no-search-results-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.no-search-results-text {
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+
+.no-search-results-subtext {
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+/* CD command completion dropdown */
 .cd-completion-dropdown {
     position: absolute;
     top: 100%;
@@ -215,6 +234,7 @@
     max-height: 300px;
     overflow-y: auto;
     margin-top: 2px;
+    animation: slideDown 0.15s ease-out;
 }
 
 .completion-list {
@@ -231,13 +251,18 @@
     gap: 8px;
     border-radius: 4px;
     margin: 0 4px;
-    transition: background-color 0.15s ease;
+    transition: all 0.15s ease;
 }
 
 .completion-item:hover,
 .completion-item.selected {
     background-color: var(--accent-primary);
     color: var(--text-primary);
+}
+
+.completion-item.selected {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: -2px;
 }
 
 .completion-text {
@@ -262,7 +287,6 @@
     margin-top: 2px;
 }
 
-/* 補完ドロップダウンのスクロールバー */
 .cd-completion-dropdown::-webkit-scrollbar {
     width: 6px;
 }
@@ -280,82 +304,13 @@
     background: var(--text-secondary);
 }
 
-/* 検索入力フィールドのスタイル強化 */
-.search-input {
-    position: relative;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-}
-
-/* cdモード時のプレースホルダー */
-.search-input::placeholder {
-    color: var(--text-secondary);
-    opacity: 0.7;
-}
-
-/* cdモード時のヒント表示 */
-.search-container.cd-mode::after {
-    content: "Type 'cd ' followed by folder name, then press Tab for completion";
-    position: absolute;
-    bottom: -20px;
-    left: 0;
-    font-size: 11px;
-    color: var(--text-secondary);
-    pointer-events: none;
-}
-
-/* 検索結果ヘッダーのスタイル強化 */
-.search-results-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
-    margin-bottom: 16px;
-    border-radius: 6px;
-}
-
-.search-results-count {
-    flex: 1;
-}
-
-.search-controls {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
-
-.search-back-btn {
-    padding: 6px 12px;
-    background: var(--accent-secondary);
-    color: var(--text-primary);
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: background-color 0.15s ease;
-}
-
-.search-back-btn:hover {
-    background: var(--accent-primary);
-}
-
-/* ページネーション */
-.pagination-controls {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 8px;
-    padding: 16px 0;
-}
-
-.pagination-btn {
-    padding: 6px 12px;
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: all 0.15s ease;
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }

@@ -1,5 +1,5 @@
 /* Toast Notifications */
-.toast-container {
+#toast-container {
   position: fixed;
   top: 20px;
   right: 20px;
@@ -19,16 +19,20 @@
   animation: slideIn 0.3s ease;
 }
 
-.toast.success {
+.toast.toast-success {
   border-left: 4px solid var(--success);
 }
 
-.toast.error {
+.toast.toast-error {
   border-left: 4px solid var(--error);
 }
 
-.toast.warning {
+.toast.toast-warning {
   border-left: 4px solid var(--warning);
+}
+
+.toast.toast-info {
+  border-left: 4px solid var(--accent-secondary);
 }
 
 .toast-content {

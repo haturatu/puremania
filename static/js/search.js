@@ -26,8 +26,6 @@ export class SearchHandler {
         this.cdCompletions = [];
         this.selectedCompletionIndex = -1;
         this.isShowingCompletions = false;
-        
-        this.init();
     }
     
     init() {
@@ -55,19 +53,23 @@ export class SearchHandler {
     
     // ファイル操作後の自動更新リスナーを設定
     setupFileOperationListeners() {
+        const api = this.fileManager.api;
+        const ui = this.fileManager.ui;
+
         // FileManagerのファイル操作メソッドをフック
         const originalMethods = {
-            deleteFile: this.fileManager.deleteFile.bind(this.fileManager),
-            deleteSelectedFiles: this.fileManager.deleteSelectedFiles.bind(this.fileManager),
-            renameFile: this.fileManager.renameFile.bind(this.fileManager),
-            moveFile: this.fileManager.moveFile.bind(this.fileManager),
-            moveSelected: this.fileManager.moveSelected.bind(this.fileManager),
-            createNewFile: this.fileManager.createNewFile.bind(this.fileManager),
-            createNewFolder: this.fileManager.createNewFolder.bind(this.fileManager)
+            deleteFile: api.deleteFile.bind(api),
+            deleteSelectedFiles: api.deleteSelectedFiles.bind(api),
+            renameFile: api.renameFile.bind(api),
+            moveFile: api.moveFile.bind(api),
+            moveSelected: api.moveSelected.bind(api),
+            createNewFile: api.createNewFile.bind(api),
+            createNewFolder: api.createNewFolder.bind(api),
+            setViewMode: ui.setViewMode.bind(ui)
         };
 
         // ファイル削除操作のフック
-        this.fileManager.deleteFile = async (path) => {
+        api.deleteFile = async (path) => {
             const result = await originalMethods.deleteFile(path);
             if (this.isInSearchMode && this.lastSearchTerm) {
                 setTimeout(() => this.refreshSearchResults(), 100);
@@ -75,7 +77,7 @@ export class SearchHandler {
             return result;
         };
 
-        this.fileManager.deleteSelectedFiles = async () => {
+        api.deleteSelectedFiles = async () => {
             const result = await originalMethods.deleteSelectedFiles();
             if (this.isInSearchMode && this.lastSearchTerm) {
                 setTimeout(() => this.refreshSearchResults(), 100);
@@ -84,7 +86,7 @@ export class SearchHandler {
         };
 
         // ファイル名変更操作のフック
-        this.fileManager.renameFile = async (path) => {
+        api.renameFile = async (path) => {
             const result = await originalMethods.renameFile(path);
             if (this.isInSearchMode && this.lastSearchTerm) {
                 setTimeout(() => this.refreshSearchResults(), 100);
@@ -93,7 +95,7 @@ export class SearchHandler {
         };
 
         // ファイル移動操作のフック
-        this.fileManager.moveFile = async (sourcePath) => {
+        api.moveFile = async (sourcePath) => {
             const result = await originalMethods.moveFile(sourcePath);
             if (this.isInSearchMode && this.lastSearchTerm) {
                 setTimeout(() => this.refreshSearchResults(), 100);
@@ -101,7 +103,7 @@ export class SearchHandler {
             return result;
         };
 
-        this.fileManager.moveSelected = async () => {
+        api.moveSelected = async () => {
             const result = await originalMethods.moveSelected();
             if (this.isInSearchMode && this.lastSearchTerm) {
                 setTimeout(() => this.refreshSearchResults(), 100);
@@ -110,7 +112,7 @@ export class SearchHandler {
         };
 
         // 新規ファイル作成のフック
-        this.fileManager.createNewFile = async () => {
+        api.createNewFile = async () => {
             const result = await originalMethods.createNewFile();
             if (this.isInSearchMode && this.lastSearchTerm) {
                 setTimeout(() => this.refreshSearchResults(), 100);
@@ -118,7 +120,7 @@ export class SearchHandler {
             return result;
         };
 
-        this.fileManager.createNewFolder = async () => {
+        api.createNewFolder = async () => {
             const result = await originalMethods.createNewFolder();
             if (this.isInSearchMode && this.lastSearchTerm) {
                 setTimeout(() => this.refreshSearchResults(), 100);
@@ -127,14 +129,13 @@ export class SearchHandler {
         };
 
         // FileManagerのsetViewModeをフック
-        const originalSetViewMode = this.fileManager.setViewMode.bind(this.fileManager);
-        this.fileManager.setViewMode = (mode) => {
+        ui.setViewMode = (mode) => {
             if (this.isInSearchMode && this.lastSearchResults && this.lastSearchTerm) {
                 // 検索モード中の場合、ビュー切り替え後に検索結果を再表示
-                this.fileManager.viewMode = mode;
+                ui.viewMode = mode;
                 this.redisplayResults(this.currentPage);
             } else {
-                originalSetViewMode(mode);
+                originalMethods.setViewMode(mode);
             }
         };
     }
@@ -279,8 +280,8 @@ export class SearchHandler {
             
         } catch (error) {
             console.error('cd command error:', error);
-            if (this.fileManager && this.fileManager.showToast) {
-                this.fileManager.showToast('cd Error', `Cannot change directory: ${error.message}`, 'error');
+            if (this.fileManager && this.fileManager.ui) {
+                this.fileManager.ui.showToast('cd Error', `Cannot change directory: ${error.message}`, 'error');
             }
         }
     }
@@ -675,8 +676,8 @@ export class SearchHandler {
         const searchTerm = searchInput.value.trim();
         
         if (!searchTerm) {
-            if (this.fileManager && this.fileManager.showToast) {
-                this.fileManager.showToast('Search', 'Please enter a search term', 'warning');
+            if (this.fileManager && this.fileManager.ui) {
+                this.fileManager.ui.showToast('Search', 'Please enter a search term', 'warning');
             }
             return;
         }
@@ -684,15 +685,15 @@ export class SearchHandler {
         // 検索モードに入る際の状態保存
         if (!this.isInSearchMode) {
             this.isInSearchMode = true;
-            this.originalViewMode = this.fileManager.viewMode;
+            this.originalViewMode = this.fileManager.ui.viewMode;
         }
         
         this.lastSearchTerm = searchTerm;
         this.currentPage = page;
         
         try {
-            if (this.fileManager && this.fileManager.showLoading) {
-                this.fileManager.showLoading();
+            if (this.fileManager && this.fileManager.ui) {
+                this.fileManager.ui.showLoading();
             }
             
             const offset = page * this.pageSize;
@@ -723,18 +724,18 @@ export class SearchHandler {
                 this.totalResults = this.lastSearchResults.length;
                 this.displaySearchResults(this.lastSearchResults, searchTerm, page);
             } else {
-                if (this.fileManager && this.fileManager.showToast) {
-                    this.fileManager.showToast('Search Error', result ? result.message : 'Unknown error', 'error');
+                if (this.fileManager && this.fileManager.ui) {
+                    this.fileManager.ui.showToast('Search Error', result ? result.message : 'Unknown error', 'error');
                 }
             }
         } catch (error) {
             console.error('Search error:', error);
-            if (this.fileManager && this.fileManager.showToast) {
-                this.fileManager.showToast('Search Error', 'Failed to perform search', 'error');
+            if (this.fileManager && this.fileManager.ui) {
+                this.fileManager.ui.showToast('Search Error', 'Failed to perform search', 'error');
             }
         } finally {
-            if (this.fileManager && this.fileManager.hideLoading) {
-                this.fileManager.hideLoading();
+            if (this.fileManager && this.fileManager.ui) {
+                this.fileManager.ui.hideLoading();
             }
         }
     }
@@ -824,23 +825,31 @@ export class SearchHandler {
                 ${paginationInfo}
             </div>
             <div class="search-controls">
-                <button class="search-back-btn" onclick="window.fileManager.searchHandler.exitSearchMode()">
+                <button class="search-back-btn">
                     ← Back to Files
                 </button>
-                ${this.createPaginationControls(page, totalPages)}
+            </div>
         `;
+        
+        const paginationControls = this.createPaginationControls(page, totalPages);
+        header.querySelector('.search-controls').appendChild(paginationControls);
+
         container.appendChild(header);
+
+        header.querySelector('.search-back-btn').addEventListener('click', () => this.exitSearchMode());
         
         // ビューモード切り替えボタンを追加（検索モード専用の処理）
         const viewToggle = document.createElement('div');
         viewToggle.className = 'view-toggle';
         viewToggle.innerHTML = `
-            <button class="view-toggle-btn ${this.fileManager.viewMode === 'grid' ? 'active' : ''}" 
-                    data-view="grid" onclick="window.fileManager.setViewMode('grid')">Grid</button>
-            <button class="view-toggle-btn ${this.fileManager.viewMode === 'list' ? 'active' : ''}" 
-                    data-view="list" onclick="window.fileManager.setViewMode('list')">List</button>
+            <button class="view-toggle-btn ${this.fileManager.ui.viewMode === 'grid' ? 'active' : ''}" data-view="grid">Grid</button>
+            <button class="view-toggle-btn ${this.fileManager.ui.viewMode === 'list' ? 'active' : ''}" data-view="list">List</button>
         `;
         container.appendChild(viewToggle);
+
+        viewToggle.querySelectorAll('.view-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.fileManager.ui.setViewMode(e.target.dataset.view));
+        });
         
         if (results.length === 0) {
             const noResults = document.createElement('div');
@@ -855,7 +864,7 @@ export class SearchHandler {
         }
         
         // FileManagerの表示モードに合わせて表示
-        if (this.fileManager.viewMode === 'list') {
+        if (this.fileManager.ui.viewMode === 'list') {
             this.renderListView(pageResults, container);
         } else {
             this.renderGridView(pageResults, container);
@@ -865,7 +874,7 @@ export class SearchHandler {
         if (totalPages > 1) {
             const footerPagination = document.createElement('div');
             footerPagination.className = 'search-pagination-footer';
-            footerPagination.innerHTML = this.createPaginationControls(page, totalPages);
+            footerPagination.appendChild(this.createPaginationControls(page, totalPages));
             container.appendChild(footerPagination);
         }
         
@@ -887,17 +896,57 @@ export class SearchHandler {
         
         // cdモード関連の状態をリセット
         this.isCdMode = false;
-        this.tabPressCount = 0;
         this.hideCompletions();
         
         // 元のビューモードに復元
         if (this.originalViewMode) {
-            this.fileManager.viewMode = this.originalViewMode;
+            this.fileManager.ui.viewMode = this.originalViewMode;
             this.originalViewMode = null;
         }
         
         // 通常のファイル一覧を再読み込み
         this.fileManager.loadFiles(this.fileManager.currentPath);
+    }
+
+    // フォルダに移動し、検索モードを終了
+    async navigateToFolderAndExitSearch(path) {
+        try {
+            // APIを使ってフォルダの存在確認
+            const encodedPath = encodeURIComponent(path);
+            const response = await fetch(`/api/files?path=${encodedPath}`);
+            const result = await response.json();
+
+            if (result.success) {
+                // 検索関連の状態をリセット
+                this.isInSearchMode = false;
+                this.lastSearchResults = null;
+                this.lastSearchTerm = '';
+                this.currentPage = 0;
+
+                const searchInput = document.querySelector('.search-input');
+                if (searchInput) {
+                    searchInput.value = '';
+                }
+                this.isCdMode = false;
+                this.hideCompletions();
+
+                if (this.originalViewMode) {
+                    this.fileManager.ui.viewMode = this.originalViewMode;
+                    this.originalViewMode = null;
+                }
+                
+                // フォルダに移動
+                this.fileManager.navigateToPath(path);
+
+            } else {
+                throw new Error(result.message || 'Directory not found');
+            }
+        } catch (error) {
+            console.error('Navigation error:', error);
+            if (this.fileManager && this.fileManager.ui) {
+                this.fileManager.ui.showToast('Error', `Could not navigate to folder: ${error.message}`, 'error');
+            }
+        }
     }
     
     // Grid表示のレンダリング
@@ -906,7 +955,7 @@ export class SearchHandler {
         fileGrid.className = 'file-grid';
         
         files.forEach(file => {
-            const fileItem = this.fileManager.createFileItem(file);
+            const fileItem = this.fileManager.ui.createFileItem(file);
             fileGrid.appendChild(fileItem);
         });
         
@@ -924,26 +973,28 @@ export class SearchHandler {
         const thead = document.createElement('thead');
         thead.innerHTML = `
             <tr>
-                <th class="sortable ${this.sortField === 'name' ? this.sortDirection : ''}" 
-                    onclick="window.fileManager.searchHandler.setSort('name')">
+                <th class="sortable ${this.sortField === 'name' ? this.sortDirection : ''}" data-sort="name">
                     Name ${this.sortField === 'name' ? (this.sortDirection === 'asc' ? '↑' : '↓') : ''}
                 </th>
-                <th class="sortable ${this.sortField === 'size' ? this.sortDirection : ''}" 
-                    onclick="window.fileManager.searchHandler.setSort('size')">
+                <th class="sortable ${this.sortField === 'size' ? this.sortDirection : ''}" data-sort="size">
                     Size ${this.sortField === 'size' ? (this.sortDirection === 'asc' ? '↑' : '↓') : ''}
                 </th>
-                <th class="sortable ${this.sortField === 'modified' ? this.sortDirection : ''}" 
-                    onclick="window.fileManager.searchHandler.setSort('modified')">
+                <th class="sortable ${this.sortField === 'modified' ? this.sortDirection : ''}" data-sort="modified">
                     Modified ${this.sortField === 'modified' ? (this.sortDirection === 'asc' ? '↑' : '↓') : ''}
                 </th>
-                <th class="sortable ${this.sortField === 'type' ? this.sortDirection : ''}" 
-                    onclick="window.fileManager.searchHandler.setSort('type')">
+                <th class="sortable ${this.sortField === 'type' ? this.sortDirection : ''}" data-sort="type">
                     Type ${this.sortField === 'type' ? (this.sortDirection === 'asc' ? '↑' : '↓') : ''}
                 </th>
                 <th>Actions</th>
             </tr>
         `;
         table.appendChild(thead);
+
+        const headers = thead.querySelectorAll('.sortable');
+        headers[0].addEventListener('click', () => this.setSort('name'));
+        headers[1].addEventListener('click', () => this.setSort('size'));
+        headers[2].addEventListener('click', () => this.setSort('modified'));
+        headers[3].addEventListener('click', () => this.setSort('type'));
         
         const tbody = document.createElement('tbody');
         files.forEach(file => {
@@ -960,14 +1011,14 @@ export class SearchHandler {
     createTableRow(file) {
         const tr = document.createElement('tr');
         tr.className = 'file-item';
-        this.fileManager.setFileItemData(tr, file);
+        this.fileManager.ui.setFileItemData(tr, file);
         
         tr.innerHTML = `
             <td>
-                <div class="file-icon ${this.fileManager.getFileIconClass(file)}"></div>
+                <div class="file-icon ${this.fileManager.ui.getFileIconClass(file)}"></div>
                 <span class="file-name">${file.name}</span>
             </td>
-            <td>${file.is_dir ? '-' : this.fileManager.formatFileSize(file.size)}</td>
+            <td>${file.is_dir ? '-' : this.fileManager.ui.formatFileSize(file.size)}</td>
             <td>${new Date(file.mod_time).toLocaleString()}</td>
             <td>${file.is_dir ? 'Folder' : (file.mime_type || 'Unknown')}</td>
             <td>
@@ -988,19 +1039,19 @@ export class SearchHandler {
         // クリックイベントのバインド
         tr.addEventListener('click', (e) => {
             if (!e.target.matches('.file-action-btn, .file-action-btn *')) {
-                this.fileManager.handleFileClick(tr);
+                this.fileManager.events.handleFileClick(tr, e);
             }
         });
         
-        tr.addEventListener('dblclick', () => {
-            this.fileManager.handleFileDoubleClick(tr);
+        tr.addEventListener('dblclick', (e) => {
+            this.fileManager.events.handleFileDoubleClick(tr);
         });
         
         // アクションボタンのイベントバインド
         tr.querySelectorAll('.file-action-btn').forEach(button => {
             button.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.fileManager.handleFileActionClick(button, tr);
+                this.fileManager.events.handleFileActionClick(button, tr);
             });
         });
         
@@ -1008,52 +1059,80 @@ export class SearchHandler {
     }
     
     createPaginationControls(currentPage, totalPages) {
-        if (totalPages <= 1) return '';
-        
-        const prevDisabled = currentPage === 0 ? 'disabled' : '';
-        const nextDisabled = currentPage === totalPages - 1 ? 'disabled' : '';
-        
-        let pageNumbers = '';
-        
+        if (totalPages <= 1) return document.createDocumentFragment();
+
+        const controls = document.createElement('div');
+        controls.className = 'pagination-controls';
+
+        const prevDisabled = currentPage === 0;
+        const nextDisabled = currentPage === totalPages - 1;
+
+        const prevButton = document.createElement('button');
+        prevButton.className = 'pagination-btn';
+        prevButton.textContent = '← Previous';
+        prevButton.disabled = prevDisabled;
+        if (!prevDisabled) {
+            prevButton.addEventListener('click', () => this.performSearch(currentPage - 1));
+        }
+
+        const nextButton = document.createElement('button');
+        nextButton.className = 'pagination-btn';
+        nextButton.textContent = 'Next →';
+        nextButton.disabled = nextDisabled;
+        if (!nextDisabled) {
+            nextButton.addEventListener('click', () => this.performSearch(currentPage + 1));
+        }
+
+        const pageNumbers = document.createElement('div');
+        pageNumbers.className = 'page-numbers';
+
         const startPage = Math.max(0, currentPage - 2);
         const endPage = Math.min(totalPages - 1, currentPage + 2);
-        
+
         if (startPage > 0) {
-            pageNumbers += `<button class="page-btn" onclick="window.fileManager.searchHandler.performSearch(0)">1</button>`;
+            const btn = document.createElement('button');
+            btn.className = 'page-btn';
+            btn.textContent = '1';
+            btn.addEventListener('click', () => this.performSearch(0));
+            pageNumbers.appendChild(btn);
             if (startPage > 1) {
-                pageNumbers += '<span class="page-ellipsis">...</span>';
+                const ellipsis = document.createElement('span');
+                ellipsis.className = 'page-ellipsis';
+                ellipsis.textContent = '...';
+                pageNumbers.appendChild(ellipsis);
             }
         }
-        
+
         for (let i = startPage; i <= endPage; i++) {
-            const activeClass = i === currentPage ? 'active' : '';
-            pageNumbers += `<button class="page-btn ${activeClass}" onclick="window.fileManager.searchHandler.performSearch(${i})">${i + 1}</button>`;
+            const btn = document.createElement('button');
+            btn.className = 'page-btn';
+            if (i === currentPage) {
+                btn.classList.add('active');
+            }
+            btn.textContent = i + 1;
+            btn.addEventListener('click', () => this.performSearch(i));
+            pageNumbers.appendChild(btn);
         }
-        
+
         if (endPage < totalPages - 1) {
             if (endPage < totalPages - 2) {
-                pageNumbers += '<span class="page-ellipsis">...</span>';
+                const ellipsis = document.createElement('span');
+                ellipsis.className = 'page-ellipsis';
+                ellipsis.textContent = '...';
+                pageNumbers.appendChild(ellipsis);
             }
-            pageNumbers += `<button class="page-btn" onclick="window.fileManager.searchHandler.performSearch(${totalPages - 1})">${totalPages}</button>`;
+            const btn = document.createElement('button');
+            btn.className = 'page-btn';
+            btn.textContent = totalPages;
+            btn.addEventListener('click', () => this.performSearch(totalPages - 1));
+            pageNumbers.appendChild(btn);
         }
         
-        return `
-            <div class="pagination-controls">
-                <button class="pagination-btn ${prevDisabled}" 
-                        onclick="window.fileManager.searchHandler.performSearch(${currentPage - 1})"
-                        ${prevDisabled}>
-                    ← Previous
-                </button>
-                <div class="page-numbers">
-                    ${pageNumbers}
-                </div>
-                <button class="pagination-btn ${nextDisabled}" 
-                        onclick="window.fileManager.searchHandler.performSearch(${currentPage + 1})"
-                        ${nextDisabled}>
-                    Next →
-                </button>
-            </div>
-        `;
+        controls.appendChild(prevButton);
+        controls.appendChild(pageNumbers);
+        controls.appendChild(nextButton);
+
+        return controls;
     }
     
     redisplayResults(page) {

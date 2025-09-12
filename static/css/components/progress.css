@@ -83,7 +83,7 @@
 }
 
 /* ローディングインジケータ */
-.loading-overlay {
+#loading-overlay {
   position: fixed;
   top: 0;
   left: 0;
