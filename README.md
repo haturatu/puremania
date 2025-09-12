@@ -14,7 +14,12 @@
     - [Running the Application](#running-the-application)
     - [Supervisor (Optional)](#supervisor-optional)
   - [Usage](#usage)
+  - [Keyboard Shortcuts](#keyboard-shortcuts)
+    - [Global Shortcuts](#global-shortcuts)
+    - [Search Bar: `cd` Mode](#search-bar-cd-mode)
+    - [File Editor](#file-editor)
   - [Configuration](#configuration-1)
+    - [Switching Between Remote and Local JavaScript Libraries](#switching-between-remote-and-local-javascript-libraries)
   - [What We Won't Do](#what-we-wont-do)
   - [API Endpoints](#api-endpoints)
   - [License](#license)
@@ -161,6 +166,60 @@ Once the server is running, open your web browser and navigate to:
 `http://localhost:8844`  
   
 *(The port may be different if you changed it in your `.env` file.)*  
+
+## Keyboard Shortcuts
+
+Pure Mania offers a variety of keyboard shortcuts to speed up your workflow.
+
+### Global Shortcuts
+
+These shortcuts are available anywhere in the file browser view.
+
+| Keybinding          | Action                               |
+| ------------------- | ------------------------------------ |
+| `Ctrl` + `f`        | Focus the search bar                 |
+| `Alt` + `←`         | Navigate to the parent directory     |
+| `Delete`            | Delete selected file(s)              |
+| `F2`                | Rename the selected file or folder   |
+| `Ctrl` + `u`        | Show the upload dialog               |
+| `Ctrl` + `n`        | Create a new empty file              |
+| `Ctrl` + `Shift` + `n` | Create a new folder                  |
+
+### Search Bar: `cd` Mode
+
+The search bar doubles as a quick navigation tool using `cd` commands, similar to a shell.
+
+1.  Type `cd ` (with a space) into the search bar to activate `cd` mode.
+2.  You can then use commands like:
+    - `cd /absolute/path/to/folder` - Navigate to an absolute path.
+    - `cd relative/folder` - Navigate to a path relative to the current directory.
+    - `cd ..` - Go to the parent directory.
+    - `cd` (by itself) - Go to the root directory.
+3.  Press `Enter` to execute the navigation.
+
+**Tab Completion:**
+- While in `cd` mode, press `Tab` to see a list of matching directory completions.
+- Use `↑` / `↓` arrows to navigate the completion list.
+- Press `Enter` or `Tab` again to apply the selected completion.
+- Press `Escape` to close the completion list.
+
+### File Editor
+
+The web editor includes powerful keybindings for efficient text editing. Vim mode is enabled by default on non-mobile devices.
+
+**Vim Mode Commands:**
+- `:w` - Save the current file.
+- `:q` - Close the editor.
+- `:wq` - Save the file and close the editor.
+- `:q!` - Close the editor without saving.
+- `ZZ` - (Default Vim behavior) Save and close.
+
+**Standard Editor Shortcuts:**
+| Keybinding          | Action                               |
+| ------------------- | ------------------------------------ |
+| `Ctrl` + `s` / `Cmd` + `s` | Save the current file                |
+| `Ctrl` + `/` / `Cmd` + `/` | Toggle line comments                 |
+| `Escape`            | Close the editor                     |
   
 ## Configuration
   
