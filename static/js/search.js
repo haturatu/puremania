@@ -263,13 +263,13 @@ export class SearchHandler {
                 targetPath = '/';
             } else if (path === '..') {
                 // 親ディレクトリに移動
-                targetPath = this.getParentPath(this.fileManager.currentPath);
+                targetPath = this.getParentPath(this.fileManager.router.getCurrentPath());
             } else if (path.startsWith('/')) {
                 // 絶対パス
                 targetPath = path;
             } else {
                 // 相対パス
-                targetPath = this.joinPaths(this.fileManager.currentPath, path);
+                targetPath = this.joinPaths(this.fileManager.router.getCurrentPath(), path);
             }
             
             // パスの正規化
@@ -341,7 +341,7 @@ export class SearchHandler {
                 prefix = partialPath.substring(lastSlashIndex + 1);
             } else {
                 // 相対パス
-                searchPath = this.fileManager.currentPath;
+                searchPath = this.fileManager.router.getCurrentPath();
                 prefix = partialPath;
             }
             
@@ -705,7 +705,7 @@ export class SearchHandler {
                 },
                 body: JSON.stringify({
                     term: searchTerm,
-                    path: this.fileManager ? this.fileManager.currentPath : '/',
+                    path: this.fileManager ? this.fileManager.router.getCurrentPath() : '/',
                     useRegex: this.searchOptions.useRegex,
                     caseSensitive: this.searchOptions.caseSensitive,
                     scope: this.searchOptions.scope,
@@ -754,7 +754,7 @@ export class SearchHandler {
                 },
                 body: JSON.stringify({
                     term: this.lastSearchTerm,
-                    path: this.fileManager ? this.fileManager.currentPath : '/',
+                    path: this.fileManager ? this.fileManager.router.getCurrentPath() : '/',
                     useRegex: this.searchOptions.useRegex,
                     caseSensitive: this.searchOptions.caseSensitive,
                     scope: this.searchOptions.scope,
@@ -905,7 +905,7 @@ export class SearchHandler {
         }
         
         // 通常のファイル一覧を再読み込み
-        this.fileManager.loadFiles(this.fileManager.currentPath);
+        this.fileManager.loadFiles(this.fileManager.router.getCurrentPath());
     }
 
     // フォルダに移動し、検索モードを終了
