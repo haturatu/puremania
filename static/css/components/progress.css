@@ -72,8 +72,13 @@
 .progress-details {
     display: flex;
     justify-content: space-between;
+    align-items: center; /* 中央揃え */
     font-size: 0.8rem;
     color: var(--text-secondary);
+}
+
+.progress-time {
+    font-style: italic;
 }
 
 .progress-status {
