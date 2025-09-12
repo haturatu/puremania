@@ -689,6 +689,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 			// キャッシュクリア
 			h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(targetDir)))
+			h.cache.InvalidateByPrefix("search:")
 		})
 	}
 
@@ -1040,6 +1041,7 @@ func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
 
 	// キャッシュを無効化
 	h.invalidateFileCache(fullPath)
+	h.cache.InvalidateByPrefix("search:")
 
 	h.respondSuccess(w, map[string]string{"message": "File saved successfully"})
 }
@@ -1078,6 +1080,7 @@ func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
 				// キャッシュを無効化
 				h.invalidateFileCache(fullPath)
 				h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(fullPath)))
+				h.cache.InvalidateByPrefix("search:")
 			}
 		})
 	}
@@ -1124,6 +1127,7 @@ func (h *Handler) CreateDirectory(w http.ResponseWriter, r *http.Request) {
 
 	// 親ディレクトリのキャッシュを無効化
 	h.cache.InvalidateByPrefix("list:" + h.convertToVirtualPath(parentPath))
+	h.cache.InvalidateByPrefix("search:")
 
 	h.respondSuccess(w, map[string]string{"message": "Directory created successfully"})
 }
@@ -1179,6 +1183,7 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 	h.invalidateFileCache(targetFullPath)
 	h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(sourceFullPath)))
 	h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(targetFullPath)))
+	h.cache.InvalidateByPrefix("search:")
 
 	h.respondSuccess(w, map[string]string{"message": "File moved successfully"})
 }
@@ -1246,6 +1251,7 @@ func (h *Handler) CreateFile(w http.ResponseWriter, r *http.Request) {
 
 	// 親ディレクトリのキャッシュを無効化
 	h.cache.InvalidateByPrefix("list:" + h.convertToVirtualPath(parentPath))
+	h.cache.InvalidateByPrefix("search:")
 
 	// 仮想パスを返す
 	virtualPath := h.convertToVirtualPath(newFilePath)
