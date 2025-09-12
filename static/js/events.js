@@ -246,6 +246,11 @@ export class EventHandler {
         const path = fileItem.dataset.path;
         const isDir = fileItem.dataset.isDir === 'true';
         const mimeType = fileItem.dataset.mimeType || '';
+
+        if (this.app.searchHandler && this.app.searchHandler.isInSearchMode && isDir) {
+            this.app.searchHandler.navigateToFolderAndExitSearch(path);
+            return;
+        }
         
         if (isDir) {
             this.app.navigateToPath(path);

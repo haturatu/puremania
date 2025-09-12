@@ -907,6 +907,47 @@ export class SearchHandler {
         // 通常のファイル一覧を再読み込み
         this.fileManager.loadFiles(this.fileManager.currentPath);
     }
+
+    // フォルダに移動し、検索モードを終了
+    async navigateToFolderAndExitSearch(path) {
+        try {
+            // APIを使ってフォルダの存在確認
+            const encodedPath = encodeURIComponent(path);
+            const response = await fetch(`/api/files?path=${encodedPath}`);
+            const result = await response.json();
+
+            if (result.success) {
+                // 検索関連の状態をリセット
+                this.isInSearchMode = false;
+                this.lastSearchResults = null;
+                this.lastSearchTerm = '';
+                this.currentPage = 0;
+
+                const searchInput = document.querySelector('.search-input');
+                if (searchInput) {
+                    searchInput.value = '';
+                }
+                this.isCdMode = false;
+                this.hideCompletions();
+
+                if (this.originalViewMode) {
+                    this.fileManager.ui.viewMode = this.originalViewMode;
+                    this.originalViewMode = null;
+                }
+                
+                // フォルダに移動
+                this.fileManager.navigateToPath(path);
+
+            } else {
+                throw new Error(result.message || 'Directory not found');
+            }
+        } catch (error) {
+            console.error('Navigation error:', error);
+            if (this.fileManager && this.fileManager.ui) {
+                this.fileManager.ui.showToast('Error', `Could not navigate to folder: ${error.message}`, 'error');
+            }
+        }
+    }
     
     // Grid表示のレンダリング
     renderGridView(files, container) {
