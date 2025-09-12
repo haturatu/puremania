@@ -17,7 +17,7 @@ export class ProgressManager {
             <div class="progress-modal">
                 <div class="progress-header">
                     <div class="progress-title">Uploading Files</div>
-                    <button class="progress-close" style="display: none;">&times;</button>
+                    <button class="progress-close" style="display: none;">Cancel</button>
                 </div>
                 <div class="progress-info">
                     <span class="progress-current">Preparing files...</span>
@@ -88,7 +88,6 @@ export class ProgressManager {
         }
 
         if (closeBtn) {
-            closeBtn.style.display = 'none';
             closeBtn.style.background = '';
             closeBtn.style.color = '';
         }
@@ -162,6 +161,11 @@ export class ProgressManager {
             const titleElement = this.progressOverlay.querySelector('.progress-title');
             if (titleElement) titleElement.textContent = title;
 
+            const closeBtn = this.progressOverlay.querySelector('.progress-close');
+            if (closeBtn) {
+                closeBtn.style.display = 'block';
+            }
+
             this.progressOverlay.style.display = 'flex';
             this.resetError();
             this.resetProgress();
@@ -170,6 +174,10 @@ export class ProgressManager {
 
     hide() {
         if (this.progressOverlay) {
+            const closeBtn = this.progressOverlay.querySelector('.progress-close');
+            if (closeBtn) {
+                closeBtn.style.display = 'none';
+            }
             this.progressOverlay.style.display = 'none';
         }
         this.currentUpload = null;

@@ -1,3 +1,24 @@
+class UploadProcess {
+    constructor() {
+        this.xhrs = [];
+        this.cancelled = false;
+    }
+
+    add(xhr) {
+        if (this.cancelled) {
+            xhr.abort();
+        } else {
+            this.xhrs.push(xhr);
+        }
+    }
+
+    abort() {
+        this.cancelled = true;
+        this.xhrs.forEach(xhr => xhr.abort());
+        this.xhrs = [];
+    }
+}
+
 export class Uploader {
     constructor(app) {
         this.app = app;
@@ -102,6 +123,9 @@ export class Uploader {
 
     async handleFileUpload(files) {
         if (!files || files.length === 0) return;
+
+        const uploadProcess = new UploadProcess();
+        this.app.progressManager.setCurrentUpload(uploadProcess);
     
         try {
             if (!this.app.progressManager.progressOverlay ||
@@ -136,7 +160,15 @@ export class Uploader {
             const inFlight = [];
     
             while (batchIndex < batches.length || inFlight.length > 0) {
+                if (uploadProcess.cancelled) {
+                    break;
+                }
+
                 while (batchIndex < batches.length && inFlight.length < MAX_PARALLEL_BATCHES) {
+                    if (uploadProcess.cancelled) {
+                        break;
+                    }
+
                     const currentBatchIndex = batchIndex;
                     const batch = batches[currentBatchIndex];
     
@@ -148,8 +180,9 @@ export class Uploader {
                         status: `Batch ${currentBatchIndex + 1}/${batches.length}: ${batch.length} files`
                     });
     
-                    const promise = this.uploadBatch(batch, currentBatchIndex + 1, batches.length)
+                    const promise = this.uploadBatch(batch, currentBatchIndex + 1, batches.length, uploadProcess)
                         .then(result => {
+                            if (uploadProcess.cancelled) return;
                             totalSuccessful += result.successful;
                             totalFailed += result.failed;
                             totalProcessed += batch.length;
@@ -163,6 +196,9 @@ export class Uploader {
                             });
                         })
                         .catch(error => {
+                            if (uploadProcess.cancelled) {
+                                throw error; // Re-throw to reject the promise
+                            }
                             console.error(`Batch ${currentBatchIndex + 1} failed:`, error);
                             totalFailed += batch.length;
                             totalProcessed += batch.length;
@@ -184,7 +220,15 @@ export class Uploader {
                     batchIndex++;
                 }
     
-                await Promise.race(inFlight);
+                if (inFlight.length > 0) {
+                    await Promise.race(inFlight);
+                }
+            }
+
+            if (uploadProcess.cancelled) {
+                this.app.ui.showToast('Info', 'Upload cancelled by user', 'info');
+                // No need to hide progressManager here, finally block will do it.
+                return;
             }
     
             const finalResult = {
@@ -211,32 +255,40 @@ export class Uploader {
             }
     
             this.showUploadCompleteDialog(finalResult).then(() => {
-                this.app.progressManager.hide();
                 const currentPath = this.app.router.getCurrentPath();
                 this.app.api.directoryEtags.delete(currentPath); // Invalidate ETag
                 this.app.loadFiles(currentPath);
             });
     
         } catch (error) {
-            console.error('Error in parallel batch upload:', error);
-            this.handleUploadError('Parallel batch upload failed: ' + error.message);
+            if (!uploadProcess.cancelled) {
+                console.error('Error in parallel batch upload:', error);
+                this.handleUploadError('Parallel batch upload failed: ' + error.message);
+            }
         } finally {
+            this.app.progressManager.hide();
             const uploadArea = document.querySelector('.upload-area');
             if (uploadArea) uploadArea.classList.remove('uploading');
         }
     }
 
-    async uploadBatch(batchFiles, batchNumber, totalBatches) {
+    async uploadBatch(batchFiles, batchNumber, totalBatches, uploadProcess) {
         const CONCURRENT_UPLOADS = 50;
         
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             let completedFiles = 0;
             let successfulFiles = 0;
             let failedFiles = 0;
             
             const processFileChunk = async (fileChunk, chunkIndex) => {
+                if (uploadProcess.cancelled) return;
+
                 const uploadPromises = fileChunk.map((file, fileIndex) => {
-                    return new Promise((fileResolve) => {
+                    return new Promise((fileResolve, fileReject) => {
+                        if (uploadProcess.cancelled) {
+                            return fileReject(new Error('Upload cancelled'));
+                        }
+
                         const formData = new FormData();
                         formData.append('path', this.app.router.getCurrentPath());
                         formData.append('file', file);
@@ -245,6 +297,7 @@ export class Uploader {
                         formData.append('relativePath[]', relativePath);
                         
                         const xhr = new XMLHttpRequest();
+                        uploadProcess.add(xhr);
                         
                         xhr.upload.addEventListener('progress', (e) => {
                             if (e.lengthComputable) {
@@ -263,6 +316,11 @@ export class Uploader {
                         });
                         
                         xhr.addEventListener('load', () => {
+                            if (uploadProcess.cancelled) {
+                                completedFiles++;
+                                failedFiles++;
+                                return fileReject(new Error('Upload cancelled'));
+                            }
                             completedFiles++;
                             
                             if (xhr.status >= 200 && xhr.status < 300) {
@@ -286,13 +344,19 @@ export class Uploader {
                         xhr.addEventListener('error', () => {
                             completedFiles++;
                             failedFiles++;
-                            fileResolve();
+                            fileReject(new Error('Upload error'));
                         });
                         
                         xhr.addEventListener('timeout', () => {
                             completedFiles++;
                             failedFiles++;
-                            fileResolve();
+                            fileReject(new Error('Upload timeout'));
+                        });
+
+                        xhr.addEventListener('abort', () => {
+                            completedFiles++;
+                            failedFiles++;
+                            fileReject(new Error('Upload aborted'));
                         });
                         
                         xhr.open('POST', '/api/files/upload');
@@ -304,12 +368,18 @@ export class Uploader {
             };
             
             const processAllChunks = async () => {
+                if (uploadProcess.cancelled) {
+                    return resolve({ successful: 0, failed: batchFiles.length });
+                }
+
                 const chunks = [];
                 for (let i = 0; i < batchFiles.length; i += CONCURRENT_UPLOADS) {
                     chunks.push(batchFiles.slice(i, i + CONCURRENT_UPLOADS));
                 }
                 
                 for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+                    if (uploadProcess.cancelled) break;
+
                     const chunk = chunks[chunkIndex];
                     
                     this.app.progressManager.safeUpdateProgress({
@@ -327,6 +397,10 @@ export class Uploader {
                     }
                 }
                 
+                if (uploadProcess.cancelled) {
+                    return resolve({ successful: successfulFiles, failed: batchFiles.length - successfulFiles });
+                }
+
                 this.app.progressManager.safeUpdateProgress({
                     currentFile: `Batch ${batchNumber} completed`,
                     percentage: (batchNumber / totalBatches) * 90,
@@ -341,11 +415,11 @@ export class Uploader {
                 });
             };
             
-            processAllChunks().catch(() => {
-                resolve({
-                    successful: successfulFiles,
-                    failed: batchFiles.length - successfulFiles,
-                });
+            processAllChunks().catch((error) => {
+                if (!uploadProcess.cancelled) {
+                    console.error('An error occurred during upload:', error);
+                }
+                reject(error);
             });
         });
     }
