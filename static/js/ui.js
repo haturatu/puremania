@@ -19,6 +19,19 @@ export class UIManager {
         const isNewFolder = currentPath !== this.previousPath;
         this.previousPath = currentPath;
 
+        // 新しいフォルダに移動したときだけデフォルトソート順を評価する
+        if (isNewFolder) {
+            const musicFileCount = files.filter(file => file.mime_type && file.mime_type.startsWith('audio/')).length;
+            if (musicFileCount >= 10) {
+                this.sortState.field = 'name';
+                this.sortState.direction = 'asc';
+            } else {
+                // デフォルトのソート順に戻す
+                this.sortState.field = 'type';
+                this.sortState.direction = 'desc';
+            }
+        }
+
         container.innerHTML = '';
 
         this.renderToolbar(container);
