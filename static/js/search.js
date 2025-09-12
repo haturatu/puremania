@@ -973,16 +973,16 @@ export class SearchHandler {
         const thead = document.createElement('thead');
         thead.innerHTML = `
             <tr>
-                <th class="sortable ${this.sortField === 'name' ? this.sortDirection : ''}">
+                <th class="sortable ${this.sortField === 'name' ? this.sortDirection : ''}" data-sort="name">
                     Name ${this.sortField === 'name' ? (this.sortDirection === 'asc' ? '↑' : '↓') : ''}
                 </th>
-                <th class="sortable ${this.sortField === 'size' ? this.sortDirection : ''}">
+                <th class="sortable ${this.sortField === 'size' ? this.sortDirection : ''}" data-sort="size">
                     Size ${this.sortField === 'size' ? (this.sortDirection === 'asc' ? '↑' : '↓') : ''}
                 </th>
-                <th class="sortable ${this.sortField === 'modified' ? this.sortDirection : ''}">
+                <th class="sortable ${this.sortField === 'modified' ? this.sortDirection : ''}" data-sort="modified">
                     Modified ${this.sortField === 'modified' ? (this.sortDirection === 'asc' ? '↑' : '↓') : ''}
                 </th>
-                <th class="sortable ${this.sortField === 'type' ? this.sortDirection : ''}">
+                <th class="sortable ${this.sortField === 'type' ? this.sortDirection : ''}" data-sort="type">
                     Type ${this.sortField === 'type' ? (this.sortDirection === 'asc' ? '↑' : '↓') : ''}
                 </th>
                 <th>Actions</th>
