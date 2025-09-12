@@ -27,8 +27,8 @@ func Load() *Config {
 
 	config := &Config{
 		StorageDir:  getEnv("STORAGE_DIR", ""),
-		Port:        getEnvAsInt("PORT", 8080),
-		MaxFileSize: getEnvAsInt64("MAX_FILE_SIZE_MB", 100),
+		Port:        getEnvAsInt("PORT", 8844),
+		MaxFileSize: getEnvAsInt64("MAX_FILE_SIZE_MB", 10000), // デフォルト10GB
 		ZipTimeout:  getEnvAsInt("ZIP_TIMEOUT", 300),      // デフォルト5分
 		MaxZipSize:  getEnvAsInt64("MAX_ZIP_SIZE_MB", 1024), // デフォルト1GB
 	}

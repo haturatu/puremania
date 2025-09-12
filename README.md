@@ -5,6 +5,7 @@
 - [Pure Mania](#pure-mania)
 - [Why did I make this?](#why-did-i-make-this)
   - [Features](#features)
+  - [Recent Changes (2025-09-12 - 2025-09-13)](#recent-changes-2025-09-12---2025-09-13)
   - [Getting Started](#getting-started)
     - [IP Address Firewall Configuration](#ip-address-firewall-configuration)
     - [Prerequisites](#prerequisites)
@@ -58,7 +59,20 @@ That’s enough of my rambling.
 - **No Database Required:** Pure Mania uses the filesystem directly, eliminating the need for a database.
 - **Media Preview**: Preview images and play audio/video files directly in the browser.
 - **Web Editor**: Edit text files directly within the web interface.
-  
+
+## Recent Changes (2025-09-12 - 2025-09-13)
+
+Here are some of the notable changes from the last couple of days:
+
+- `f41e408` - fix: Enhanced client-side caching for directory views to prevent unnecessary re-renders.
+- `b0f4ea7` - feat: Added the ability to switch between and display specific directories in the sidebar.
+- `2112ebd` - fix: Resolved an issue where the view would not update when switching between different display modes (grid, list, masonry).
+- `0f9ecb5` - feat: Implemented a mechanism (`jsload.sh`) to easily switch between loading JavaScript libraries from a remote CDN and a local bundle.
+- `dfc6d90` - feat: Added Vim mode to the web editor for improved text editing capabilities.
+- `6a071d5` - feat: Integrated CodeMirror 6, a modern and extensible code editor component.
+- `d4ae797` - refactor: Reorganized and separated CSS files into a more modular structure for better maintainability.
+- `a4ccc6a` - refactor: Converted JavaScript files to use ES modules, improving code organization and dependency management.
+
 ## Getting Started  
   
 Follow these instructions to get a copy of the project up and running on your local machine.  
@@ -103,7 +117,7 @@ In general, as long as proper user and permission management is in place, any fi
     ```  
   
 2.  **Edit the `.env` file:**  
-    Open the `.env` file and customize the settings to match your environment. See the [Configuration](#Configuration) section for more details.  
+    Open the `.env` file and customize the settings to match your environment. See the [Configuration](#Configuration-1) section for more details.  
   
 ### Running the Application  
   
@@ -148,18 +162,19 @@ Once the server is running, open your web browser and navigate to:
   
 *(The port may be different if you changed it in your `.env` file.)*  
   
-## Configuration  
+## Configuration
   
 The following environment variables can be configured in the `.env` file:  
   
-| Variable           | Description                                     | Default              |  
-| ------------------ | ----------------------------------------------- | -------------------- |  
-| `STORAGE_DIR`      | The main storage directory for your files.      | `/home/$USER`        |  
-| `MOUNT_DIRS`       | Comma-separated list of additional directories. | (empty)              |  
-| `MAX_FILE_SIZE_MB` | Maximum file size for uploads in megabytes.     | `10000`              |  
-| `PORT`             | The port on which the server will run.          | `8844`               |  
-| `ZIP_TIMEOUT`      | Timeout in seconds for ZIP file creation.       | `300`                |  
-| `MAX_ZIP_SIZE`     | Maximum size in MB for files to be zipped.      | `1024`               |  
+| Variable           | Description                                                                                                                                            | Default              |  
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------- |  
+| `STORAGE_DIR`      | The main storage directory for your files.                                                                                                             | `/home/$USER`        |  
+| `MOUNT_DIRS`       | Comma-separated list of additional directories to mount.                                                                                               | (empty)              |  
+| `MAX_FILE_SIZE_MB` | Maximum file size for uploads in megabytes.                                                                                                            | `10000`              |  
+| `PORT`             | The port on which the server will run.                                                                                                                 | `8844`               |  
+| `ZIP_TIMEOUT`      | Timeout in seconds for ZIP file creation.                                                                                                              | `300`                |  
+| `MAX_ZIP_SIZE`     | Maximum size in MB for files to be zipped.                                                                                                             | `1024`               |
+| `SPECIFIC_DIRS`    | Comma-separated list of full paths to show in the sidebar. If empty, default directories (Documents, Images, etc. in the user's home) will be used. | (empty)              |
   
 ### Switching Between Remote and Local JavaScript Libraries
 
