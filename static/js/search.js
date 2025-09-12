@@ -263,13 +263,13 @@ export class SearchHandler {
                 targetPath = '/';
             } else if (path === '..') {
                 // 親ディレクトリに移動
-                targetPath = this.getParentPath(this.fileManager.currentPath);
+                targetPath = this.getParentPath(this.fileManager.router.getCurrentPath());
             } else if (path.startsWith('/')) {
                 // 絶対パス
                 targetPath = path;
             } else {
                 // 相対パス
-                targetPath = this.joinPaths(this.fileManager.currentPath, path);
+                targetPath = this.joinPaths(this.fileManager.router.getCurrentPath(), path);
             }
             
             // パスの正規化
@@ -295,20 +295,28 @@ export class SearchHandler {
             const result = await response.json();
             
             if (result.success) {
-                // フォルダが存在する場合、移動
-                await this.fileManager.loadFiles(path);
-                
-                // 検索入力をクリア
+                // 検索関連の状態をリセット
+                this.isInSearchMode = false;
+                this.lastSearchResults = null;
+                this.lastSearchTerm = '';
+                this.currentPage = 0;
+
                 const searchInput = document.querySelector('.search-input');
                 if (searchInput) {
                     searchInput.value = '';
                 }
-                
                 this.isCdMode = false;
                 this.hideCompletions();
+
+                if (this.originalViewMode) {
+                    this.fileManager.ui.viewMode = this.originalViewMode;
+                    this.originalViewMode = null;
+                }
                 
-                this.exitSearchMode();
-                
+                // ルーターを使ってナビゲーション
+                this.fileManager.api.directoryEtags.delete(path);
+                this.fileManager.router.navigate(path);
+
             } else {
                 throw new Error(result.message || 'Directory not found');
             }
@@ -341,7 +349,7 @@ export class SearchHandler {
                 prefix = partialPath.substring(lastSlashIndex + 1);
             } else {
                 // 相対パス
-                searchPath = this.fileManager.currentPath;
+                searchPath = this.fileManager.router.getCurrentPath();
                 prefix = partialPath;
             }
             
@@ -705,7 +713,7 @@ export class SearchHandler {
                 },
                 body: JSON.stringify({
                     term: searchTerm,
-                    path: this.fileManager ? this.fileManager.currentPath : '/',
+                    path: this.fileManager ? this.fileManager.router.getCurrentPath() : '/',
                     useRegex: this.searchOptions.useRegex,
                     caseSensitive: this.searchOptions.caseSensitive,
                     scope: this.searchOptions.scope,
@@ -754,7 +762,7 @@ export class SearchHandler {
                 },
                 body: JSON.stringify({
                     term: this.lastSearchTerm,
-                    path: this.fileManager ? this.fileManager.currentPath : '/',
+                    path: this.fileManager ? this.fileManager.router.getCurrentPath() : '/',
                     useRegex: this.searchOptions.useRegex,
                     caseSensitive: this.searchOptions.caseSensitive,
                     scope: this.searchOptions.scope,
@@ -905,7 +913,7 @@ export class SearchHandler {
         }
         
         // 通常のファイル一覧を再読み込み
-        this.fileManager.loadFiles(this.fileManager.currentPath);
+        this.fileManager.loadFiles(this.fileManager.router.getCurrentPath());
     }
 
     // フォルダに移動し、検索モードを終了
@@ -936,7 +944,7 @@ export class SearchHandler {
                 }
                 
                 // フォルダに移動
-                this.fileManager.navigateToPath(path);
+                this.fileManager.router.navigate(path);
 
             } else {
                 throw new Error(result.message || 'Directory not found');

@@ -1,20 +1,56 @@
 export class ApiClient {
     constructor(app) {
         this.app = app;
+        this.directoryEtags = new Map(); // ETagを保存するマップ
+        this.directoryCache = new Map(); // ディレクトリの内容をキャッシュするマップ
     }
 
     async loadFiles(path) {
         try {
             this.app.ui.showLoading();
             
-            const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+            const headers = {};
+            const etag = this.directoryEtags.get(path);
+            if (etag) {
+                headers['If-None-Match'] = etag;
+            }
+
+            const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`, { headers });
+
+            if (response.status === 304) {
+                console.log(`Content for ${path} not modified. Using cache.`);
+                if (this.directoryCache.has(path)) {
+                    const cachedData = this.directoryCache.get(path);
+                    this.app.ui.displayFiles(cachedData);
+                    this.app.ui.updateBreadcrumb(path);
+                    this.app.ui.updateSidebarActiveState(path);
+                    this.app.router.updatePath(path);
+                    this.app.ui.updateToolbar();
+                }
+                return;
+            }
+
+            if (!response.ok) {
+                const errorResult = await response.json().catch(() => null);
+                const message = errorResult?.message || `Failed to load files (status: ${response.status})`;
+                this.app.ui.showToast('Error', message, 'error');
+                this.app.ui.displayFiles([]);
+                this.app.router.updatePath(path);
+                return;
+            }
+            
+            const newEtag = response.headers.get('ETag');
+            if (newEtag) {
+                this.directoryEtags.set(path, newEtag);
+            }
+
             const result = await response.json();
             
             if (result.success) {
+                this.directoryCache.set(path, result.data); // キャッシュに保存
                 this.app.ui.displayFiles(result.data);
                 this.app.ui.updateBreadcrumb(path);
                 this.app.ui.updateSidebarActiveState(path);
-                
                 this.app.router.updatePath(path);
                 this.app.ui.updateToolbar();
             } else {
@@ -56,7 +92,9 @@ export class ApiClient {
             
             if (result.success) {
                 this.app.ui.showToast('Success', 'File renamed successfully', 'success');
-                this.app.loadFiles(this.app.router.getCurrentPath());
+                const currentPath = this.app.router.getCurrentPath();
+                this.directoryEtags.delete(currentPath);
+                this.app.loadFiles(currentPath);
             } else {
                 this.app.ui.showToast('Error', result.message, 'error');
             }
@@ -108,7 +146,10 @@ export class ApiClient {
             
             if (result.success) {
                 this.app.ui.showToast('Success', `Moved "${fileName}" successfully`, 'success');
-                this.app.loadFiles(this.app.router.getCurrentPath());
+                const currentPath = this.app.router.getCurrentPath();
+                this.directoryEtags.delete(this.app.util.getParentPath(sourcePath));
+                this.directoryEtags.delete(targetDir);
+                this.app.loadFiles(currentPath);
             } else {
                 this.app.ui.showToast('Error', result.message, 'error');
             }
@@ -191,7 +232,10 @@ export class ApiClient {
                 } else {
                     this.app.ui.showToast('Success', message, 'success');
                 }
-                this.app.loadFiles(this.app.router.getCurrentPath());
+                const currentPath = this.app.router.getCurrentPath();
+                this.directoryEtags.delete(currentPath);
+                this.directoryEtags.delete(targetDir);
+                this.app.loadFiles(currentPath);
                 this.app.clearSelection();
             } else {
                 this.app.ui.showToast('Error', 'All items failed to move', 'error');
@@ -224,7 +268,9 @@ export class ApiClient {
             
             if (result.success) {
                 this.app.ui.showToast('Success', 'Folder created successfully', 'success');
-                this.app.loadFiles(this.app.router.getCurrentPath());
+                const currentPath = this.app.router.getCurrentPath();
+                this.directoryEtags.delete(currentPath);
+                this.app.loadFiles(currentPath);
             } else {
                 this.app.ui.showToast('Error', result.message, 'error');
             }
@@ -254,7 +300,9 @@ export class ApiClient {
             
             if (result.success) {
                 this.app.ui.showToast('Success', 'File created successfully', 'success');
-                this.app.loadFiles(this.app.router.getCurrentPath());
+                const currentPath = this.app.router.getCurrentPath();
+                this.directoryEtags.delete(currentPath);
+                this.app.loadFiles(currentPath);
                 
                 if (this.app.util.isEditableFile(result.data.path)) {
                     setTimeout(() => {
@@ -287,7 +335,9 @@ export class ApiClient {
             if (result.success) {
                 this.app.ui.showToast('Success', 'File deleted successfully', 'success');
                 this.app.clearSelection();
-                this.app.loadFiles(this.app.router.getCurrentPath());
+                const currentPath = this.app.router.getCurrentPath();
+                this.directoryEtags.delete(currentPath);
+                this.app.loadFiles(currentPath);
             } else {
                 this.app.ui.showToast('Error', result.message, 'error');
             }
@@ -315,7 +365,9 @@ export class ApiClient {
             if (result.success) {
                 this.app.ui.showToast('Success', 'Files deleted successfully', 'success');
                 this.app.clearSelection();
-                this.app.loadFiles(this.app.router.getCurrentPath());
+                const currentPath = this.app.router.getCurrentPath();
+                this.directoryEtags.delete(currentPath);
+                this.app.loadFiles(currentPath);
             } else {
                 this.app.ui.showToast('Error', result.message, 'error');
             }

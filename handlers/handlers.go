@@ -284,6 +284,53 @@ func NewHandler(config *config.Config) *Handler {
 	}
 }
 
+func (h *Handler) generateDirectoryStateKey(path string) (string, error) {
+	physicalPath, err := h.convertToPhysicalPath(path)
+	if err != nil {
+		return "", err
+	}
+
+	entries, err := os.ReadDir(physicalPath)
+	if err != nil {
+		// ディレクトリが存在しない場合も空のキーを返すことで、キャッシュミスを誘発
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+
+	// ファイル名でソートして一貫性を保つ
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name() < entries[j].Name()
+	})
+
+	var stateBuilder strings.Builder
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(&stateBuilder, "%s:%d:%d;", info.Name(), info.Size(), info.ModTime().UnixNano())
+	}
+
+	// ルートディレクトリの場合、マウントポイントの情報もキーに含める
+	if path == "/" {
+		// MountDirsもソートして一貫性を保つ
+		sortedMounts := make([]string, len(h.config.MountDirs))
+		copy(sortedMounts, h.config.MountDirs)
+		sort.Strings(sortedMounts)
+
+		for _, mountDir := range sortedMounts {
+			if info, err := os.Stat(mountDir); err == nil {
+				fmt.Fprintf(&stateBuilder, "mount_%s:%d:%d;", info.Name(), info.Size(), info.ModTime().UnixNano())
+			}
+		}
+	}
+
+	hash := md5.Sum([]byte(stateBuilder.String()))
+	return hex.EncodeToString(hash[:]), nil
+}
+
 // 検索条件のハッシュ化でキー生成
 func (h *Handler) generateSearchCacheKey(term, path, scope string, useRegex, caseSensitive bool, maxResults int) string {
 	data := fmt.Sprintf("search:%s:%s:%s:%t:%t:%d", term, path, scope, useRegex, caseSensitive, maxResults)
@@ -363,15 +410,33 @@ func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
 	return filepath.Join(h.config.StorageDir, strings.TrimPrefix(virtualPath, "/")), nil
 }
 
-// ListFiles - 並列処理とTTLキャッシュ使用
+// ListFiles - 並列処理とTTLキャッシュ、ETagによる差分検知を使用
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	if path == "" {
 		path = "/"
 	}
 
-	// キャッシュチェック
-	cacheKey := "list:" + path
+	// 1. 現在のディレクトリ状態からETagを生成
+	currentStateKey, err := h.generateDirectoryStateKey(path)
+	if err != nil {
+		// ETag生成に失敗した場合は、キャッシュを使わずに通常処理
+		h.serveFreshFileList(w, path, "") // ETagなしで提供
+		return
+	}
+
+	// 2. クライアントのETagと比較
+	clientEtag := r.Header.Get("If-None-Match")
+	if clientEtag != "" && clientEtag == currentStateKey {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	// 3. ETagが不一致、または存在しない場合 -> 新しいレスポンスを生成
+	w.Header().Set("ETag", currentStateKey)
+
+	// 4. ETagに基づいたキャッシュを確認
+	cacheKey := "list:" + currentStateKey // キーはETagだけで十分
 	if cached, found := h.cache.Get(cacheKey); found {
 		if fileInfos, ok := cached.([]models.FileInfo); ok {
 			h.respondSuccess(w, fileInfos)
@@ -379,30 +444,30 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 並列処理でファイルリストを取得
-	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
-		fileInfos, err := h.getFileList(path)
-		if err != nil {
-			return err
-		}
-		return fileInfos
-	})
+	// 5. キャッシュがない場合は、新しいファイルリストを生成
+	h.serveFreshFileList(w, path, currentStateKey)
+}
 
-	result := <-resultChan
-	switch res := result.(type) {
-	case []models.FileInfo:
-		// 結果をキャッシュ（TTL付き）
-		h.cache.Set(cacheKey, res, int64(len(res)*200), CacheTTL)
-		h.respondSuccess(w, res)
-	case error:
-		if os.IsNotExist(res) {
+// serveFreshFileList は新しいファイルリストを生成し、必要に応じてキャッシュに保存する
+func (h *Handler) serveFreshFileList(w http.ResponseWriter, path string, etag string) {
+	fileInfos, err := h.getFileList(path)
+	if err != nil {
+		if os.IsNotExist(err) {
 			h.respondError(w, "Directory not found", http.StatusNotFound)
 		} else {
 			h.respondError(w, "Cannot read directory", http.StatusInternalServerError)
 		}
-	default:
-		h.respondError(w, "Unexpected error", http.StatusInternalServerError)
+		return
 	}
+
+	// 結果をキャッシュ（ETagがあれば）
+	if etag != "" {
+		cacheKey := "list:" + etag
+		// size of fileInfos is roughly len(fileInfos) * 200 bytes
+		h.cache.Set(cacheKey, fileInfos, int64(len(fileInfos)*200), CacheTTL)
+	}
+
+	h.respondSuccess(w, fileInfos)
 }
 
 func (h *Handler) getFileList(path string) ([]models.FileInfo, error) {
