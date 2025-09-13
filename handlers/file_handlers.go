@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"puremania/models"
+	"puremania/types"
 	"puremania/utils"
 	"strings"
 	"sync"
@@ -65,7 +65,7 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	// 4. ETagに基づいたキャッシュを確認
 	cacheKey := "list:" + currentStateKey // キーはETagだけで十分
 	if cached, found := h.cache.Get(cacheKey); found {
-		if fileInfos, ok := cached.([]models.FileInfo); ok {
+		if fileInfos, ok := cached.([]types.FileInfo); ok {
 			h.respondSuccess(w, fileInfos)
 			return
 		}
@@ -97,8 +97,8 @@ func (h *Handler) serveFreshFileList(w http.ResponseWriter, path string, etag st
 	h.respondSuccess(w, fileInfos)
 }
 
-func (h *Handler) getFileList(path string) ([]models.FileInfo, error) {
-	var fileInfos []models.FileInfo
+func (h *Handler) getFileList(path string) ([]types.FileInfo, error) {
+	var fileInfos []types.FileInfo
 
 	// 通常のパス処理 (convertToPhysicalPathがすべてを処理する)
 	fullPath, err := h.convertToPhysicalPath(path)
@@ -116,7 +116,7 @@ func (h *Handler) getFileList(path string) ([]models.FileInfo, error) {
 		for _, mountDir := range h.config.GetMountDirs() {
 			if info, err := os.Stat(mountDir); err == nil {
 				virtualPath := h.convertToVirtualPath(mountDir)
-				fileInfos = append(fileInfos, models.FileInfo{
+				fileInfos = append(fileInfos, types.FileInfo{
 					Name:    filepath.Base(mountDir),
 					Path:    virtualPath,
 					Size:    info.Size(),
@@ -137,8 +137,8 @@ func (h *Handler) getFileList(path string) ([]models.FileInfo, error) {
 	}
 }
 
-func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string) []models.FileInfo {
-	var fileInfos []models.FileInfo
+func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string) []types.FileInfo {
+	var fileInfos []types.FileInfo
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -181,7 +181,7 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 				}
 			}
 
-			fileInfo := models.FileInfo{
+			fileInfo := types.FileInfo{
 				Name:       entry.Name(),
 				Path:       virtualPath,
 				Size:       size,
@@ -202,10 +202,7 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 	return fileInfos
 }
 
-type uploadResult struct {
-	path    string
-	success bool
-}
+
 
 // UploadFile - 並列処理でファイルアップロード
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +251,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 並列アップロード処理
-	resultChan := make(chan uploadResult, len(files))
+	resultChan := make(chan types.UploadResult, len(files))
 	var wg sync.WaitGroup
 
 	for i, fileHeader := range files {
@@ -265,7 +262,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 			file, err := fileHeader.Open()
 			if err != nil {
-				resultChan <- uploadResult{path: fileHeader.Filename, success: false}
+				resultChan <- types.UploadResult{Path: fileHeader.Filename, Success: false}
 				return
 			}
 			defer file.Close()
@@ -276,14 +273,14 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			targetDir := filepath.Dir(targetPath)
 
 			if err := os.MkdirAll(targetDir, 0755); err != nil {
-				resultChan <- uploadResult{path: relativePath, success: false}
+				resultChan <- types.UploadResult{Path: relativePath, Success: false}
 				return
 			}
 
 			// ファイル作成
 			dst, err := os.Create(targetPath)
 			if err != nil {
-				resultChan <- uploadResult{path: relativePath, success: false}
+				resultChan <- types.UploadResult{Path: relativePath, Success: false}
 				return
 			}
 			defer func() {
@@ -312,12 +309,12 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			if saveErr != nil {
 				// エラー時は作成したファイルを削除
 				os.Remove(targetPath)
-				resultChan <- uploadResult{path: relativePath, success: false}
+				resultChan <- types.UploadResult{Path: relativePath, Success: false}
 				return
 			}
 
 			virtualPath := h.convertToVirtualPath(targetPath)
-			resultChan <- uploadResult{path: virtualPath, success: true}
+			resultChan <- types.UploadResult{Path: virtualPath, Success: true}
 
 			// キャッシュクリア
 			h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(targetDir)))
@@ -335,10 +332,10 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	failedFiles := make([]string, 0)
 
 	for result := range resultChan {
-		if result.success {
-			uploadedFiles = append(uploadedFiles, result.path)
+		if result.Success {
+			uploadedFiles = append(uploadedFiles, result.Path)
 		} else {
-			failedFiles = append(failedFiles, result.path)
+			failedFiles = append(failedFiles, result.Path)
 		}
 	}
 
@@ -474,7 +471,7 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 
 // DownloadZip - 並列処理でZIPストリーミング配信
 func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
-	var req models.BatchPathsRequest
+	var req types.BatchPathsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
@@ -637,7 +634,7 @@ func (h *Handler) addFileToZip(zipWriter *zip.Writer, filePath, zipPath string, 
 }
 
 func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
-	var req models.SaveFileRequest
+	var req types.SaveFileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
@@ -674,7 +671,7 @@ func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
-	var req models.BatchPathsRequest
+	var req types.BatchPathsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
@@ -723,7 +720,7 @@ func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateDirectory(w http.ResponseWriter, r *http.Request) {
-	var req models.CreateDirectoryRequest
+	var req types.CreateDirectoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return

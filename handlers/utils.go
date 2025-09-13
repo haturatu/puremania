@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"puremania/models"
+	"puremania/types"
 	"sort"
 	"strings"
 )
@@ -88,7 +88,7 @@ func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
 func (h *Handler) respondSuccess(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(models.APIResponse{
+	json.NewEncoder(w).Encode(types.APIResponse{
 		Success: true,
 		Data:    data,
 	})
@@ -97,7 +97,7 @@ func (h *Handler) respondSuccess(w http.ResponseWriter, data interface{}) {
 func (h *Handler) respondError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(models.APIResponse{
+	json.NewEncoder(w).Encode(types.APIResponse{
 		Success: false,
 		Message: message,
 	})

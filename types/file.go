@@ -1,4 +1,4 @@
-package models
+package types
 
 type FileInfo struct {
 	Name       string `json:"name"`
@@ -9,12 +9,6 @@ type FileInfo struct {
 	MimeType   string `json:"mime_type"`
 	IsEditable bool   `json:"is_editable"`
 	IsMount    bool   `json:"is_mount"`
-}
-
-type APIResponse struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
 }
 
 type CreateDirectoryRequest struct {
@@ -29,4 +23,10 @@ type SaveFileRequest struct {
 
 type BatchPathsRequest struct {
 	Paths []string `json:"paths"`
+}
+
+// UploadResult はファイルアップロードの結果を表します。
+type UploadResult struct {
+	Path    string
+	Success bool
 }
