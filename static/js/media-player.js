@@ -128,7 +128,8 @@ export class MediaPlayer {
                 </button>
                 <button class="close-btn" title="Close">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                        <path fill-rule="evenodd" d="M13.854 2.146a.5.5 0 0 1 0 .708l-11 11a.5.5 0 0 1-.708-.708l11-11a.5.5 0 0 1 .708 0Z"/>
+                        <path fill-rule="evenodd" d="M2.146 2.146a.5.5 0 0 0 0 .708l11 11a.5.5 0 0 0 .708-.708l-11-11a.5.5 0 0 0-.708 0Z"/>
                     </svg>
                 </button>
             </div>
@@ -151,7 +152,8 @@ export class MediaPlayer {
                     </button>
                     <button class="close-btn" title="Close">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                            <path fill-rule="evenodd" d="M13.854 2.146a.5.5 0 0 1 0 .708l-11 11a.5.5 0 0 1-.708-.708l11-11a.5.5 0 0 1 .708 0Z"/>
+                        <path fill-rule="evenodd" d="M2.146 2.146a.5.5 0 0 0 0 .708l11 11a.5.5 0 0 0 .708-.708l-11-11a.5.5 0 0 0-.708 0Z"/>
                         </svg>
                     </button>
                 </div>
@@ -171,7 +173,7 @@ export class MediaPlayer {
     }
    
     bindEvents() {
-        this.playerElement.querySelector('.play-pause').addEventListener('click', () => this.togglePlayPause());
+        this.playerElement.querySelectorAll('.play-pause').forEach(btn => btn.addEventListener('click', () => this.togglePlayPause()));
         this.playerElement.querySelector('.prev').addEventListener('click', () => this.playPrevious());
         this.playerElement.querySelector('.next').addEventListener('click', () => this.playNext());
         this.playerElement.querySelector('.mode-btn').addEventListener('click', () => this.toggleMainMode());
@@ -186,7 +188,7 @@ export class MediaPlayer {
         });
         this.playerElement.querySelector('.volume-btn').addEventListener('click', () => this.toggleMute());
         this.playerElement.querySelectorAll('.minimize-btn').forEach(btn => btn.addEventListener('click', () => this.toggleMinimize()));
-        this.playerElement.querySelector('.close-btn').addEventListener('click', () => { this.stop(); this.hide(); });
+        this.playerElement.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', () => { this.stop(); this.hide(); }));
         
         this.audioElement.addEventListener('timeupdate', () => this.updateProgress());
         this.audioElement.addEventListener('ended', () => this.handleMediaEnded());
