@@ -226,7 +226,7 @@ Vim mode is enabled by default on non-mobile devices to provide a more powerful 
 
 Your preference for Vim mode is automatically saved in your browser's local storage and will be remembered across sessions.
 
-**Vim Mode Commands:**
+**Vim Mode Commands example:**
 - `:w` - Save the current file.
 - `:q` - Close the editor.
 - `:wq` - Save the file and close the editor.
