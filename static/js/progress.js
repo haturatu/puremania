@@ -3,6 +3,10 @@ export class ProgressManager {
         this.progressOverlay = null;
         this.currentUpload = null;
         this.isCompleted = false;
+        this.startTime = null;
+        this.timerInterval = null;
+        this.lastUpdateTime = 0;
+        this.updateThrottle = 250; // ms
         this.init();
     }
 
@@ -28,6 +32,7 @@ export class ProgressManager {
                 <div class="progress-details">
                     <span class="progress-percentage">0%</span>
                     <span class="progress-stats">0 files processed</span>
+                    <span class="progress-time">Elapsed: 0s</span>
                 </div>
                 <div class="progress-status">Initializing...</div>
             </div>
@@ -36,7 +41,6 @@ export class ProgressManager {
         document.body.appendChild(overlay);
         this.progressOverlay = overlay;
 
-        // Only allow closing when explicitly shown
         overlay.querySelector('.progress-close').addEventListener('click', () => {
             if (this.isCompleted || confirm('Cancel upload? This will stop the current upload process.')) {
                 this.hide();
@@ -47,9 +51,35 @@ export class ProgressManager {
         });
     }
 
+    startTimer() {
+        this.startTime = Date.now();
+        this.timerInterval = setInterval(() => {
+            if (!this.isCompleted) {
+                const elapsedTime = Math.round((Date.now() - this.startTime) / 1000);
+                const timeElement = this.progressOverlay.querySelector('.progress-time');
+                if (timeElement) {
+                    timeElement.textContent = `Elapsed: ${elapsedTime}s`;
+                }
+            }
+        }, 1000);
+    }
+
+    stopTimer() {
+        clearInterval(this.timerInterval);
+        this.timerInterval = null;
+        if (this.startTime) {
+            const elapsedTime = Math.round((Date.now() - this.startTime) / 1000);
+            const timeElement = this.progressOverlay.querySelector('.progress-time');
+            if (timeElement) {
+                timeElement.textContent = `Completed in: ${elapsedTime}s`;
+            }
+        }
+    }
+
     showError(message) {
         if (!this.progressOverlay) return;
 
+        this.stopTimer();
         const statusElement = this.progressOverlay.querySelector('.progress-status');
         const modal = this.progressOverlay.querySelector('.progress-modal');
         const closeBtn = this.progressOverlay.querySelector('.progress-close');
@@ -96,7 +126,6 @@ export class ProgressManager {
         this.isCompleted = false;
     }
 
-    // Core update method - handles the actual DOM updates
     updateProgress(progress) {
         if (!this.progressOverlay) return;
 
@@ -108,7 +137,6 @@ export class ProgressManager {
             status = ''
         } = progress;
 
-        // Validate and sanitize values
         const safePercentage = Math.max(0, Math.min(100, percentage));
         const safeProcessed = Math.max(0, Math.min(total, processed));
         const safeTotal = Math.max(0, total);
@@ -118,7 +146,6 @@ export class ProgressManager {
             `${safeProcessed}/${safeTotal} files` :
             `${safeProcessed} files processed`;
 
-        // Update DOM elements
         const elements = {
             current: this.progressOverlay.querySelector('.progress-current'),
             barFill: this.progressOverlay.querySelector('.progress-bar-fill'),
@@ -133,19 +160,25 @@ export class ProgressManager {
         if (elements.stats) elements.stats.textContent = statsText;
         if (elements.status && status) elements.status.textContent = status;
 
-        // Mark as completed when at 100%
         if (safePercentage >= 100) {
             this.isCompleted = true;
+            this.stopTimer();
         }
     }
 
-    // Safe wrapper method - handles errors gracefully
     safeUpdateProgress(progress) {
+        const now = Date.now();
+        const isFinalUpdate = progress.percentage >= 100;
+
+        if (!isFinalUpdate && now - this.lastUpdateTime < this.updateThrottle) {
+            return;
+        }
+        this.lastUpdateTime = now;
+
         try {
             this.updateProgress(progress);
         } catch (error) {
             console.error('Error updating progress:', error);
-            // Fallback: try to at least update the status
             try {
                 const statusElement = this.progressOverlay?.querySelector('.progress-status');
                 if (statusElement) {
@@ -165,6 +198,7 @@ export class ProgressManager {
             this.progressOverlay.style.display = 'flex';
             this.resetError();
             this.resetProgress();
+            this.startTimer();
         }
     }
 
@@ -174,9 +208,12 @@ export class ProgressManager {
         }
         this.currentUpload = null;
         this.isCompleted = false;
+        this.stopTimer();
+        this.startTime = null;
     }
 
     resetProgress() {
+        this.isCompleted = false;
         this.safeUpdateProgress({
             currentFile: 'Preparing files...',
             percentage: 0,
@@ -184,6 +221,10 @@ export class ProgressManager {
             total: 0,
             status: 'Initializing...'
         });
+        const timeElement = this.progressOverlay.querySelector('.progress-time');
+        if (timeElement) {
+            timeElement.textContent = 'Elapsed: 0s';
+        }
     }
 
     setCurrentUpload(upload) {
