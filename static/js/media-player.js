@@ -14,10 +14,11 @@ export class MediaPlayer {
         this.modalVideoElement = null;
         this.previousVolume = this.volume;
 
-        // 再生モード: repeat ('off', 'playlist', 'one'), shuffle (boolean)
+        // 再生モード
         this.playbackMode = {
-            repeat: 'off',
-            shuffle: false
+            repeat: 'off', // 'off', 'playlist', 'one'
+            shuffle: false,
+            smartShuffle: false
         };
 
         this.currentDirectory = '';
@@ -83,6 +84,11 @@ export class MediaPlayer {
                         <svg class="repeat-one" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: none;">
                             <path d="M11 4v1.466a.25.25 0 0 0 .41.192l2.36-1.966a.25.25 0 0 0 0-.384l-2.36-1.966a.25.25 0 0 0-.41.192V3H5a5 5 0 0 0-4.48 7.223.5.5 0 0 0 .896-.446A4 4 0 0 1 5 4h6Zm4.48 1.777a.5.5 0 0 0-.896.446A4 4 0 0 1 11 12H5.001v-1.466a.25.25 0 0 0-.41-.192l-2.36 1.966a.25.25 0 0 0 0 .384l2.36 1.966a.25.25 0 0 0 .41-.192V13H11a5 5 0 0 0 4.48-7.223Z"/>
                             <text x="8" y="11" font-size="6" text-anchor="middle" fill="currentColor">1</text>
+                        </svg>
+                    </button>
+                    <button class="control-btn smart-shuffle-btn" title="Smart Shuffle">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M9.5 2.672a.5.5 0 1 0 1 0V.843a.5.5 0 0 0-1 0v1.829Zm4.5.035A.5.5 0 0 0 13.293 2L12 3.293a.5.5 0 1 0 .707.707L14 3.707a.5.5 0 0 0 0-.707ZM7.293 4L8 3.293a.5.5 0 0 0-.707-.707L6.293 3a.5.5 0 0 0 0 .707.5.5 0 0 0 .707 0Zm-.195-2.344a.5.5 0 1 0 .707-.707L6.105.25a.5.5 0 0 0-.707.707l1.697 1.697ZM1.5 10.672a.5.5 0 1 0 1 0V8.843a.5.5 0 0 0-1 0v1.829Zm4.5.035A.5.5 0 0 0 5.293 10L4 11.293a.5.5 0 1 0 .707.707L6 11.707a.5.5 0 0 0 0-.707ZM11.293 12L12 11.293a.5.5 0 0 0-.707-.707L10.293 11a.5.5 0 0 0 0 .707.5.5 0 0 0 .707 0Zm-.195-2.344a.5.5 0 1 0 .707-.707L10.105 8.25a.5.5 0 0 0-.707.707l1.697 1.697ZM2.18 8.93a1.5 1.5 0 0 0 2.12 0l5.248-5.248a1.5 1.5 0 0 0-2.122-2.12L2.18 6.808a1.5 1.5 0 0 0 0 2.122Z"/>
                         </svg>
                     </button>
                 </div>
@@ -177,6 +183,7 @@ export class MediaPlayer {
         const nextBtn = this.playerElement.querySelector('.next');
         const repeatBtn = this.playerElement.querySelector('.repeat-btn');
         const shuffleBtn = this.playerElement.querySelector('.shuffle-btn');
+        const smartShuffleBtn = this.playerElement.querySelector('.smart-shuffle-btn');
         const progressBar = this.playerElement.querySelector('.progress-bar');
         const volumeSlider = this.playerElement.querySelector('.volume-slider');
         const volumeBtn = this.playerElement.querySelector('.volume-btn');
@@ -188,6 +195,7 @@ export class MediaPlayer {
         nextBtn.addEventListener('click', () => this.playNext());
         repeatBtn.addEventListener('click', () => this.toggleRepeatMode());
         shuffleBtn.addEventListener('click', () => this.toggleShuffleMode());
+        smartShuffleBtn.addEventListener('click', () => this.toggleSmartShuffleMode());
         
         progressBar.addEventListener('click', (e) => {
             const rect = progressBar.getBoundingClientRect();
@@ -234,7 +242,7 @@ export class MediaPlayer {
         });
         
         this.playlist = mediaFiles;
-        this.originalPlaylist = [...this.playlist]; // シャッフル用に元の順序を保存
+        this.originalPlaylist = [...this.playlist];
     }
 
     // --- Playback Controls ---
@@ -244,15 +252,9 @@ export class MediaPlayer {
         this.createPlaylistFromUI();
 
         const newIndex = this.playlist.findIndex(file => file.path === path);
-        if (newIndex !== -1) {
-            this.currentIndex = newIndex;
-        } else {
-            if (this.playlist.length > 0) {
-                this.currentIndex = 0;
-            } else {
-                return; // 再生できる曲がない
-            }
-        }
+        this.currentIndex = (newIndex !== -1) ? newIndex : 0;
+
+        if (this.playlist.length === 0) return;
         
         if (this.playbackMode.shuffle) {
             this.shufflePlaylist();
@@ -284,9 +286,7 @@ export class MediaPlayer {
         this.currentMedia = { type: 'audio', path: media.path };
 
         this.audioElement.src = `/api/files/download?path=${encodeURIComponent(media.path)}`;
-        this.audioElement.play().catch(error => {
-            console.error('Audio play error:', error);
-        });
+        this.audioElement.play().catch(error => console.error('Audio play error:', error));
         this.isPlaying = true;
 
         this.updateMediaInfo(media.path);
@@ -295,22 +295,22 @@ export class MediaPlayer {
     }
 
     handleMediaEnded() {
-        switch (this.playbackMode.repeat) {
-            case 'one':
-                this.seekTo(0);
-                this.play();
-                break;
-            case 'playlist':
-                this.playNext(true); // ループ再生時は強制的に次の曲へ
-                break;
-            case 'off':
-            default:
-                if (this.currentIndex < this.playlist.length - 1) {
-                    this.playNext(false);
-                } else {
-                    this.pause();
-                }
-                break;
+        if (this.playbackMode.repeat === 'one') {
+            this.seekTo(0);
+            this.play();
+            return;
+        }
+
+        const isLastTrack = this.currentIndex >= this.playlist.length - 1;
+
+        if (!isLastTrack) {
+            this.playNext(false);
+        } else if (this.playbackMode.repeat === 'playlist') {
+            this.playNext(true);
+        } else if (this.playbackMode.smartShuffle) {
+            this.playNextFromRandomFolder();
+        } else {
+            this.pause();
         }
     }
 
@@ -322,7 +322,7 @@ export class MediaPlayer {
         } else if (this.playbackMode.repeat === 'playlist') {
             this.currentIndex = this.playlist.length - 1;
         } else {
-            return; // プレイリストの先頭なら何もしない
+            return;
         }
         this.playCurrentTrack();
     }
@@ -332,12 +332,55 @@ export class MediaPlayer {
 
         if (this.currentIndex < this.playlist.length - 1) {
             this.currentIndex++;
-        } else if (isLoop || this.playbackMode.repeat === 'playlist') {
+        } else if (isLoop) {
             this.currentIndex = 0;
         } else {
-            return; // プレイリストの最後なら何もしない
+            return;
         }
         this.playCurrentTrack();
+    }
+
+    async playNextFromRandomFolder() {
+        if (!this.currentDirectory) return;
+        const parentDir = this.currentDirectory.substring(0, this.currentDirectory.lastIndexOf('/')) || '/';
+        if (parentDir === this.currentDirectory) return;
+
+        try {
+            const response = await fetch(`/api/files?path=${encodeURIComponent(parentDir)}`);
+            const result = await response.json();
+            if (!result.success || !result.data.files) return;
+
+            const siblingDirs = result.data.files.filter(f => f.is_dir && f.path !== this.currentDirectory);
+            if (siblingDirs.length === 0) return;
+
+            let attempts = 0;
+            while (attempts < siblingDirs.length) {
+                const randomDir = siblingDirs[Math.floor(Math.random() * siblingDirs.length)];
+                const dirResponse = await fetch(`/api/files?path=${encodeURIComponent(randomDir.path)}`);
+                const dirResult = await dirResponse.json();
+
+                if (dirResult.success && dirResult.data.files) {
+                    const audioFiles = dirResult.data.files
+                        .filter(f => f.mime_type && f.mime_type.startsWith('audio/'))
+                        .map(f => ({ path: f.path, mime_type: f.mime_type, name: f.name }));
+
+                    if (audioFiles.length > 0) {
+                        this.playlist = audioFiles;
+                        this.originalPlaylist = [...this.playlist];
+                        this.currentIndex = 0;
+                        this.currentDirectory = randomDir.path;
+                        if (this.playbackMode.shuffle) {
+                            this.shufflePlaylist();
+                        }
+                        this.playCurrentTrack();
+                        return;
+                    }
+                }
+                attempts++;
+            }
+        } catch (error) {
+            console.error("Error during smart shuffle:", error);
+        }
     }
 
     togglePlayPause() {
@@ -350,11 +393,7 @@ export class MediaPlayer {
         if (this.currentMedia.type === 'audio') {
             this.audioElement.play().catch(e => console.error('Play error:', e));
         } else if (this.currentMedia.type === 'video') {
-            if (this.isVideoModalOpen && this.modalVideoElement) {
-                this.modalVideoElement.play().catch(e => console.error('Play error:', e));
-            } else {
-                this.showVideoModal();
-            }
+            this.isVideoModalOpen ? this.modalVideoElement.play() : this.showVideoModal();
         }
         this.isPlaying = true;
         this.updatePlayButton();
@@ -386,58 +425,67 @@ export class MediaPlayer {
 
     toggleRepeatMode() {
         const modes = ['off', 'playlist', 'one'];
-        const currentIndex = modes.indexOf(this.playbackMode.repeat);
-        this.playbackMode.repeat = modes[(currentIndex + 1) % modes.length];
+        const currentModeIndex = modes.indexOf(this.playbackMode.repeat);
+        const nextMode = modes[(currentModeIndex + 1) % modes.length];
+        this.playbackMode.repeat = nextMode;
+
+        if (nextMode === 'one') {
+            if (this.playbackMode.shuffle) this.toggleShuffleMode(); // 1曲リピートとシャッフルは共存不可
+            if (this.playbackMode.smartShuffle) this.toggleSmartShuffleMode(); // 1曲リピートとスマートシャッフルは共存不可
+        }
         this.updateModeUI();
     }
 
     toggleShuffleMode() {
         this.playbackMode.shuffle = !this.playbackMode.shuffle;
-        const currentMediaPath = this.currentMedia?.path;
-
-        if (this.playbackMode.shuffle) {
-            this.shufflePlaylist();
-        } else {
-            this.playlist = [...this.originalPlaylist];
+        if (this.playbackMode.shuffle && this.playbackMode.repeat === 'one') {
+            this.playbackMode.repeat = 'off'; // シャッフルONなら1曲リピートは解除
         }
+
+        const currentMediaPath = this.currentMedia?.path;
+        this.playlist = this.playbackMode.shuffle ? [...this.playlist] : [...this.originalPlaylist];
+        if (this.playbackMode.shuffle) this.shufflePlaylist();
 
         if (currentMediaPath) {
             const newIndex = this.playlist.findIndex(item => item.path === currentMediaPath);
             if (newIndex !== -1) this.currentIndex = newIndex;
         }
-        
+        this.updateModeUI();
+    }
+
+    toggleSmartShuffleMode() {
+        this.playbackMode.smartShuffle = !this.playbackMode.smartShuffle;
+        if (this.playbackMode.smartShuffle) {
+            this.playbackMode.repeat = 'off'; // スマートシャッフルONならリピートは解除
+            if (!this.playbackMode.shuffle) {
+                this.toggleShuffleMode(); // スマートシャッフルはシャッフルを兼ねる
+            }
+        }
         this.updateModeUI();
     }
     
     shufflePlaylist() {
         if (!this.currentMedia) {
-            // 再生中でなければ単純にシャッフル
             for (let i = this.playlist.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [this.playlist[i], this.playlist[j]] = [this.playlist[j], this.playlist[i]];
             }
             return;
         }
-    
-        // 現在再生中の曲を取得
         const currentItem = this.playlist[this.currentIndex];
-        // 現在の曲を除いたリストを作成
-        const restOfPlaylist = this.playlist.filter((_, index) => index !== this.currentIndex);
-    
-        // 残りの曲をシャッフル
-        for (let i = restOfPlaylist.length - 1; i > 0; i--) {
+        const rest = this.playlist.filter((_, index) => index !== this.currentIndex);
+        for (let i = rest.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
-            [restOfPlaylist[i], restOfPlaylist[j]] = [restOfPlaylist[j], restOfPlaylist[i]];
+            [rest[i], rest[j]] = [rest[j], rest[i]];
         }
-    
-        // 現在の曲を先頭にしてプレイリストを再構築
-        this.playlist = [currentItem, ...restOfPlaylist];
-        this.currentIndex = 0; // 現在の曲が先頭になったのでインデックスを0に
+        this.playlist = [currentItem, ...rest];
+        this.currentIndex = 0;
     }
 
     updateModeUI() {
         const repeatBtn = this.playerElement.querySelector('.repeat-btn');
         const shuffleBtn = this.playerElement.querySelector('.shuffle-btn');
+        const smartShuffleBtn = this.playerElement.querySelector('.smart-shuffle-btn');
         const repeatOff = repeatBtn.querySelector('.repeat-off');
         const repeatAll = repeatBtn.querySelector('.repeat-all');
         const repeatOne = repeatBtn.querySelector('.repeat-one');
@@ -466,6 +514,8 @@ export class MediaPlayer {
 
         shuffleBtn.style.color = this.playbackMode.shuffle ? '#4A90E2' : '';
         shuffleBtn.setAttribute('title', `Shuffle: ${this.playbackMode.shuffle ? 'On' : 'Off'}`);
+        smartShuffleBtn.style.color = this.playbackMode.smartShuffle ? '#4A90E2' : '';
+        smartShuffleBtn.setAttribute('title', `Smart Shuffle: ${this.playbackMode.smartShuffle ? 'On' : 'Off'}`);
     }
 
     // --- Volume Controls ---
@@ -479,12 +529,8 @@ export class MediaPlayer {
     }
 
     toggleMute() {
-        if (this.volume > 0) {
-            this.previousVolume = this.volume;
-            this.setVolume(0);
-        } else {
-            this.setVolume(this.previousVolume || 0.7);
-        }
+        this.setVolume(this.volume > 0 ? 0 : (this.previousVolume || 0.7));
+        this.previousVolume = this.volume > 0 ? this.volume : this.previousVolume;
     }
 
     // --- UI Updates ---
@@ -502,16 +548,15 @@ export class MediaPlayer {
             const albumArt = await this.getAlbumArt(path);
             this.playerElement.querySelector('.media-thumbnail').src = albumArt;
         } catch (error) {
-            console.error('Failed to update album art:', error);
             this.playerElement.querySelector('.media-thumbnail').src = this.getDefaultAlbumArt();
         }
     }
 
     updateProgress() {
-        let mediaElement = this.currentMedia?.type === 'audio' ? this.audioElement : this.modalVideoElement;
-        if (!mediaElement || !this.currentMedia) return;
+        let media = this.currentMedia?.type === 'audio' ? this.audioElement : this.modalVideoElement;
+        if (!media || !this.currentMedia) return;
 
-        const { currentTime = 0, duration = 0 } = mediaElement;
+        const { currentTime = 0, duration = 0 } = media;
         const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
         
         this.playerElement.querySelector('.progress-filled').style.width = `${progressPercent}%`;
@@ -521,29 +566,25 @@ export class MediaPlayer {
     }
 
     updatePlayButton() {
-        const playIcons = this.playerElement.querySelectorAll('.play-icon');
-        const pauseIcons = this.playerElement.querySelectorAll('.pause-icon');
         const display = this.isPlaying ? { play: 'none', pause: 'block' } : { play: 'block', pause: 'none' };
-        playIcons.forEach(icon => icon.style.display = display.play);
-        pauseIcons.forEach(icon => icon.style.display = display.pause);
+        this.playerElement.querySelectorAll('.play-icon').forEach(i => i.style.display = display.play);
+        this.playerElement.querySelectorAll('.pause-icon').forEach(i => i.style.display = display.pause);
     }
 
     updateVolumeUI() {
         this.playerElement.querySelector('.volume-filled').style.width = `${this.volume * 100}%`;
-        const high = this.playerElement.querySelector('.volume-high');
-        const medium = this.playerElement.querySelector('.volume-medium');
-        const low = this.playerElement.querySelector('.volume-low');
-        const mute = this.playerElement.querySelector('.volume-mute');
-        
-        high.style.display = 'none';
-        medium.style.display = 'none';
-        low.style.display = 'none';
-        mute.style.display = 'none';
+        const icons = {
+            high: this.playerElement.querySelector('.volume-high'),
+            medium: this.playerElement.querySelector('.volume-medium'),
+            low: this.playerElement.querySelector('.volume-low'),
+            mute: this.playerElement.querySelector('.volume-mute')
+        };
+        Object.values(icons).forEach(i => i.style.display = 'none');
 
-        if (this.volume === 0) mute.style.display = 'block';
-        else if (this.volume < 0.3) low.style.display = 'block';
-        else if (this.volume < 0.7) medium.style.display = 'block';
-        else high.style.display = 'block';
+        if (this.volume === 0) icons.mute.style.display = 'block';
+        else if (this.volume < 0.3) icons.low.style.display = 'block';
+        else if (this.volume < 0.7) icons.medium.style.display = 'block';
+        else icons.high.style.display = 'block';
     }
 
     toggleMinimize() {
@@ -620,7 +661,7 @@ export class MediaPlayer {
                         this.albumArtCache.set(filePath, imageUrl);
                         return imageUrl;
                     }
-                } catch { /* Ignore and continue */ }
+                } catch { /* Ignore */ }
             }
         } catch (error) {
             console.error('Error fetching album art:', error);
@@ -632,7 +673,7 @@ export class MediaPlayer {
     }
 
     getDefaultAlbumArt() {
-        return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJDRCBpY29uIj48ZGVmcz48bWFzayBpZD0iaG9sZSI+PHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IndoaXRlIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSI4MCIgZmlsbD0iYmxhY2siLz48L21hc2s+PC9kZWZzPjwhLS0gOS4r5paw5YWz44GMOS4nOmog5o2iIC0tPjxwYXRoIGQ9Ik0xMTAgMTQwIEMxNzAgOTAsIDMyMCA5MCwgMzkyIDE0MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utb3BhY2l0eT0iMC4xMiIgc3Ryb2tlLXdpZHRoPSIyMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMjAiIGZpbGw9IiM2NjYiIG1hc2s9InVybCgjaG9sZSkiLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjQwIiBmaWxsPSIjNjY2Ii8+PC9zdmc+';
+        return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJDRCBpY29uIj48ZGVmcz48bWFzayBpZD0iaG9sZSI+PHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IndoaXRlIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSI4MCIgZmlsbD0iYmxhY2siLz48L21hc2s+PC9kZWZzPjxwYXRoIGQ9Ik0xMTAgMTQwIEMxNzAgOTAsIDMyMCA5MCwgMzkyIDE0MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utb3BhY2l0eT0iMC4xMiIgc3Ryb2tlLXdpZHRoPSIyMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIyMjAiIGZpbGw9IiM2NjYiIG1hc2s9InVybCgjaG9sZSkiLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjQwIiBmaWxsPSIjNjY2Ii8+PC9zdmc+';
     }
 
     formatTime(seconds) {
