@@ -305,6 +305,12 @@ This command will:
 - HTTPS
   - Not needed.
   - If needed, handle HTTPS at the HTTP server application level via local or internal reverse proxy.
+- Compressed Media File Delivery
+  - This should not be handled by the application itself. Especially for local communication, compression/decompression only wastes resources on both ends.
+  - If compression is needed, we recommend controlling it on the Nginx side using gzip/brotli via a local reverse proxy.
+
+- Audio File Tag Information Retrieval
+  - There are too many formats, and metadata often ends up corrupted. It’s essentially a mess.
 
 ## API Endpoints  
   
