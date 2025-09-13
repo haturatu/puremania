@@ -185,7 +185,7 @@ export class MediaPlayer {
             this.setVolume((e.clientX - rect.left) / rect.width);
         });
         this.playerElement.querySelector('.volume-btn').addEventListener('click', () => this.toggleMute());
-        this.playerElement.querySelector('.minimize-btn').addEventListener('click', () => this.toggleMinimize());
+        this.playerElement.querySelectorAll('.minimize-btn').forEach(btn => btn.addEventListener('click', () => this.toggleMinimize()));
         this.playerElement.querySelector('.close-btn').addEventListener('click', () => { this.stop(); this.hide(); });
         
         this.audioElement.addEventListener('timeupdate', () => this.updateProgress());
