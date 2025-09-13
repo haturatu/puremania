@@ -4,15 +4,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"puremania/types"
 	"syscall"
 	"time"
 )
 
-// SpecificDirInfo は、フロントエンドに渡すための特定のディレクトリ情報です。
-type SpecificDirInfo struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
-}
+
 
 // GetConfig - クライアントに渡す設定情報
 func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
@@ -90,12 +87,12 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 // GetSpecificDirs は、設定された特定のディレクトリのリストを返します。
 func (h *Handler) GetSpecificDirs(w http.ResponseWriter, r *http.Request) {
 	dirs := h.config.GetSpecificDirs()
-	dirInfos := make([]SpecificDirInfo, 0, len(dirs))
+	dirInfos := make([]types.SpecificDirInfo, 0, len(dirs))
 
 	for _, dirPath := range dirs {
 		// フォルダが存在するかどうかを確認
 		if info, err := os.Stat(dirPath); err == nil && info.IsDir() {
-			dirInfos = append(dirInfos, SpecificDirInfo{
+			dirInfos = append(dirInfos, types.SpecificDirInfo{
 				Name: filepath.Base(dirPath),
 				Path: "/" + filepath.Base(dirPath), // フロントには仮想パスを渡す
 			})
@@ -104,3 +101,4 @@ func (h *Handler) GetSpecificDirs(w http.ResponseWriter, r *http.Request) {
 
 	h.respondSuccess(w, dirInfos)
 }
+

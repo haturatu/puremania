@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"puremania/models"
+	"puremania/types"
 	"puremania/utils"
 	"regexp"
 	"sort"
@@ -45,7 +45,7 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	// 細かいキャッシュキーを生成
 	cacheKey := h.generateSearchCacheKey(req.Term, req.Path, req.Scope, req.UseRegex, req.CaseSensitive, req.MaxResults)
 	if cached, found := h.cache.Get(cacheKey); found {
-		if results, ok := cached.([]models.FileInfo); ok {
+		if results, ok := cached.([]types.FileInfo); ok {
 			h.respondSuccess(w, results)
 			return
 		}
@@ -63,7 +63,7 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	})
 
 	result := <-resultChan
-	if results, ok := result.([]models.FileInfo); ok {
+	if results, ok := result.([]types.FileInfo); ok {
 		// 結果をキャッシュ（検索結果は短めのTTL）
 		h.cache.Set(cacheKey, results, int64(len(results)*200), time.Minute*2)
 		h.respondSuccess(w, results)
@@ -79,7 +79,7 @@ func (h *Handler) performSearch(req struct {
 	UseRegex      bool   `json:"useRegex"`
 	CaseSensitive bool   `json:"caseSensitive"`
 	MaxResults    int    `json:"maxResults"`
-}, basePath string) []models.FileInfo {
+}, basePath string) []types.FileInfo {
 	var searchFunc func(string) bool
 
 	if req.UseRegex {
@@ -91,7 +91,7 @@ func (h *Handler) performSearch(req struct {
 			regex, err = regexp.Compile("(?i)" + req.Term)
 		}
 		if err != nil {
-			return []models.FileInfo{}
+			return []types.FileInfo{}
 		}
 		searchFunc = func(name string) bool {
 			return regex.MatchString(name)
@@ -117,8 +117,8 @@ func (h *Handler) performSearch(req struct {
 }
 
 // searchCurrentParallel - 並列処理で現在ディレクトリ検索
-func (h *Handler) searchCurrentParallel(path string, matchFunc func(string) bool, maxResults int) []models.FileInfo {
-	var results []models.FileInfo
+func (h *Handler) searchCurrentParallel(path string, matchFunc func(string) bool, maxResults int) []types.FileInfo {
+	var results []types.FileInfo
 	var mu sync.Mutex
 
 	entries, err := os.ReadDir(path)
@@ -161,7 +161,7 @@ func (h *Handler) searchCurrentParallel(path string, matchFunc func(string) bool
 				fullPath := filepath.Join(path, entry.Name())
 				virtualPath := h.convertToVirtualPath(fullPath)
 
-				fileInfo := models.FileInfo{
+				fileInfo := types.FileInfo{
 					Name:       entry.Name(),
 					Path:       virtualPath,
 					Size:       size,
@@ -186,8 +186,8 @@ func (h *Handler) searchCurrentParallel(path string, matchFunc func(string) bool
 }
 
 // searchRecursiveParallel - 並列処理で再帰検索
-func (h *Handler) searchRecursiveParallel(path string, matchFunc func(string) bool, maxResults int) []models.FileInfo {
-	var results []models.FileInfo
+func (h *Handler) searchRecursiveParallel(path string, matchFunc func(string) bool, maxResults int) []types.FileInfo {
+	var results []types.FileInfo
 	var mu sync.Mutex
 	resultCount := int64(0)
 
@@ -228,7 +228,7 @@ func (h *Handler) searchRecursiveParallel(path string, matchFunc func(string) bo
 
 				virtualPath := h.convertToVirtualPath(filePath)
 
-				fileInfo := models.FileInfo{
+				fileInfo := types.FileInfo{
 					Name:       d.Name(),
 					Path:       virtualPath,
 					Size:       size,

@@ -11,6 +11,7 @@
   display: flex;
   /* align-items: center; */
   justify-content: space-between;
+  transition: all 0.3s ease;
 }
 
 .media-info {
@@ -119,6 +120,12 @@
   max-width: 30%;
 }
 
+.media-info,
+.media-controls,
+.media-volume {
+  transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+}
+
 .volume-btn {
   background: none;
   border: none;
@@ -155,28 +162,33 @@
 
 /* メディアプレイヤーの最小化 */
 .media-player.minimized {
-  height: 60px;
+  height: 50px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .media-player.minimized .media-info,
 .media-player.minimized .media-controls,
 .media-player.minimized .media-volume {
   display: none;
+  opacity: 0;
+  visibility: hidden;
 }
 
-.media-player.minimized .media-minimized-info {
-  display: flex;
+.media-player .media-minimized-info {
+  display: none;
+  width: 100%;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-}
-
-.media-minimized-info {
-  display: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease-in-out;
 }
 
 .media-player.minimized .media-minimized-info {
   display: flex;
+  opacity: 1;
+  visibility: visible;
 }
 
 .minimized-title {
@@ -196,9 +208,11 @@
 .minimize-btn {
   background: none;
   border: none;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   cursor: pointer;
   font-size: 1.2rem;
+  padding: 5px;
+  margin: 0 5px;
 }
 
 .minimize-btn:hover {
