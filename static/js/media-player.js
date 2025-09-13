@@ -302,9 +302,9 @@ export class MediaPlayer {
         try {
             const response = await fetch(`/api/files?path=${encodeURIComponent(parentDir)}`);
             const result = await response.json();
-            if (!result.success || !result.data.files) return;
+            if (!result.success || !result.data) return;
 
-            const siblingDirs = result.data.files.filter(f => f.is_dir && normalize(f.path) !== currentNorm);
+            const siblingDirs = result.data.filter(f => f.is_dir && normalize(f.path) !== currentNorm);
             if (siblingDirs.length === 0) return;
 
             let attempts = 0;
@@ -314,8 +314,8 @@ export class MediaPlayer {
                 const randomDir = shuffledSiblings[attempts];
                 const dirResponse = await fetch(`/api/files?path=${encodeURIComponent(randomDir.path)}`);
                 const dirResult = await dirResponse.json();
-                if (dirResult.success && dirResult.data.files) {
-                    const audioFiles = dirResult.data.files
+                if (dirResult.success && dirResult.data) {
+                    const audioFiles = dirResult.data
                         .filter(f => f.mime_type?.startsWith('audio/'))
                         .map(f => ({ path: f.path, mime_type: f.mime_type, name: f.name }));
                     if (audioFiles.length > 0) {
@@ -323,7 +323,6 @@ export class MediaPlayer {
                         this.originalPlaylist = [...audioFiles];
                         this.currentIndex = 0;
                         this.currentDirectory = randomDir.path;
-                        if (this.playbackMode.main !== 'off') this.shufflePlaylist();
                         this.playCurrentTrack();
                         return;
                     }
