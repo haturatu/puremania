@@ -2,19 +2,21 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
+	
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
+	"puremania/cache"
 	"puremania/types"
 	"puremania/utils"
+	"puremania/worker"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"mime"
 )
 
 // SearchFiles - 並列処理と細かいキャッシュキー使用
@@ -44,7 +46,7 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 
 	// 細かいキャッシュキーを生成
 	cacheKey := h.generateSearchCacheKey(req.Term, req.Path, req.Scope, req.UseRegex, req.CaseSensitive, req.MaxResults)
-	if cached, found := h.cache.Get(cacheKey); found {
+	if cached, found := cache.Get(h.cache, cacheKey); found {
 		if results, ok := cached.([]types.FileInfo); ok {
 			h.respondSuccess(w, results)
 			return
@@ -58,14 +60,14 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 並列処理で検索実行
-	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
 		return h.performSearch(req, basePath)
 	})
 
 	result := <-resultChan
 	if results, ok := result.([]types.FileInfo); ok {
 		// 結果をキャッシュ（検索結果は短めのTTL）
-		h.cache.Set(cacheKey, results, int64(len(results)*200), time.Minute*2)
+		cache.Set(h.cache, cacheKey, results, int64(len(results)*200), time.Minute*2)
 		h.respondSuccess(w, results)
 	} else {
 		h.respondError(w, "Search failed", http.StatusInternalServerError)
@@ -135,7 +137,7 @@ func (h *Handler) searchCurrentParallel(path string, matchFunc func(string) bool
 		}
 
 		wg.Add(1)
-		h.workerPool.Submit(func() {
+		worker.Submit(h.workerPool, func() {
 			defer wg.Done()
 
 			if atomic.LoadInt64(&resultCount) >= int64(maxResults) {
@@ -191,9 +193,7 @@ func (h *Handler) searchRecursiveParallel(path string, matchFunc func(string) bo
 	var mu sync.Mutex
 	resultCount := int64(0)
 
-	var wg sync.WaitGroup
-
-	err := filepath.WalkDir(path, func(filePath string, d os.DirEntry, err error) error {
+	filepath.WalkDir(path, func(filePath string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil // エラーをスキップして継続
 		}
@@ -203,58 +203,43 @@ func (h *Handler) searchRecursiveParallel(path string, matchFunc func(string) bo
 		}
 
 		if matchFunc(d.Name()) {
-			wg.Add(1)
-			h.workerPool.Submit(func() {
-				defer wg.Done()
+			var size int64
+			var modTime time.Time
 
-				if atomic.LoadInt64(&resultCount) >= int64(maxResults) {
-					return
+			if d.Type().IsRegular() || d.IsDir() {
+				if info, err := d.Info(); err == nil {
+					size = info.Size()
+					modTime = info.ModTime()
 				}
+			}
 
-				var size int64
-				var modTime time.Time
+			mimeType := mime.TypeByExtension(filepath.Ext(d.Name()))
+			if mimeType == "" {
+				mimeType = "application/octet-stream"
+			}
 
-				if d.Type().IsRegular() || d.IsDir() {
-					if info, err := d.Info(); err == nil {
-						size = info.Size()
-						modTime = info.ModTime()
-					}
-				}
+			virtualPath := h.convertToVirtualPath(filePath)
 
-				mimeType := mime.TypeByExtension(filepath.Ext(d.Name()))
-				if mimeType == "" {
-					mimeType = "application/octet-stream"
-				}
+			fileInfo := types.FileInfo{
+				Name:       d.Name(),
+				Path:       virtualPath,
+				Size:       size,
+				ModTime:    modTime.Format(time.RFC3339),
+				IsDir:      d.IsDir(),
+				MimeType:   mimeType,
+				IsEditable: utils.IsTextFile(mimeType) || utils.IsEditableByExtension(d.Name()),
+			}
 
-				virtualPath := h.convertToVirtualPath(filePath)
-
-				fileInfo := types.FileInfo{
-					Name:       d.Name(),
-					Path:       virtualPath,
-					Size:       size,
-					ModTime:    modTime.Format(time.RFC3339),
-					IsDir:      d.IsDir(),
-					MimeType:   mimeType,
-					IsEditable: utils.IsTextFile(mimeType) || utils.IsEditableByExtension(d.Name()),
-				}
-
-				mu.Lock()
-				if atomic.LoadInt64(&resultCount) < int64(maxResults) {
-					results = append(results, fileInfo)
-					atomic.AddInt64(&resultCount, 1)
-				}
-				mu.Unlock()
-			})
+			mu.Lock()
+			if atomic.LoadInt64(&resultCount) < int64(maxResults) {
+				results = append(results, fileInfo)
+				atomic.AddInt64(&resultCount, 1)
+			}
+			mu.Unlock()
 		}
 
 		return nil
 	})
-
-	if err != nil {
-		fmt.Printf("Recursive search error: %v\n", err)
-	}
-
-	wg.Wait()
 
 	// 結果をソート
 	sort.Slice(results, func(i, j int) bool {
@@ -263,5 +248,3 @@ func (h *Handler) searchRecursiveParallel(path string, matchFunc func(string) bo
 
 	return results
 }
-
-

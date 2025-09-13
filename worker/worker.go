@@ -1,22 +1,13 @@
 package worker
 
 import (
+	"puremania/types"
 	"runtime"
-	"sync"
 	"sync/atomic"
 )
 
-// WorkerPool はCPU論理コア数ベースのワーカープールです。
-type WorkerPool struct {
-	workers    int
-	taskQueue  chan func()
-	resultChan chan interface{}
-	wg         sync.WaitGroup
-	active     int64
-}
-
 // NewWorkerPool は新しいWorkerPoolを生成します。
-func NewWorkerPool() *WorkerPool {
+func NewWorkerPool() *types.WorkerPool {
 	workers := runtime.NumCPU()
 	if workers > 16 { // 最大16ワーカーに制限
 		workers = 16
@@ -25,33 +16,33 @@ func NewWorkerPool() *WorkerPool {
 		workers = 2
 	}
 
-	pool := &WorkerPool{
-		workers:    workers,
-		taskQueue:  make(chan func(), workers*4), // バッファ付きチャネル
-		resultChan: make(chan interface{}, workers*2),
+	pool := &types.WorkerPool{
+		Workers:    workers,
+		TaskQueue:  make(chan func(), workers*4), // バッファ付きチャネル
+		ResultChan: make(chan interface{}, workers*2),
 	}
 
 	for i := 0; i < workers; i++ {
-		pool.wg.Add(1)
-		go pool.worker()
+		pool.Wg.Add(1)
+		go worker(pool)
 	}
 
 	return pool
 }
 
-func (p *WorkerPool) worker() {
-	defer p.wg.Done()
-	for task := range p.taskQueue {
-		atomic.AddInt64(&p.active, 1)
+func worker(p *types.WorkerPool) {
+	defer p.Wg.Done()
+	for task := range p.TaskQueue {
+		atomic.AddInt64(&p.Active, 1)
 		task()
-		atomic.AddInt64(&p.active, -1)
+		atomic.AddInt64(&p.Active, -1)
 	}
 }
 
 // Submit はタスクをワーカープールに投入します。
-func (p *WorkerPool) Submit(task func()) {
+func Submit(p *types.WorkerPool, task func()) {
 	select {
-	case p.taskQueue <- task:
+	case p.TaskQueue <- task:
 	default:
 		// タスクキューが満杯の場合は同期実行
 		task()
@@ -59,9 +50,9 @@ func (p *WorkerPool) Submit(task func()) {
 }
 
 // SubmitWithResult は結果を返すタスクをワーカープールに投入します。
-func (p *WorkerPool) SubmitWithResult(task func() interface{}) <-chan interface{} {
+func SubmitWithResult(p *types.WorkerPool, task func() interface{}) <-chan interface{} {
 	resultChan := make(chan interface{}, 1)
-	p.Submit(func() {
+	Submit(p, func() {
 		result := task()
 		resultChan <- result
 		close(resultChan)
@@ -70,13 +61,13 @@ func (p *WorkerPool) SubmitWithResult(task func() interface{}) <-chan interface{
 }
 
 // ActiveWorkers は現在アクティブなワーカー数を返します。
-func (p *WorkerPool) ActiveWorkers() int64 {
-	return atomic.LoadInt64(&p.active)
+func ActiveWorkers(p *types.WorkerPool) int64 {
+	return atomic.LoadInt64(&p.Active)
 }
 
 // Close はワーカープールをシャットダウンします。
-func (p *WorkerPool) Close() {
-	close(p.taskQueue)
-	p.wg.Wait()
-	close(p.resultChan)
+func Close(p *types.WorkerPool) {
+	close(p.TaskQueue)
+	p.Wg.Wait()
+	close(p.ResultChan)
 }

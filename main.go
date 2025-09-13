@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"puremania/handlers"
+	"puremania/types"
 	"strconv"
 	"strings"
 	"time"
@@ -15,39 +16,28 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config はアプリケーションの設定を保持します。
-type Config struct {
-	StorageDir      string
-	MountDirs       []string
-	MaxFileSize     int64
-	Port            int
-	ZipTimeout      int
-	MaxZipSize      int64
-	SpecificDirs    []string
-}
-
-func (c *Config) GetStorageDir() string {
+func GetStorageDir(c *types.Config) string {
 	return c.StorageDir
 }
 
-func (c *Config) GetMountDirs() []string {
+func GetMountDirs(c *types.Config) []string {
 	return c.MountDirs
 }
 
-func (c *Config) GetMaxFileSize() int64 {
+func GetMaxFileSize(c *types.Config) int64 {
 	return c.MaxFileSize
 }
 
-func (c *Config) GetSpecificDirs() []string {
+func GetSpecificDirs(c *types.Config) []string {
 	return c.SpecificDirs
 }
 
 // Load は.envファイルから設定を読み込みます。
-func LoadConfig() *Config {
+func LoadConfig() *types.Config {
 	_ = godotenv.Load() // .envファイルが見つからなくてもエラーにしない
 
 	// デフォルト値
-	config := &Config{
+	config := &types.Config{
 		StorageDir:      getEnv("STORAGE_DIR", "/home/"+os.Getenv("USER")),
 		MountDirs:       getEnvAsStringSlice("MOUNT_DIRS", []string{}),
 		MaxFileSize:     getEnvAsInt64("MAX_FILE_SIZE_MB", 10000),
@@ -87,7 +77,6 @@ func main() {
 
 	// ハンドラーを初期化
 	handler := handlers.NewHandler(cfg)
-
 
 	r := mux.NewRouter()
 
