@@ -232,6 +232,7 @@ Your preference for Vim mode is automatically saved in your browser's local stor
 - `:wq` - Save the file and close the editor.
 - `:q!` - Close the editor without saving.
 - `ZZ` - (Default Vim behavior) Save and close.
+- `:%s/old/new/g` - Replace all occurrences of "old" with "new".
 
 **Standard Editor Shortcuts:**
 | Keybinding          | Action                               |
@@ -239,7 +240,6 @@ Your preference for Vim mode is automatically saved in your browser's local stor
 | `Ctrl` / `Cmd` + `s` | Save the current file                |
 | `Ctrl` / `Cmd` + `/` | Toggle line comments                 |
 | `Ctrl` / `Cmd` + `Alt` + `v` | Toggle Vim mode                      |
-| `Escape`            | Close the editor (in non-Vim mode)   |
   
 ## Configuration
   
