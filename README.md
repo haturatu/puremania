@@ -64,6 +64,11 @@ That’s enough of my rambling.
 - **No Database Required:** Pure Mania uses the filesystem directly, eliminating the need for a database.
 - **Media Preview**: Preview images and play audio/video files directly in the browser.
 - **Web Editor**: Edit text files directly within the web interface.
+- **Media Player**:
+  - Play audio and video files directly in the browser.
+  - Supports various playback modes: normal, shuffle, smart shuffle (plays from a random sibling folder), and repeat one.
+  - Playlist repeat functionality.
+  - Caches album art at the directory level to reduce redundant API calls. It looks for `cover.jpg`, `cover.jpeg`, `cover.png`, `folder.jpg`, or `album.jpg` in the same directory as the music file.
 
 ## Recent Changes (2025-09-12 - 2025-09-13)
 
