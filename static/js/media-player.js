@@ -567,9 +567,12 @@ export class MediaPlayer {
     }
 
     async getAlbumArt(filePath) {
-        if (this.albumArtCache.has(filePath)) return this.albumArtCache.get(filePath);
+        const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+        if (this.albumArtCache.has(dirPath)) {
+            return this.albumArtCache.get(dirPath);
+        }
+
         try {
-            const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
             const coverImages = ['cover.jpg', 'cover.jpeg', 'cover.png', 'folder.jpg', 'album.jpg'];
             for (const coverName of coverImages) {
                 const coverPath = `${dirPath}/${coverName}`;
@@ -577,16 +580,19 @@ export class MediaPlayer {
                     const response = await fetch(`/api/files/download?path=${encodeURIComponent(coverPath)}`);
                     if (response.ok) {
                         const imageUrl = URL.createObjectURL(await response.blob());
-                        this.albumArtCache.set(filePath, imageUrl);
+                        this.albumArtCache.set(dirPath, imageUrl);
                         return imageUrl;
                     }
-                } catch {}
+                } catch (e) {
+                    // ignore fetch error
+                }
             }
         } catch (error) {
             console.error('Error fetching album art:', error);
         }
+
         const defaultArt = this.getDefaultAlbumArt();
-        this.albumArtCache.set(filePath, defaultArt);
+        this.albumArtCache.set(dirPath, defaultArt);
         return defaultArt;
     }
 
