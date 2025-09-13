@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"puremania/cache"
 	"puremania/types"
 	"sort"
 	"strings"
@@ -16,8 +17,8 @@ import (
 // 物理パスを仮想パスに変換するメソッド
 func (h *Handler) convertToVirtualPath(physicalPath string) string {
 	// ストレージディレクトリ内のパスの場合
-	if strings.HasPrefix(physicalPath, h.config.GetStorageDir()) {
-		relPath, err := filepath.Rel(h.config.GetStorageDir(), physicalPath)
+	if strings.HasPrefix(physicalPath, h.config.StorageDir) {
+		relPath, err := filepath.Rel(h.config.StorageDir, physicalPath)
 		if err == nil {
 			virtualPath := "/" + filepath.ToSlash(relPath)
 			return virtualPath
@@ -25,7 +26,7 @@ func (h *Handler) convertToVirtualPath(physicalPath string) string {
 	}
 
 	// マウントディレクトリの場合
-	for _, mountDir := range h.config.GetMountDirs() {
+	for _, mountDir := range h.config.MountDirs {
 		if strings.HasPrefix(physicalPath, mountDir) {
 			relPath, err := filepath.Rel(mountDir, physicalPath)
 			if err == nil {
@@ -45,11 +46,11 @@ func (h *Handler) convertToVirtualPath(physicalPath string) string {
 // 仮想パスを物理パスに変換するメソッド
 func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
 	if virtualPath == "" || virtualPath == "/" {
-		return h.config.GetStorageDir(), nil
+		return h.config.StorageDir, nil
 	}
 
 	// SpecificDirs のチェック
-	for _, specificDir := range h.config.GetSpecificDirs() {
+	for _, specificDir := range h.config.SpecificDirs {
 		dirName := filepath.Base(specificDir)
 		// Note: 仮想パスはURLなので、常にスラッシュを使うべき
 		virtualDirPrefix := "/" + dirName
@@ -69,7 +70,7 @@ func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
 	parts := strings.Split(strings.Trim(virtualPath, "/"), "/")
 	if len(parts) > 0 {
 		mountName := parts[0]
-		for _, mountDir := range h.config.GetMountDirs() {
+		for _, mountDir := range h.config.MountDirs {
 			if filepath.Base(mountDir) == mountName {
 				if len(parts) == 1 {
 					return mountDir, nil
@@ -82,7 +83,7 @@ func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
 	}
 
 	// デフォルトはストレージディレクトリ内
-	return filepath.Join(h.config.GetStorageDir(), strings.TrimPrefix(virtualPath, "/")), nil
+	return filepath.Join(h.config.StorageDir, strings.TrimPrefix(virtualPath, "/")), nil
 }
 
 func (h *Handler) respondSuccess(w http.ResponseWriter, data interface{}) {
@@ -135,8 +136,8 @@ func (h *Handler) generateDirectoryStateKey(path string) (string, error) {
 	// ルートディレクトリの場合、マウントポイントの情報もキーに含める
 	if path == "/" {
 		// MountDirsもソートして一貫性を保つ
-		sortedMounts := make([]string, len(h.config.GetMountDirs()))
-		copy(sortedMounts, h.config.GetMountDirs())
+		sortedMounts := make([]string, len(h.config.MountDirs))
+		copy(sortedMounts, h.config.MountDirs)
 		sort.Strings(sortedMounts)
 
 		for _, mountDir := range sortedMounts {
@@ -155,8 +156,8 @@ func (h *Handler) invalidateFileCache(filePath string) {
 	virtualPath := h.convertToVirtualPath(filePath)
 
 	// ファイル関連のキャッシュを無効化
-	h.cache.InvalidateByPrefix("content:" + virtualPath)
-	h.cache.InvalidateByPrefix("list:" + filepath.Dir(virtualPath))
+	cache.InvalidateByPrefix(h.cache, "content:"+virtualPath)
+	cache.InvalidateByPrefix(h.cache, "list:"+filepath.Dir(virtualPath))
 }
 
 // 検索条件のハッシュ化でキー生成

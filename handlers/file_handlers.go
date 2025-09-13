@@ -9,13 +9,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"puremania/cache"
 	"puremania/types"
 	"puremania/utils"
+	"puremania/worker"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"strconv"
 )
 
 // Optimized buffer sizes for different operations
@@ -64,7 +66,7 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 
 	// 4. ETagに基づいたキャッシュを確認
 	cacheKey := "list:" + currentStateKey // キーはETagだけで十分
-	if cached, found := h.cache.Get(cacheKey); found {
+	if cached, found := cache.Get(h.cache, cacheKey); found {
 		if fileInfos, ok := cached.([]types.FileInfo); ok {
 			h.respondSuccess(w, fileInfos)
 			return
@@ -91,7 +93,7 @@ func (h *Handler) serveFreshFileList(w http.ResponseWriter, path string, etag st
 	if etag != "" {
 		cacheKey := "list:" + etag
 		// size of fileInfos is roughly len(fileInfos) * 200 bytes
-		h.cache.Set(cacheKey, fileInfos, int64(len(fileInfos)*200), CacheTTL)
+		cache.Set(h.cache, cacheKey, fileInfos, int64(len(fileInfos)*200), CacheTTL)
 	}
 
 	h.respondSuccess(w, fileInfos)
@@ -113,7 +115,7 @@ func (h *Handler) getFileList(path string) ([]types.FileInfo, error) {
 
 	// ルートディレクトリの場合はマウントポイントも表示
 	if path == "/" {
-		for _, mountDir := range h.config.GetMountDirs() {
+		for _, mountDir := range h.config.MountDirs {
 			if info, err := os.Stat(mountDir); err == nil {
 				virtualPath := h.convertToVirtualPath(mountDir)
 				fileInfos = append(fileInfos, types.FileInfo{
@@ -145,7 +147,7 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 	// 並列処理でエントリーを処理
 	for _, entry := range entries {
 		wg.Add(1)
-		h.workerPool.Submit(func() {
+		worker.Submit(h.workerPool, func() {
 			defer wg.Done()
 
 			var size int64
@@ -174,7 +176,7 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 
 			// マウントポイントかどうかを判定
 			isMount := false
-			for _, mountDir := range h.config.GetMountDirs() {
+			for _, mountDir := range h.config.MountDirs {
 				if physicalFilepath == mountDir {
 					isMount = true
 					break
@@ -202,8 +204,6 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 	return fileInfos
 }
 
-
-
 // UploadFile - 並列処理でファイルアップロード
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -213,7 +213,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(h.config.GetMaxFileSize() << 20); err != nil {
+	if err := r.ParseMultipartForm(h.config.MaxFileSize << 20); err != nil {
 		if r.MultipartForm != nil {
 			_ = r.MultipartForm.RemoveAll()
 		}
@@ -257,7 +257,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	for i, fileHeader := range files {
 		wg.Add(1)
 		index := i
-		h.workerPool.Submit(func() {
+		worker.Submit(h.workerPool, func() {
 			defer wg.Done()
 
 			file, err := fileHeader.Open()
@@ -317,8 +317,8 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			resultChan <- types.UploadResult{Path: virtualPath, Success: true}
 
 			// キャッシュクリア
-			h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(targetDir)))
-			h.cache.InvalidateByPrefix("search:")
+			cache.InvalidateByPrefix(h.cache, "list:"+filepath.Dir(h.convertToVirtualPath(targetDir)))
+			cache.InvalidateByPrefix(h.cache, "search:")
 		})
 	}
 
@@ -436,7 +436,7 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 
 	// キャッシュチェック
 	cacheKey := "content:" + path + ":" + strconv.FormatInt(stat.ModTime().Unix(), 10)
-	if cached, found := h.cache.Get(cacheKey); found {
+	if cached, found := cache.Get(h.cache, cacheKey); found {
 		if content, ok := cached.(string); ok {
 			h.respondSuccess(w, map[string]string{
 				"content": content,
@@ -447,7 +447,7 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 並列処理でファイル読み込み
-	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
 		content, err := os.ReadFile(fullPath)
 		if err != nil {
 			return nil
@@ -458,7 +458,7 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	result := <-resultChan
 	if contentStr, ok := result.(string); ok {
 		// コンテンツをキャッシュ（TTL付き）
-		h.cache.Set(cacheKey, contentStr, stat.Size(), CacheTTL)
+		cache.Set(h.cache, cacheKey, contentStr, stat.Size(), CacheTTL)
 
 		h.respondSuccess(w, map[string]string{
 			"content": contentStr,
@@ -510,7 +510,7 @@ func (h *Handler) createZipArchive(w io.Writer, paths []string) {
 	// 並列処理でファイルをZIPに追加
 	for _, userPath := range paths {
 		wg.Add(1)
-		h.workerPool.Submit(func() {
+		worker.Submit(h.workerPool, func() {
 			defer wg.Done()
 
 			fullPath, err := h.convertToPhysicalPath(userPath)
@@ -579,7 +579,7 @@ func (h *Handler) addDirectoryToZip(zipWriter *zip.Writer, dirPath string, succe
 
 		// 並列処理でファイルを追加
 		wg.Add(1)
-		h.workerPool.Submit(func() {
+		worker.Submit(h.workerPool, func() {
 			defer wg.Done()
 			if h.addFileToZip(zipWriter, filePath, relPath, mu) {
 				atomic.AddInt64(successfulFiles, 1)
@@ -652,7 +652,7 @@ func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 並列処理でファイル保存
-	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
 		err := os.WriteFile(fullPath, []byte(req.Content), 0644)
 		return err
 	})
@@ -665,7 +665,7 @@ func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
 
 	// キャッシュを無効化
 	h.invalidateFileCache(fullPath)
-	h.cache.InvalidateByPrefix("search:")
+	cache.InvalidateByPrefix(h.cache, "search:")
 
 	h.respondSuccess(w, map[string]string{"message": "File saved successfully"})
 }
@@ -684,7 +684,7 @@ func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
 
 	for _, path := range req.Paths {
 		wg.Add(1)
-		h.workerPool.Submit(func() {
+		worker.Submit(h.workerPool, func() {
 			defer wg.Done()
 
 			fullPath, err := h.convertToPhysicalPath(path)
@@ -703,8 +703,8 @@ func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
 			} else {
 				// キャッシュを無効化
 				h.invalidateFileCache(fullPath)
-				h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(fullPath)))
-				h.cache.InvalidateByPrefix("search:")
+				cache.InvalidateByPrefix(h.cache, "list:"+filepath.Dir(h.convertToVirtualPath(fullPath)))
+				cache.InvalidateByPrefix(h.cache, "search:")
 			}
 		})
 	}
@@ -739,7 +739,7 @@ func (h *Handler) CreateDirectory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 並列処理でディレクトリ作成
-	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
 		return os.MkdirAll(newDirPath, 0755)
 	})
 
@@ -750,8 +750,8 @@ func (h *Handler) CreateDirectory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 親ディレクトリのキャッシュを無効化
-	h.cache.InvalidateByPrefix("list:" + h.convertToVirtualPath(parentPath))
-	h.cache.InvalidateByPrefix("search:")
+	cache.InvalidateByPrefix(h.cache, "list:"+h.convertToVirtualPath(parentPath))
+	cache.InvalidateByPrefix(h.cache, "search:")
 
 	h.respondSuccess(w, map[string]string{"message": "Directory created successfully"})
 }
@@ -786,7 +786,7 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 並列処理でファイル移動
-	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
 		// ターゲットディレクトリが存在するか確認
 		if _, err := os.Stat(filepath.Dir(targetFullPath)); os.IsNotExist(err) {
 			return fmt.Errorf("target directory does not exist")
@@ -805,9 +805,9 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 	// キャッシュを無効化
 	h.invalidateFileCache(sourceFullPath)
 	h.invalidateFileCache(targetFullPath)
-	h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(sourceFullPath)))
-	h.cache.InvalidateByPrefix("list:" + filepath.Dir(h.convertToVirtualPath(targetFullPath)))
-	h.cache.InvalidateByPrefix("search:")
+	cache.InvalidateByPrefix(h.cache, "list:"+filepath.Dir(h.convertToVirtualPath(sourceFullPath)))
+	cache.InvalidateByPrefix(h.cache, "list:"+filepath.Dir(h.convertToVirtualPath(targetFullPath)))
+	cache.InvalidateByPrefix(h.cache, "search:")
 
 	h.respondSuccess(w, map[string]string{"message": "File moved successfully"})
 }
@@ -848,7 +848,7 @@ func (h *Handler) CreateFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 並列処理でファイル作成
-	resultChan := h.workerPool.SubmitWithResult(func() interface{} {
+	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
 		// ファイルが既に存在するか確認
 		if _, err := os.Stat(newFilePath); err == nil {
 			return fmt.Errorf("file already exists")
@@ -874,8 +874,8 @@ func (h *Handler) CreateFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 親ディレクトリのキャッシュを無効化
-	h.cache.InvalidateByPrefix("list:" + h.convertToVirtualPath(parentPath))
-	h.cache.InvalidateByPrefix("search:")
+	cache.InvalidateByPrefix(h.cache, "list:"+h.convertToVirtualPath(parentPath))
+	cache.InvalidateByPrefix(h.cache, "search:")
 
 	// 仮想パスを返す
 	virtualPath := h.convertToVirtualPath(newFilePath)

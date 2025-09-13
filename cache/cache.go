@@ -1,165 +1,142 @@
 package cache
 
 import (
-	"sync"
-	"time"
+	"puremania/types"
 	"strings"
+	"time"
 )
 
-// CacheEntry は統一キャッシュエントリ（TTL付き）です。
-type CacheEntry struct {
-	Data      interface{}
-	Timestamp time.Time
-	Size      int64
-	TTL       time.Duration
-}
-
-// IsExpired はエントリが期限切れかどうかを返します。
-func (c *CacheEntry) IsExpired() bool {
-	return time.Since(c.Timestamp) > c.TTL
-}
-
-// TTLCache は統一TTLキャッシュです。
-type TTLCache struct {
-	mu       sync.RWMutex
-	entries  map[string]*CacheEntry
-	order    []string
-	maxSize  int64
-	maxItems int
-	curSize  int64
-}
-
 // NewTTLCache は新しいTTLCacheを生成します。
-func NewTTLCache(maxSize int64, maxItems int) *TTLCache {
-	cache := &TTLCache{
-		entries:  make(map[string]*CacheEntry),
-		order:    make([]string, 0, maxItems),
-		maxSize:  maxSize,
-		maxItems: maxItems,
+func NewTTLCache(maxSize int64, maxItems int) *types.TTLCache {
+	cache := &types.TTLCache{
+		Entries:  make(map[string]*types.CacheEntry),
+		Order:    make([]string, 0, maxItems),
+		MaxSize:  maxSize,
+		MaxItems: maxItems,
 	}
 
-	go cache.cleanupExpired()
+	go cleanupExpired(cache)
 
 	return cache
 }
 
-func (c *TTLCache) cleanupExpired() {
+func cleanupExpired(c *types.TTLCache) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		c.mu.Lock()
+		c.Mu.Lock()
 		var toDelete []string
 
-		for key, entry := range c.entries {
+		for key, entry := range c.Entries {
 			if entry.IsExpired() {
 				toDelete = append(toDelete, key)
 			}
 		}
 
 		for _, key := range toDelete {
-			c.evict(key)
+			evict(c, key)
 		}
-		c.mu.Unlock()
+		c.Mu.Unlock()
 	}
 }
 
 // Get はキーに対応するデータを取得します。
-func (c *TTLCache) Get(key string) (interface{}, bool) {
-	c.mu.RLock()
-	entry, exists := c.entries[key]
-	c.mu.RUnlock()
+func Get(c *types.TTLCache, key string) (interface{}, bool) {
+	c.Mu.RLock()
+	entry, exists := c.Entries[key]
+	c.Mu.RUnlock()
 
 	if !exists || entry.IsExpired() {
 		if exists {
-			c.mu.Lock()
-			c.evict(key)
-			c.mu.Unlock()
+			c.Mu.Lock()
+			evict(c, key)
+			c.Mu.Unlock()
 		}
 		return nil, false
 	}
 
-	c.mu.Lock()
-	c.moveToFront(key)
-	c.mu.Unlock()
+	c.Mu.Lock()
+	moveToFront(c, key)
+	c.Mu.Unlock()
 
 	return entry.Data, true
 }
 
 // Set はキーにデータを設定します。
-func (c *TTLCache) Set(key string, data interface{}, size int64, ttl time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func Set(c *types.TTLCache, key string, data interface{}, size int64, ttl time.Duration) {
+	c.Mu.Lock()
+	defer c.Mu.Unlock()
 
-	if existing, exists := c.entries[key]; exists {
-		c.curSize -= existing.Size
-		c.removeFromOrder(key)
+	if existing, exists := c.Entries[key]; exists {
+		c.CurSize -= existing.Size
+		removeFromOrder(c, key)
 	}
 
-	for c.curSize+size > c.maxSize || len(c.entries) >= c.maxItems {
-		if len(c.order) == 0 {
+	for c.CurSize+size > c.MaxSize || len(c.Entries) >= c.MaxItems {
+		if len(c.Order) == 0 {
 			break
 		}
-		oldest := c.order[len(c.order)-1]
-		c.evict(oldest)
+		oldest := c.Order[len(c.Order)-1]
+		evict(c, oldest)
 	}
 
-	c.entries[key] = &CacheEntry{
+	c.Entries[key] = &types.CacheEntry{
 		Data:      data,
 		Timestamp: time.Now(),
 		Size:      size,
 		TTL:       ttl,
 	}
-	c.order = append([]string{key}, c.order...)
-	c.curSize += size
+	c.Order = append([]string{key}, c.Order...)
+	c.CurSize += size
 }
 
-func (c *TTLCache) moveToFront(key string) {
-	for i, k := range c.order {
+func moveToFront(c *types.TTLCache, key string) {
+	for i, k := range c.Order {
 		if k == key {
-			c.order = append([]string{key}, append(c.order[:i], c.order[i+1:]...)...)
+			c.Order = append([]string{key}, append(c.Order[:i], c.Order[i+1:]...)...)
 			break
 		}
 	}
 }
 
-func (c *TTLCache) removeFromOrder(key string) {
-	for i, k := range c.order {
+func removeFromOrder(c *types.TTLCache, key string) {
+	for i, k := range c.Order {
 		if k == key {
-			c.order = append(c.order[:i], c.order[i+1:]...)
+			c.Order = append(c.Order[:i], c.Order[i+1:]...)
 			break
 		}
 	}
 }
 
-func (c *TTLCache) evict(key string) {
-	if entry, exists := c.entries[key]; exists {
-		c.curSize -= entry.Size
-		delete(c.entries, key)
-		c.removeFromOrder(key)
+func evict(c *types.TTLCache, key string) {
+	if entry, exists := c.Entries[key]; exists {
+		c.CurSize -= entry.Size
+		delete(c.Entries, key)
+		removeFromOrder(c, key)
 	}
 }
 
 // InvalidateByPrefix は指定されたプレフィックスを持つキャッシュを無効化します。
-func (c *TTLCache) InvalidateByPrefix(prefix string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func InvalidateByPrefix(c *types.TTLCache, prefix string) {
+	c.Mu.Lock()
+	defer c.Mu.Unlock()
 
 	var toDelete []string
-	for key := range c.entries {
+	for key := range c.Entries {
 		if strings.HasPrefix(key, prefix) {
 			toDelete = append(toDelete, key)
 		}
 	}
 
 	for _, key := range toDelete {
-		c.evict(key)
-	}
+			evict(c, key)
+		}
 }
 
 // Stats はキャッシュの統計情報を返します。
-func (c *TTLCache) Stats() (entries int, size int64) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.entries), c.curSize
+func Stats(c *types.TTLCache) (entries int, size int64) {
+	c.Mu.RLock()
+	defer c.Mu.RUnlock()
+	return len(c.Entries), c.CurSize
 }
