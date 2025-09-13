@@ -37,7 +37,7 @@ func getOptimalBufferSize(fileSize int64) int {
 	}
 }
 
-// ListFiles - 並列処理とTTLキャッシュ、ETagによる差分検知を使用
+// ListFiles - TTLキャッシュ、ETagによる差分検知を使用
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	if path == "" {
