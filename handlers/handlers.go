@@ -11,14 +11,14 @@ const (
 	CacheTTL = 5 * time.Minute // Cache TTL
 )
 
-// Handler はAPIハンドラーの依存関係を保持します。
+// Handler はAPIハンドラーの依存関係を保持
 type Handler struct {
 	config     *types.Config
 	cache      *types.TTLCache
 	workerPool *types.WorkerPool
 }
 
-// NewHandler は新しいHandlerを生成します。
+// NewHandler は新しいHandlerを生成
 func NewHandler(config *types.Config) *Handler {
 	return &Handler{
 		config:     config,

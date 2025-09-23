@@ -1,6 +1,6 @@
 package types
 
-// Config はアプリケーションの設定を保持します。
+// Config はアプリケーションの設定を保持
 type Config struct {
 	StorageDir   string
 	MountDirs    []string

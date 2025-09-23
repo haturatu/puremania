@@ -32,7 +32,7 @@ func GetSpecificDirs(c *types.Config) []string {
 	return c.SpecificDirs
 }
 
-// Load は.envファイルから設定を読み込みます。
+// Load は.envファイルから設定を読み込み
 func LoadConfig() *types.Config {
 	_ = godotenv.Load() // .envファイルが見つからなくてもエラーにしない
 
@@ -154,7 +154,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// getEnv は環境変数を読み込み、見つからない場合はデフォルト値を返します。
+// getEnv は環境変数を読み込み、見つからない場合はデフォルト値を返す
 func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
@@ -162,7 +162,7 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// getEnvAsInt は環境変数を整数として読み込みます。
+// getEnvAsInt は環境変数を整数として読み込み
 func getEnvAsInt(key string, fallback int) int {
 	if value, exists := os.LookupEnv(key); exists {
 		if i, err := strconv.Atoi(value); err == nil {
@@ -172,7 +172,7 @@ func getEnvAsInt(key string, fallback int) int {
 	return fallback
 }
 
-// getEnvAsInt64 は環境変数をint64として読み込みます。
+// getEnvAsInt64 は環境変数をint64として読み込み
 func getEnvAsInt64(key string, fallback int64) int64 {
 	if value, exists := os.LookupEnv(key); exists {
 		if i, err := strconv.ParseInt(value, 10, 64); err == nil {
@@ -182,7 +182,7 @@ func getEnvAsInt64(key string, fallback int64) int64 {
 	return fallback
 }
 
-// getEnvAsStringSlice はカンマ区切りの環境変数を文字列スライスとして読み込みます。
+// getEnvAsStringSlice はカンマ区切りの環境変数を文字列スライスとして読み込み
 func getEnvAsStringSlice(key string, fallback []string) []string {
 	if value, exists := os.LookupEnv(key); exists {
 		if value == "" {

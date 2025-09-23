@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 )
 
-// NewWorkerPool は新しいWorkerPoolを生成します。
+// NewWorkerPool は新しいWorkerPoolを生成
 func NewWorkerPool() *types.WorkerPool {
 	workers := runtime.NumCPU()
 	if workers > 16 { // 最大16ワーカーに制限
@@ -39,7 +39,7 @@ func worker(p *types.WorkerPool) {
 	}
 }
 
-// Submit はタスクをワーカープールに投入します。
+// Submit はタスクをワーカープールに投入
 func Submit(p *types.WorkerPool, task func()) {
 	select {
 	case p.TaskQueue <- task:
@@ -49,7 +49,7 @@ func Submit(p *types.WorkerPool, task func()) {
 	}
 }
 
-// SubmitWithResult は結果を返すタスクをワーカープールに投入します。
+// SubmitWithResult は結果を返すタスクをワーカープールに投入
 func SubmitWithResult(p *types.WorkerPool, task func() interface{}) <-chan interface{} {
 	resultChan := make(chan interface{}, 1)
 	Submit(p, func() {
@@ -60,12 +60,12 @@ func SubmitWithResult(p *types.WorkerPool, task func() interface{}) <-chan inter
 	return resultChan
 }
 
-// ActiveWorkers は現在アクティブなワーカー数を返します。
+// ActiveWorkers は現在アクティブなワーカー数を返す
 func ActiveWorkers(p *types.WorkerPool) int64 {
 	return atomic.LoadInt64(&p.Active)
 }
 
-// Close はワーカープールをシャットダウンします。
+// Close はワーカープールをシャットダウン
 func Close(p *types.WorkerPool) {
 	close(p.TaskQueue)
 	p.Wg.Wait()

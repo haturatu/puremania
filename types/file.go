@@ -25,7 +25,7 @@ type BatchPathsRequest struct {
 	Paths []string `json:"paths"`
 }
 
-// UploadResult はファイルアップロードの結果を表します。
+// UploadResult はファイルアップロードの結果
 type UploadResult struct {
 	Path    string
 	Success bool

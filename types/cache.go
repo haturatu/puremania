@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// CacheEntry は統一キャッシュエントリ（TTL付き）です。
+// CacheEntry は統一キャッシュエントリ（TTL付き）
 type CacheEntry struct {
 	Data      interface{}
 	Timestamp time.Time
@@ -13,12 +13,12 @@ type CacheEntry struct {
 	TTL       time.Duration
 }
 
-// IsExpired はエントリが期限切れかどうかを返します。
+// IsExpired はエントリが期限切れかどうかを返す
 func (c *CacheEntry) IsExpired() bool {
 	return time.Since(c.Timestamp) > c.TTL
 }
 
-// TTLCache は統一TTLキャッシュです。
+// TTLCache は統一TTLキャッシュ
 type TTLCache struct {
 	Mu       sync.RWMutex
 	Entries  map[string]*CacheEntry

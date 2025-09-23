@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// NewTTLCache は新しいTTLCacheを生成します。
+// NewTTLCache は新しいTTLCacheを生成
 func NewTTLCache(maxSize int64, maxItems int) *types.TTLCache {
 	cache := &types.TTLCache{
 		Entries:  make(map[string]*types.CacheEntry),
@@ -41,7 +41,7 @@ func cleanupExpired(c *types.TTLCache) {
 	}
 }
 
-// Get はキーに対応するデータを取得します。
+// Get はキーに対応するデータを取得
 func Get(c *types.TTLCache, key string) (interface{}, bool) {
 	c.Mu.RLock()
 	entry, exists := c.Entries[key]
@@ -63,7 +63,7 @@ func Get(c *types.TTLCache, key string) (interface{}, bool) {
 	return entry.Data, true
 }
 
-// Set はキーにデータを設定します。
+// Set はキーにデータを設定
 func Set(c *types.TTLCache, key string, data interface{}, size int64, ttl time.Duration) {
 	c.Mu.Lock()
 	defer c.Mu.Unlock()
@@ -117,7 +117,7 @@ func evict(c *types.TTLCache, key string) {
 	}
 }
 
-// InvalidateByPrefix は指定されたプレフィックスを持つキャッシュを無効化します。
+// InvalidateByPrefix は指定されたプレフィックスを持つキャッシュを無効化
 func InvalidateByPrefix(c *types.TTLCache, prefix string) {
 	c.Mu.Lock()
 	defer c.Mu.Unlock()
@@ -134,7 +134,7 @@ func InvalidateByPrefix(c *types.TTLCache, prefix string) {
 		}
 }
 
-// Stats はキャッシュの統計情報を返します。
+// Stats はキャッシュの統計情報を返す
 func Stats(c *types.TTLCache) (entries int, size int64) {
 	c.Mu.RLock()
 	defer c.Mu.RUnlock()

@@ -84,7 +84,7 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	h.respondSuccess(w, status)
 }
 
-// GetSpecificDirs は、設定された特定のディレクトリのリストを返します。
+// GetSpecificDirs は、設定された特定のディレクトリのリストを返す
 func (h *Handler) GetSpecificDirs(w http.ResponseWriter, r *http.Request) {
 	dirs := h.config.SpecificDirs
 	dirInfos := make([]types.SpecificDirInfo, 0, len(dirs))
