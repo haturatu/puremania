@@ -5,7 +5,7 @@
 - [Pure Mania](#pure-mania)
 - [Why did I make this?](#why-did-i-make-this)
   - [Features](#features)
-  - [Recent Changes (2025-09-12 - 2025-09-13)](#recent-changes-2025-09-12---2025-09-13)
+  - [Recent Changes (2025-09-27)](#recent-changes-2025-09-27)
   - [Getting Started](#getting-started)
     - [IP Address Firewall Configuration](#ip-address-firewall-configuration)
     - [Prerequisites](#prerequisites)
@@ -16,7 +16,7 @@
   - [Usage](#usage)
   - [Keyboard Shortcuts](#keyboard-shortcuts)
     - [Global Shortcuts](#global-shortcuts)
-    - [Search Bar: `cd` Mode](#search-bar-cd-mode)
+    - [Search Bar: `cd` and `aria2c` Mode](#search-bar-cd-and-aria2c-mode)
     - [File Editor](#file-editor)
   - [Configuration](#configuration-1)
     - [Switching Between Remote and Local JavaScript Libraries](#switching-between-remote-and-local-javascript-libraries)
@@ -64,32 +64,28 @@ That’s enough of my rambling.
 - **No Database Required:** Pure Mania uses the filesystem directly, eliminating the need for a database.
 - **Media Preview**: Preview images and play audio/video files directly in the browser.
 - **Web Editor**: Edit text files directly within the web interface.
+- **Aria2c Integration:** Start downloads via the search bar (`aria2c <URL>`) and monitor them on a dedicated page. The `aria2c` daemon is managed automatically by the application.
 - **Media Player**:
   - Play audio and video files directly in the browser.
   - Supports various playback modes: normal, shuffle, smart shuffle (plays from a random sibling folder), and repeat one.
   - Playlist repeat functionality.
   - Caches album art at the directory level to reduce redundant API calls. It looks for `cover.jpg`, `cover.jpeg`, `cover.png`, `folder.jpg`, or `album.jpg` in the same directory as the music file.
 
-## Recent Changes (2025-09-12 - 2025-09-13)
+## Recent Changes (2025-09-27)
 
-Here's a summary of notable changes from the last couple of days, categorized for clarity.
+This update introduces a major new feature, Aria2c integration, along with numerous fixes and refactorings to support it.
 
 ### Features
-- **Music Auto-Sort (`14377b5`):** The file list now automatically sorts by name in ascending order when a directory contains 10 or more music files.
-- **Keyboard Shortcuts (`bfbafd5`):** Added a comprehensive "Keyboard Shortcuts" section to the README for improved usability and discoverability of features.
-- **Specific Directory Navigation (`b0f4ea7`):** Implemented a feature to display and navigate to user-defined specific directories from the sidebar.
-- **Vim Mode (`dfc6d90`):** Added Vim keybindings to the web editor for a more efficient text editing experience.
-- **JS Library Switching (`0f9ecb5`):** Created a script (`jsload.sh`) to easily switch between remote (CDN) and local bundled JavaScript libraries.
+- **Aria2c Integration (`1180f65`, `a5d48f7`, `4bd0b23`, `baa7fc5`):** Added a comprehensive integration with the `aria2c` download manager.
+  - Downloads can be initiated from the search bar using the `aria2c <URL>` command.
+  - A dedicated page (`/system/aria2c`) allows monitoring and control (pause, resume, cancel) of active, waiting, and stopped downloads.
+  - The `aria2c` daemon process is now automatically and securely managed by the Pure Mania backend. This feature can be enabled by setting `ARIA2C=enable` in the `.env` file.
 
-### UI, Bug Fixes & UX Improvements
-- **Client-Side Caching (`f41e408`, `d178348`, `c53aaa8`):** Overhauled the front-end caching mechanism, fixing critical bugs where the view would not update after navigation. This ensures the UI correctly reflects the current directory's contents.
-- **Navigation Fixes (`d5bdcb0`):** Corrected folder click handling to ensure proper and reliable navigation.
-- **View Switching (`2112ebd`):** Resolved an issue where the UI would not visually update when switching between grid, list, and masonry views.
-
-### Code Refactoring
-- **CSS Restructuring (`d4ae797`):** Reorganized CSS files into a more modular, component-based structure for better maintainability.
-- **JavaScript Modules (`a4ccc6a`):** Converted the frontend JavaScript codebase to use modern ES modules, improving code organization and dependency management.
-- **CodeMirror 6 Integration (`6a071d5`):** Upgraded the web editor to use CodeMirror 6, a modern and more extensible code editor component.
+### Bug Fixes & Refactoring
+- **Aria2c Process Management (`1180f65`):** Refactored the `aria2c` daemon startup logic to ensure reliable and secure process management, resolving persistent authorization errors by managing the process lifecycle directly and isolating it from user configuration files.
+- **Frontend Stability & Routing (`e372bf9`):** Fixed several frontend issues related to feature detection and routing, ensuring a smoother user experience. The application now correctly shows or hides UI elements based on whether optional features are enabled.
+- **Go Backend Refactoring (`8489799`):** Restructured Go type definitions into a centralized `types/` package for better code organization and maintainability.
+- **Build Process (`689883e`):** Added `go vet` to the build script to improve code quality and catch potential issues early.
 
 ## Getting Started  
   
@@ -111,7 +107,8 @@ In general, as long as proper user and permission management is in place, any fi
 ### Prerequisites  
   
 - [Go](https://golang.org/doc/install) (version 1.24.0 or later)  
-  
+- `aria2c` (if you want to use the Aria2c integration feature)
+
 ### Installation & Building  
   
 1.  **Clone the repository:**  
@@ -198,10 +195,11 @@ These shortcuts are available anywhere in the file browser view.
 | `Ctrl` + `n`        | Create a new empty file              |
 | `Ctrl` + `Shift` + `n` | Create a new folder                  |
 
-### Search Bar: `cd` Mode
+### Search Bar: `cd` and `aria2c` Mode
 
-The search bar doubles as a quick navigation tool using `cd` commands, similar to a shell.
+The search bar doubles as a command interface for quick actions.
 
+**`cd` Mode (Navigation):**
 1.  Type `cd ` (with a space) into the search bar to activate `cd` mode.
 2.  You can then use commands like:
     - `cd /absolute/path/to/folder` - Navigate to an absolute path.
@@ -210,7 +208,12 @@ The search bar doubles as a quick navigation tool using `cd` commands, similar t
     - `cd` (by itself) - Go to the root directory.
 3.  Press `Enter` to execute the navigation.
 
-**Tab Completion:**
+**`aria2c` Mode (Downloads):**
+1.  Type `aria2c ` (with a space) into the search bar.
+2.  Paste the URL you want to download.
+3.  Press `Enter` to start the download. You can monitor the progress on the Aria2c page.
+
+**Tab Completion (for `cd` mode):**
 - While in `cd` mode, press `Tab` to see a list of matching directory completions.
 - Use `↑` / `↓` arrows to navigate the completion list.
 - Press `Enter` or `Tab` again to apply the selected completion.
@@ -254,6 +257,7 @@ The following environment variables can be configured in the `.env` file:
 | `ZIP_TIMEOUT`      | Timeout in seconds for ZIP file creation.                                                                                                              | `300`                |  
 | `MAX_ZIP_SIZE`     | Maximum size in MB for files to be zipped.                                                                                                             | `1024`               |
 | `SPECIFIC_DIRS`    | Comma-separated list of full paths to show in the sidebar. If empty, default directories (Documents, Images, etc. in the user's home) will be used. | (empty)              |
+| `ARIA2C`           | Set to `enable` to activate the Aria2c integration feature. The `aria2c` executable must be in the system's PATH.                                     | `disable`            |
   
 ### Switching Between Remote and Local JavaScript Libraries
 
@@ -329,6 +333,9 @@ Pure Mania exposes the following RESTful API endpoints under the `/api` prefix:
 - `GET    /config`: Retrieve the server's public configuration.  
 - `POST   /search`: Search for files based on a query.  
 - `GET    /storage-info`: Get information about storage usage.  
+- `POST   /system/aria2c/download`: (Aria2c enabled) Start a new download.  
+- `GET    /system/aria2c/status`: (Aria2c enabled) Get the status of all downloads.  
+- `POST   /system/aria2c/control`: (Aria2c enabled) Control a download (pause, resume, cancel).  
   
 ## License  
   
