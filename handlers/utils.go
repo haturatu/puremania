@@ -22,6 +22,8 @@ func (h *Handler) convertToVirtualPath(physicalPath string) string {
 		if err == nil {
 			virtualPath := "/" + filepath.ToSlash(relPath)
 			return virtualPath
+		} else {
+			h.logger.Warn("Failed to get relative path from storage dir", "path", physicalPath, "error", err)
 		}
 	}
 
@@ -36,6 +38,8 @@ func (h *Handler) convertToVirtualPath(physicalPath string) string {
 					virtualPath += "/" + filepath.ToSlash(relPath)
 				}
 				return virtualPath
+			} else {
+				h.logger.Warn("Failed to get relative path from mount dir", "path", physicalPath, "mount", mountDir, "error", err)
 			}
 		}
 	}
@@ -89,7 +93,7 @@ func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
 func (h *Handler) respondSuccess(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(types.APIResponse{
+	_ = json.NewEncoder(w).Encode(types.APIResponse{
 		Success: true,
 		Data:    data,
 	})
@@ -98,7 +102,7 @@ func (h *Handler) respondSuccess(w http.ResponseWriter, data interface{}) {
 func (h *Handler) respondError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(types.APIResponse{
+	_ = json.NewEncoder(w).Encode(types.APIResponse{
 		Success: false,
 		Message: message,
 	})
@@ -128,6 +132,7 @@ func (h *Handler) generateDirectoryStateKey(path string) (string, error) {
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
+			h.logger.Warn("Failed to get entry info for state key generation", "entry", entry.Name(), "error", err)
 			continue
 		}
 		fmt.Fprintf(&stateBuilder, "%s:%d:%d;", info.Name(), info.Size(), info.ModTime().UnixNano())
@@ -143,6 +148,8 @@ func (h *Handler) generateDirectoryStateKey(path string) (string, error) {
 		for _, mountDir := range sortedMounts {
 			if info, err := os.Stat(mountDir); err == nil {
 				fmt.Fprintf(&stateBuilder, "mount_%s:%d:%d;", info.Name(), info.Size(), info.ModTime().UnixNano())
+			} else if !os.IsNotExist(err) {
+				h.logger.Warn("Failed to stat mount dir for state key generation", "path", mountDir, "error", err)
 			}
 		}
 	}
@@ -187,6 +194,7 @@ func (h *Handler) buildSafePath(virtualPath string) (string, error) {
 	for _, allowedDir := range allowedDirs {
 		absAllowedDir, err := filepath.Abs(allowedDir)
 		if err != nil {
+			h.logger.Warn("Could not get absolute path for allowed dir", "path", allowedDir, "error", err)
 			continue // or log error
 		}
 		if strings.HasPrefix(absPhysicalPath, absAllowedDir) {

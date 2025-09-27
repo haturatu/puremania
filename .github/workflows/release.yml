@@ -1,0 +1,36 @@
+name: Create Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for semantic-version
+
+      - name: Determine next version
+        id: version
+        uses: paulhatch/semantic-version@v5.4.0
+        with:
+          # The action will automatically bump the patch version
+          # on commits to main.
+          tag_prefix: "v"
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v2.0.6
+        with:
+          tag_name: ${{ steps.version.outputs.version_tag }}
+          name: "Release ${{ steps.version.outputs.version }}"
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

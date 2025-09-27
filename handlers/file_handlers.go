@@ -30,6 +30,7 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Failed to decode request body", "error", err)
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -41,6 +42,7 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 
 	sourcePath, err := h.convertToPhysicalPath(req.Path)
 	if err != nil {
+		h.logger.Error("Invalid source path", "path", req.Path, "error", err)
 		h.respondError(w, "Invalid source path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -57,7 +59,11 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return fmt.Errorf("cannot open source file: %w", err)
 		}
-		defer source.Close()
+		defer func() {
+			if err := source.Close(); err != nil {
+				h.logger.Error("Failed to close source file", "path", sourcePath, "error", err)
+			}
+		}()
 
 		format, stream, err := archives.Identify(ctx, sourcePath, source)
 		if err != nil {
@@ -82,13 +88,21 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return fmt.Errorf("could not open file in archive: %w", err)
 			}
-			defer file.Close()
+			defer func() {
+				if err := file.Close(); err != nil {
+					h.logger.Error("Failed to close file in archive", "path", f.NameInArchive, "error", err)
+				}
+			}()
 
 			createdFile, err := os.Create(dest)
 			if err != nil {
 				return fmt.Errorf("could not create destination file: %w", err)
 			}
-			defer createdFile.Close()
+			defer func() {
+				if err := createdFile.Close(); err != nil {
+					h.logger.Error("Failed to close destination file", "path", dest, "error", err)
+				}
+			}()
 
 			_, err = io.Copy(createdFile, file)
 			return err
@@ -110,7 +124,9 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err != nil {
-			os.RemoveAll(destPath)
+			if err := os.RemoveAll(destPath); err != nil {
+				h.logger.Error("Failed to remove destination path after extraction error", "path", destPath, "error", err)
+			}
 			return fmt.Errorf("extraction failed: %w", err)
 		}
 
@@ -119,6 +135,7 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 
 	result := <-resultChan
 	if err, ok := result.(error); ok && err != nil {
+		h.logger.Error("Failed to extract file", "path", req.Path, "error", err)
 		h.respondError(w, "Cannot extract file: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -131,12 +148,11 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 	h.respondSuccess(w, map[string]string{"message": "File extracted successfully"})
 }
 
-
 // Optimized buffer sizes for different operations
 const (
-	SmallBufferSize = 32 * 1024       // 32KB for small files
-	LargeBufferSize = 64 * 1024       // 64KB for large files
-	HugeBufferSize  = 128 * 1024      // 128KB for very large files
+	SmallBufferSize = 32 * 1024  // 32KB for small files
+	LargeBufferSize = 64 * 1024  // 64KB for large files
+	HugeBufferSize  = 128 * 1024 // 128KB for very large files
 )
 
 // getOptimalBufferSize returns optimal buffer size based on file size
@@ -161,6 +177,7 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	// 1. 現在のディレクトリ状態からETagを生成
 	currentStateKey, err := h.generateDirectoryStateKey(path)
 	if err != nil {
+		h.logger.Error("Failed to generate directory state key", "path", path, "error", err)
 		// ETag生成に失敗した場合は、キャッシュを使わずに通常処理
 		h.serveFreshFileList(w, path, "") // ETagなしで提供
 		return
@@ -194,8 +211,10 @@ func (h *Handler) serveFreshFileList(w http.ResponseWriter, path string, etag st
 	fileInfos, err := h.getFileList(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			h.logger.Warn("Directory not found for listing", "path", path, "error", err)
 			h.respondError(w, "Directory not found", http.StatusNotFound)
 		} else {
+			h.logger.Error("Failed to get file list", "path", path, "error", err)
 			h.respondError(w, "Cannot read directory", http.StatusInternalServerError)
 		}
 		return
@@ -238,6 +257,8 @@ func (h *Handler) getFileList(path string) ([]types.FileInfo, error) {
 					IsDir:   true,
 					IsMount: true,
 				})
+			} else if !os.IsNotExist(err) {
+				h.logger.Warn("Failed to stat mount directory", "path", mountDir, "error", err)
 			}
 		}
 	}
@@ -272,7 +293,7 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 				}
 			}
 
-			mimeType := "application/octet-stream"
+			var mimeType string
 			isEditable := false
 
 			if !entry.IsDir() {
@@ -281,6 +302,8 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 					mimeType = "application/octet-stream"
 				}
 				isEditable = utils.IsTextFile(mimeType) || utils.IsEditableByExtension(entry.Name())
+			} else {
+				mimeType = "application/octet-stream"
 			}
 
 			physicalFilepath := filepath.Join(basePath, entry.Name())
@@ -329,6 +352,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		if r.MultipartForm != nil {
 			_ = r.MultipartForm.RemoveAll()
 		}
+		h.logger.Error("Failed to parse multipart form", "error", err)
 		h.respondError(w, "File is too large", http.StatusBadRequest)
 		return
 	}
@@ -345,11 +369,13 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	fullPath, err := h.convertToPhysicalPath(path)
 	if err != nil {
+		h.logger.Error("Invalid path for upload", "path", path, "error", err)
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if err := os.MkdirAll(fullPath, 0755); err != nil {
+		h.logger.Error("Failed to create upload directory", "path", fullPath, "error", err)
 		h.respondError(w, "Cannot create directory", http.StatusInternalServerError)
 		return
 	}
@@ -358,6 +384,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	relativePaths := r.MultipartForm.Value["relativePath[]"]
 
 	if len(files) != len(relativePaths) {
+		h.logger.Warn("Mismatch between files and relative paths", "files_count", len(files), "paths_count", len(relativePaths))
 		h.respondError(w, "Mismatch between files and relative paths", http.StatusBadRequest)
 		return
 	}
@@ -374,10 +401,15 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 			file, err := fileHeader.Open()
 			if err != nil {
+				h.logger.Error("Failed to open multipart file", "filename", fileHeader.Filename, "error", err)
 				resultChan <- types.UploadResult{Path: fileHeader.Filename, Success: false}
 				return
 			}
-			defer file.Close()
+			defer func() {
+				if err := file.Close(); err != nil {
+					h.logger.Error("Failed to close multipart file", "filename", fileHeader.Filename, "error", err)
+				}
+			}()
 
 			relativePath := relativePaths[index]
 			normalizedRelativePath := filepath.FromSlash(relativePath)
@@ -385,6 +417,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			targetDir := filepath.Dir(targetPath)
 
 			if err := os.MkdirAll(targetDir, 0755); err != nil {
+				h.logger.Error("Failed to create target directory for upload", "path", targetDir, "error", err)
 				resultChan <- types.UploadResult{Path: relativePath, Success: false}
 				return
 			}
@@ -392,11 +425,14 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			// ファイル作成
 			dst, err := os.Create(targetPath)
 			if err != nil {
+				h.logger.Error("Failed to create destination file", "path", targetPath, "error", err)
 				resultChan <- types.UploadResult{Path: relativePath, Success: false}
 				return
 			}
 			defer func() {
-				_ = dst.Close()
+				if err := dst.Close(); err != nil {
+					h.logger.Error("Failed to close destination file for upload", "path", targetPath, "error", err)
+				}
 			}()
 
 			// ファイルサイズに応じた最適な保存方法を選択
@@ -419,12 +455,14 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 			// エラーチェック
 			if saveErr != nil {
+				h.logger.Error("Failed to save uploaded file", "path", targetPath, "error", saveErr)
 				// エラー時は作成したファイルを削除
-				os.Remove(targetPath)
+				if err := os.Remove(targetPath); err != nil {
+					h.logger.Error("Failed to remove partially uploaded file", "path", targetPath, "error", err)
+				}
 				resultChan <- types.UploadResult{Path: relativePath, Success: false}
 				return
 			}
-
 			virtualPath := h.convertToVirtualPath(targetPath)
 			resultChan <- types.UploadResult{Path: virtualPath, Success: true}
 
@@ -473,24 +511,32 @@ func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 
 	fullPath, err := h.convertToPhysicalPath(path)
 	if err != nil {
+		h.logger.Error("Invalid path for download", "path", path, "error", err)
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	file, err := os.Open(fullPath)
 	if err != nil {
+		h.logger.Warn("Cannot open file for download", "path", fullPath, "error", err)
 		h.respondError(w, "Cannot open file", http.StatusNotFound)
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			h.logger.Error("Failed to close file for download", "path", fullPath, "error", err)
+		}
+	}()
 
 	stat, err := file.Stat()
 	if err != nil {
+		h.logger.Error("Cannot get file info for download", "path", fullPath, "error", err)
 		h.respondError(w, "Cannot get file info", http.StatusInternalServerError)
 		return
 	}
 
 	if stat.IsDir() {
+		h.logger.Warn("Attempted to download a directory", "path", fullPath)
 		h.respondError(w, "Cannot download directory", http.StatusBadRequest)
 		return
 	}
@@ -501,6 +547,7 @@ func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filename := filepath.Base(path)
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
 
 	// http.ServeContentを使用してsendfile最適化とRange/If-Modified-Since自動処理
@@ -517,17 +564,20 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 
 	fullPath, err := h.convertToPhysicalPath(path)
 	if err != nil {
+		h.logger.Error("Invalid path for getting content", "path", path, "error", err)
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	stat, err := os.Stat(fullPath)
 	if err != nil {
+		h.logger.Warn("Cannot get file info for content", "path", fullPath, "error", err)
 		h.respondError(w, "Cannot get file info", http.StatusNotFound)
 		return
 	}
 
 	if stat.IsDir() {
+		h.logger.Warn("Attempted to get content of a directory", "path", fullPath)
 		h.respondError(w, "Cannot get content of directory", http.StatusBadRequest)
 		return
 	}
@@ -542,6 +592,7 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if stat.Size() > 10*1024*1024 { // 10MB limit
+		h.logger.Warn("File too large for editing", "path", fullPath, "size", stat.Size())
 		h.respondError(w, "File too large for editing (max 10MB)", http.StatusBadRequest)
 		return
 	}
@@ -562,6 +613,7 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
 		content, err := os.ReadFile(fullPath)
 		if err != nil {
+			h.logger.Error("Failed to read file content", "path", fullPath, "error", err)
 			return nil
 		}
 		return string(content)
@@ -585,6 +637,7 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 	var req types.BatchPathsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Failed to decode request body for zip download", "error", err)
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -603,17 +656,25 @@ func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 
 	// 並列処理でzip作成
 	go func() {
-		defer pw.Close()
+		defer func() {
+			if err := pw.Close(); err != nil {
+				h.logger.Error("Failed to close pipe writer", "error", err)
+			}
+		}()
 		h.createZipArchive(pw, req.Paths)
 	}()
 
 	// ストリーミング出力
-	io.Copy(w, pr)
+	_, _ = io.Copy(w, pr)
 }
 
 func (h *Handler) createZipArchive(w io.Writer, paths []string) {
 	zipWriter := zip.NewWriter(w)
-	defer zipWriter.Close()
+	defer func() {
+		if err := zipWriter.Close(); err != nil {
+			h.logger.Error("Failed to close zip writer", "error", err)
+		}
+	}()
 
 	var successfulFiles, failedFiles int64
 	var mu sync.Mutex
@@ -627,12 +688,14 @@ func (h *Handler) createZipArchive(w io.Writer, paths []string) {
 
 			fullPath, err := h.convertToPhysicalPath(userPath)
 			if err != nil {
+				h.logger.Error("Invalid path for zipping", "path", userPath, "error", err)
 				atomic.AddInt64(&failedFiles, 1)
 				return
 			}
 
 			fileInfo, err := os.Stat(fullPath)
 			if err != nil {
+				h.logger.Error("Failed to stat file for zipping", "path", fullPath, "error", err)
 				atomic.AddInt64(&failedFiles, 1)
 				return
 			}
@@ -657,13 +720,15 @@ func (h *Handler) createZipArchive(w io.Writer, paths []string) {
 func (h *Handler) addDirectoryToZip(zipWriter *zip.Writer, dirPath string, successfulFiles, failedFiles *int64, mu *sync.Mutex) {
 	var wg sync.WaitGroup
 
-	filepath.WalkDir(dirPath, func(filePath string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(dirPath, func(filePath string, d os.DirEntry, err error) error {
 		if err != nil {
+			h.logger.Error("Error during directory walk for zipping", "path", filePath, "error", err)
 			return err
 		}
 
 		relPath, err := filepath.Rel(filepath.Dir(dirPath), filePath)
 		if err != nil {
+			h.logger.Error("Failed to get relative path for zipping", "path", filePath, "error", err)
 			return err
 		}
 
@@ -681,11 +746,17 @@ func (h *Handler) addDirectoryToZip(zipWriter *zip.Writer, dirPath string, succe
 			}
 			if info, err := d.Info(); err == nil {
 				header.Modified = info.ModTime()
+			} else {
+				h.logger.Warn("Failed to get dir info for zip header", "path", filePath, "error", err)
 			}
 
 			mu.Lock()
-			zipWriter.CreateHeader(header)
+			_, err = zipWriter.CreateHeader(header)
 			mu.Unlock()
+			if err != nil {
+				h.logger.Error("Failed to create zip header for directory", "path", relPath, "error", err)
+				return err // エラーを返してWalkを停止
+			}
 			return nil
 		}
 
@@ -703,17 +774,23 @@ func (h *Handler) addDirectoryToZip(zipWriter *zip.Writer, dirPath string, succe
 		return nil
 	})
 
+	if err != nil {
+		h.logger.Error("Failed to walk directory for zipping", "path", dirPath, "error", err)
+	}
+
 	wg.Wait()
 }
 
 func (h *Handler) addFileToZip(zipWriter *zip.Writer, filePath, zipPath string, mu *sync.Mutex) bool {
 	info, err := os.Stat(filePath)
 	if err != nil {
+		h.logger.Error("Failed to stat file for zipping", "path", filePath, "error", err)
 		return false
 	}
 
 	header, err := zip.FileInfoHeader(info)
 	if err != nil {
+		h.logger.Error("Failed to create zip file info header", "path", filePath, "error", err)
 		return false
 	}
 
@@ -725,14 +802,20 @@ func (h *Handler) addFileToZip(zipWriter *zip.Writer, filePath, zipPath string, 
 	mu.Unlock()
 
 	if err != nil {
+		h.logger.Error("Failed to create zip header for file", "path", zipPath, "error", err)
 		return false
 	}
 
 	file, err := os.Open(filePath)
 	if err != nil {
+		h.logger.Error("Failed to open file for zipping", "path", filePath, "error", err)
 		return false
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			h.logger.Error("Failed to close file for zipping", "path", filePath, "error", err)
+		}
+	}()
 
 	// バッファサイズ最適化
 	bufferSize := getOptimalBufferSize(info.Size())
@@ -742,12 +825,17 @@ func (h *Handler) addFileToZip(zipWriter *zip.Writer, filePath, zipPath string, 
 	_, err = io.CopyBuffer(writer, file, buffer)
 	mu.Unlock()
 
+	if err != nil {
+		h.logger.Error("Failed to copy file content to zip", "path", filePath, "error", err)
+	}
+
 	return err == nil
 }
 
 func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
 	var req types.SaveFileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Failed to decode request body for saving file", "error", err)
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -759,6 +847,7 @@ func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
 
 	fullPath, err := h.convertToPhysicalPath(req.Path)
 	if err != nil {
+		h.logger.Error("Invalid path for saving file", "path", req.Path, "error", err)
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -771,6 +860,7 @@ func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
 
 	result := <-resultChan
 	if err, ok := result.(error); ok && err != nil {
+		h.logger.Error("Failed to save file", "path", fullPath, "error", err)
 		h.respondError(w, "Cannot save file", http.StatusInternalServerError)
 		return
 	}
@@ -785,6 +875,7 @@ func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
 	var req types.BatchPathsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Failed to decode request body for deleting files", "error", err)
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -801,6 +892,7 @@ func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
 
 			fullPath, err := h.convertToPhysicalPath(path)
 			if err != nil {
+				h.logger.Error("Invalid path for deletion", "path", path, "error", err)
 				mu.Lock()
 				errors = append(errors, fmt.Sprintf("Invalid path %s: %v", path, err))
 				mu.Unlock()
@@ -809,6 +901,7 @@ func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
 
 			err = os.RemoveAll(fullPath)
 			if err != nil {
+				h.logger.Error("Failed to delete item", "path", fullPath, "error", err)
 				mu.Lock()
 				errors = append(errors, fmt.Sprintf("Cannot delete %s: %v", path, err))
 				mu.Unlock()
@@ -834,12 +927,14 @@ func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateDirectory(w http.ResponseWriter, r *http.Request) {
 	var req types.CreateDirectoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Failed to decode request body for creating directory", "error", err)
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
 	parentPath, err := h.convertToPhysicalPath(req.Path)
 	if err != nil {
+		h.logger.Error("Invalid base path for creating directory", "path", req.Path, "error", err)
 		h.respondError(w, "Invalid base path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -857,6 +952,7 @@ func (h *Handler) CreateDirectory(w http.ResponseWriter, r *http.Request) {
 
 	result := <-resultChan
 	if err, ok := result.(error); ok && err != nil {
+		h.logger.Error("Failed to create directory", "path", newDirPath, "error", err)
 		h.respondError(w, "Cannot create directory", http.StatusInternalServerError)
 		return
 	}
@@ -876,6 +972,7 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Failed to decode request body for moving file", "error", err)
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -887,12 +984,14 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 
 	sourceFullPath, err := h.convertToPhysicalPath(req.SourcePath)
 	if err != nil {
+		h.logger.Error("Invalid source path for moving", "path", req.SourcePath, "error", err)
 		h.respondError(w, "Invalid source path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	targetFullPath, err := h.convertToPhysicalPath(req.TargetPath)
 	if err != nil {
+		h.logger.Error("Invalid target path for moving", "path", req.TargetPath, "error", err)
 		h.respondError(w, "Invalid target path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -910,6 +1009,7 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 
 	result := <-resultChan
 	if err, ok := result.(error); ok && err != nil {
+		h.logger.Error("Failed to move file", "source", sourceFullPath, "target", targetFullPath, "error", err)
 		h.respondError(w, "Cannot move file: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -933,6 +1033,7 @@ func (h *Handler) CreateFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Failed to decode request body for creating file", "error", err)
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -944,6 +1045,7 @@ func (h *Handler) CreateFile(w http.ResponseWriter, r *http.Request) {
 
 	parentPath, err := h.convertToPhysicalPath(req.Path)
 	if err != nil {
+		h.logger.Error("Invalid path for creating file", "path", req.Path, "error", err)
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -978,8 +1080,10 @@ func (h *Handler) CreateFile(w http.ResponseWriter, r *http.Request) {
 	result := <-resultChan
 	if err, ok := result.(error); ok && err != nil {
 		if strings.Contains(err.Error(), "already exists") {
+			h.logger.Warn("Attempted to create a file that already exists", "path", newFilePath)
 			h.respondError(w, "File already exists", http.StatusBadRequest)
 		} else {
+			h.logger.Error("Failed to create file", "path", newFilePath, "error", err)
 			h.respondError(w, "Cannot create file", http.StatusInternalServerError)
 		}
 		return

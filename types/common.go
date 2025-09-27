@@ -20,21 +20,20 @@ type Aria2cDownloadRequest struct {
 
 // Structs for Aria2c JSON-RPC
 type Aria2cRPCRequest struct {
-        Jsonrpc string        `json:"jsonrpc"`
-        ID      string        `json:"id"`
-        Method  string        `json:"method"`
-        Params  []interface{} `json:"params"`
+	Jsonrpc string        `json:"jsonrpc"`
+	ID      string        `json:"id"`
+	Method  string        `json:"method"`
+	Params  []interface{} `json:"params"`
 }
 
 type Aria2cRPCResponse struct {
-        Jsonrpc string      `json:"jsonrpc"`
-        ID      string      `json:"id"`
-        Result  interface{} `json:"result,omitempty"`
-        Error   *Aria2cError `json:"error,omitempty"`
+	Jsonrpc string       `json:"jsonrpc"`
+	ID      string       `json:"id"`
+	Result  interface{}  `json:"result,omitempty"`
+	Error   *Aria2cError `json:"error,omitempty"`
 }
 
 type Aria2cError struct {
-        Code    int    `json:"code"`
-        Message string `json:"message"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
-

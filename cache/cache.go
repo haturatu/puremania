@@ -130,8 +130,8 @@ func InvalidateByPrefix(c *types.TTLCache, prefix string) {
 	}
 
 	for _, key := range toDelete {
-			evict(c, key)
-		}
+		evict(c, key)
+	}
 }
 
 // Stats はキャッシュの統計情報を返す

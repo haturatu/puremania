@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -29,8 +29,8 @@ func generateSecureToken(length int) (string, error) {
 }
 
 // startAria2cDaemon はaria2cをデーモンとして起動し、設定を返します
-func startAria2cDaemon() (rpcURL string, rpcToken string, err error) {
-	log.Println("Aria2c feature enabled. Starting aria2c daemon...")
+func startAria2cDaemon(logger *slog.Logger) (rpcURL string, rpcToken string, err error) {
+	logger.Info("Aria2c feature enabled. Starting aria2c daemon...")
 
 	token, err := generateSecureToken(16)
 	if err != nil {
@@ -60,7 +60,7 @@ func startAria2cDaemon() (rpcURL string, rpcToken string, err error) {
 		return "", "", fmt.Errorf("failed to start aria2c process. Is aria2c installed and in your PATH?: %w", err)
 	}
 
-	log.Printf("Aria2c process started successfully with PID: %d", cmd.Process.Pid)
+	logger.Info("Aria2c process started successfully", "pid", cmd.Process.Pid)
 
 	// プログラム終了時にaria2cプロセスも終了するようにする
 	go func() {
@@ -74,17 +74,17 @@ func startAria2cDaemon() (rpcURL string, rpcToken string, err error) {
 }
 
 // LoadConfig は.envファイルから設定を読み込みます
-func LoadConfig() *types.Config {
+func LoadConfig(logger *slog.Logger) *types.Config {
 	_ = godotenv.Load() // .envファイルが見つからなくてもエラーにしない
 
 	// デフォルト値
 	config := &types.Config{
 		StorageDir:   getEnv("STORAGE_DIR", "/home/"+os.Getenv("USER")),
 		MountDirs:    getEnvAsStringSlice("MOUNT_DIRS", []string{}),
-		MaxFileSize:  getEnvAsInt64("MAX_FILE_SIZE_MB", 10000),
-		Port:         getEnvAsInt("PORT", 8844),
-		ZipTimeout:   getEnvAsInt("ZIP_TIMEOUT", 300),
-		MaxZipSize:   getEnvAsInt64("MAX_ZIP_SIZE", 1024),
+		MaxFileSize:  getEnvAsInt64(logger, "MAX_FILE_SIZE_MB", 10000),
+		Port:         getEnvAsInt(logger, "PORT", 8844),
+		ZipTimeout:   getEnvAsInt(logger, "ZIP_TIMEOUT", 300),
+		MaxZipSize:   getEnvAsInt64(logger, "MAX_ZIP_SIZE", 1024),
 		SpecificDirs: getEnvAsStringSlice("SPECIFIC_DIRS", []string{}),
 		// Aria2cEnabled は後で設定
 	}
@@ -100,6 +100,8 @@ func LoadConfig() *types.Config {
 			fullPath := filepath.Join(home, dir)
 			if info, err := os.Stat(fullPath); err == nil && info.IsDir() {
 				config.SpecificDirs = append(config.SpecificDirs, fullPath)
+			} else if err != nil && !os.IsNotExist(err) {
+				logger.Warn("Failed to stat default specific dir", "path", fullPath, "error", err)
 			}
 		}
 	}
@@ -108,35 +110,39 @@ func LoadConfig() *types.Config {
 }
 
 func main() {
+	// ロガーを初期化
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
 	// 設定を読み込み
-	cfg := LoadConfig()
+	cfg := LoadConfig(logger)
 
 	// Aria2cが有効な場合はデーモンを起動
 	if cfg.Aria2cEnabled {
-		rpcURL, rpcToken, err := startAria2cDaemon()
+		rpcURL, rpcToken, err := startAria2cDaemon(logger)
 		if err != nil {
-			log.Fatalf("Error starting aria2c: %v", err)
+			logger.Error("Error starting aria2c", "error", err)
+			os.Exit(1)
 		}
 		cfg.Aria2cRPCURL = rpcURL
 		cfg.Aria2cRPCToken = rpcToken
 	}
 
-	fmt.Printf("Server starting on port %d\n", cfg.Port)
-	fmt.Printf("Storage directory: %s\n", cfg.StorageDir)
+	logger.Info("Server starting", "port", cfg.Port)
+	logger.Info("Storage directory", "path", cfg.StorageDir)
 	if len(cfg.MountDirs) > 0 {
-		fmt.Printf("Mount directories: %v\n", cfg.MountDirs)
+		logger.Info("Mount directories", "paths", cfg.MountDirs)
 	}
 	if len(cfg.SpecificDirs) > 0 {
-		fmt.Printf("Specific directories: %v\n", cfg.SpecificDirs)
+		logger.Info("Specific directories", "paths", cfg.SpecificDirs)
 	}
 	if cfg.Aria2cEnabled {
-		fmt.Println("Aria2c feature is enabled.")
+		logger.Info("Aria2c feature is enabled.")
 	} else {
-		fmt.Println("Aria2c feature is disabled.")
+		logger.Info("Aria2c feature is disabled.")
 	}
 
 	// ハンドラーを初期化
-	handler := handlers.NewHandler(cfg)
+	handler := handlers.NewHandler(cfg, logger)
 
 	r := mux.NewRouter()
 
@@ -190,7 +196,7 @@ func main() {
 		IdleTimeout:  300 * time.Second,
 	}
 
-	log.Fatal(srv.ListenAndServe())
+	logger.Error("Server stopped", "error", srv.ListenAndServe())
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -220,20 +226,24 @@ func getEnv(key, fallback string) string {
 }
 
 // getEnvAsInt は環境変数を整数として読み込み
-func getEnvAsInt(key string, fallback int) int {
+func getEnvAsInt(logger *slog.Logger, key string, fallback int) int {
 	if value, exists := os.LookupEnv(key); exists {
 		if i, err := strconv.Atoi(value); err == nil {
 			return i
+		} else {
+			logger.Warn("Invalid integer value for env var, using fallback", "key", key, "value", value, "error", err)
 		}
 	}
 	return fallback
 }
 
 // getEnvAsInt64 は環境変数をint64として読み込み
-func getEnvAsInt64(key string, fallback int64) int64 {
+func getEnvAsInt64(logger *slog.Logger, key string, fallback int64) int64 {
 	if value, exists := os.LookupEnv(key); exists {
 		if i, err := strconv.ParseInt(value, 10, 64); err == nil {
 			return i
+		} else {
+			logger.Warn("Invalid int64 value for env var, using fallback", "key", key, "value", value, "error", err)
 		}
 	}
 	return fallback
