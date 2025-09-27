@@ -131,12 +131,11 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 	h.respondSuccess(w, map[string]string{"message": "File extracted successfully"})
 }
 
-
 // Optimized buffer sizes for different operations
 const (
-	SmallBufferSize = 32 * 1024       // 32KB for small files
-	LargeBufferSize = 64 * 1024       // 64KB for large files
-	HugeBufferSize  = 128 * 1024      // 128KB for very large files
+	SmallBufferSize = 32 * 1024  // 32KB for small files
+	LargeBufferSize = 64 * 1024  // 64KB for large files
+	HugeBufferSize  = 128 * 1024 // 128KB for very large files
 )
 
 // getOptimalBufferSize returns optimal buffer size based on file size

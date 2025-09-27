@@ -200,7 +200,6 @@ func (h *Handler) DownloadWithAria2c(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-
 	h.respondSuccess(w, map[string]string{
 		"message": "Download started successfully",
 		"gid":     gid,
@@ -220,7 +219,6 @@ func (h *Handler) GetAria2cStatus(w http.ResponseWriter, r *http.Request) {
 
 	methods := []string{"aria2.tellActive", "aria2.tellWaiting", "aria2.tellStopped"}
 	fields := []string{"gid", "status", "totalLength", "completedLength", "downloadSpeed", "uploadSpeed", "connections", "dir", "files", "bittorrent"}
-
 
 	for _, method := range methods {
 		go func(m string) {
@@ -248,10 +246,8 @@ func (h *Handler) GetAria2cStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-
 	h.respondSuccess(w, statuses)
 }
-
 
 // ControlAria2cDownload はaria2cのダウンロードを操作 (キャンセル、一時停止、再開)。
 func (h *Handler) ControlAria2cDownload(w http.ResponseWriter, r *http.Request) {
