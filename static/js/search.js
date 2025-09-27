@@ -307,7 +307,7 @@ export class SearchHandler {
                 this.fileManager.ui.showToast('aria2c', `Starting download...`, 'info');
             }
 
-            const response = await fetch('/api/system/download', {
+            const response = await fetch('/api/system/aria2c/download', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -948,7 +948,7 @@ export class SearchHandler {
     }
     
     // 検索モードを終了して通常表示に戻る
-    exitSearchMode() {
+    exitSearchMode(preventNavigation = false) {
         this.isInSearchMode = false;
         this.lastSearchResults = null;
         this.lastSearchTerm = '';
@@ -971,8 +971,10 @@ export class SearchHandler {
             this.originalViewMode = null;
         }
         
-        // 通常のファイル一覧を再読み込み
-        this.fileManager.loadFiles(this.fileManager.router.getCurrentPath());
+        if (!preventNavigation) {
+            // 通常のファイル一覧を再読み込み
+            this.fileManager.loadFiles(this.fileManager.router.getCurrentPath());
+        }
     }
 
     // フォルダに移動し、検索モードを終了

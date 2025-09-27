@@ -17,3 +17,24 @@ type Aria2cDownloadRequest struct {
 	URL  string `json:"url"`
 	Path string `json:"path"`
 }
+
+// Structs for Aria2c JSON-RPC
+type Aria2cRPCRequest struct {
+        Jsonrpc string        `json:"jsonrpc"`
+        ID      string        `json:"id"`
+        Method  string        `json:"method"`
+        Params  []interface{} `json:"params"`
+}
+
+type Aria2cRPCResponse struct {
+        Jsonrpc string      `json:"jsonrpc"`
+        ID      string      `json:"id"`
+        Result  interface{} `json:"result,omitempty"`
+        Error   *Aria2cError `json:"error,omitempty"`
+}
+
+type Aria2cError struct {
+        Code    int    `json:"code"`
+        Message string `json:"message"`
+}
+

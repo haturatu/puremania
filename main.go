@@ -45,6 +45,8 @@ func LoadConfig() *types.Config {
 		ZipTimeout:      getEnvAsInt("ZIP_TIMEOUT", 300),
 		MaxZipSize:      getEnvAsInt64("MAX_ZIP_SIZE", 1024),
 		SpecificDirs:    getEnvAsStringSlice("SPECIFIC_DIRS", []string{}),
+		Aria2cRPCURL:    getEnv("ARIA2C_RPC_URL", "http://localhost:6800/jsonrpc"),
+		Aria2cRPCToken:  getEnv("ARIA2C_RPC_TOKEN", ""),
 	}
 
 	// SpecificDirsが空の場合のデフォルト値設定
@@ -97,7 +99,9 @@ func main() {
 	api.HandleFunc("/storage-info", handler.GetStorageInfo).Methods("GET")
 	api.HandleFunc("/specific-dirs", handler.GetSpecificDirs).Methods("GET")
 	api.HandleFunc("/health", handler.HealthCheck).Methods("GET")
-	api.HandleFunc("/system/download", handler.DownloadWithAria2c).Methods("POST")
+	api.HandleFunc("/system/aria2c/download", handler.DownloadWithAria2c).Methods("POST")
+	api.HandleFunc("/system/aria2c/status", handler.GetAria2cStatus).Methods("GET")
+	api.HandleFunc("/system/aria2c/control", handler.ControlAria2cDownload).Methods("POST")
 
 	// 静的ファイルのサービス
 	    staticFileHandler := http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -9,6 +9,7 @@ import { ApiClient } from './api.js';
 import { EventHandler } from './events.js';
 import { Uploader } from './uploader.js';
 import { Util } from './util.js';
+import { Aria2cPageHandler } from './aria2c-page.js';
 
 class FileManagerApp {
     constructor() {
@@ -35,12 +36,15 @@ class FileManagerApp {
         // after the modules it depends on are available.
         this.searchHandler = new SearchHandler(this);
 
+        this.aria2cPageHandler = new Aria2cPageHandler(this);
+
         this.init();
     }
 
     async init() {
         this.events.bindEvents();
         this.searchHandler.init();
+        this.aria2cPageHandler.init();
         this.updateStorageInfo();
 
         // Load and display specific dirs
@@ -48,7 +52,17 @@ class FileManagerApp {
         this.ui.updateSpecificDirs(specificDirs);
 
         this.router.onChange((path) => {
-            this.navigateToPath(path);
+            if (path === '/system/aria2c') {
+                if (this.searchHandler.isInSearchMode) {
+                    this.searchHandler.exitSearchMode(true); // Pass true to prevent navigation
+                }
+                this.aria2cPageHandler.enterAria2cMode();
+            } else {
+                if (this.aria2cPageHandler.isInAria2cMode) {
+                    this.aria2cPageHandler.exitAria2cMode();
+                }
+                this.navigateToPath(path);
+            }
         });
     }
 
