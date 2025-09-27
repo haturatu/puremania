@@ -27,6 +27,10 @@
                 <!-- Specific dirs will be loaded here -->
             </div>
             
+            <div class="nav-item" id="aria2c-status-btn" data-path="/system/aria2c" >
+                <span>aria2c</span>
+            </div>
+            
             <div class="storage-info">
                 <div class="storage-text">
                     <span id="storage-used">0 B</span> / <span id="storage-total">0 B</span>
@@ -96,5 +100,29 @@
     }
     </script>
     <script type="module" src="/static/js/app.js?=v0.0.1"></script>
+
+    <!-- Aria2c Status Modal -->
+    <div id="aria2c-status-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Aria2c Downloads</h2>
+                <span class="close-button">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="aria2c-active-downloads">
+                    <h3>Active</h3>
+                    <div class="download-list"></div>
+                </div>
+                <div id="aria2c-waiting-downloads">
+                    <h3>Waiting</h3>
+                    <div class="download-list"></div>
+                </div>
+                <div id="aria2c-stopped-downloads">
+                    <h3>Stopped/Finished</h3>
+                    <div class="download-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

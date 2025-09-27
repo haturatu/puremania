@@ -531,4 +531,65 @@ export class ApiClient {
             return [];
         }
     }
+
+    async getAria2cStatus() {
+        try {
+            const response = await fetch('/api/system/aria2c/status');
+            if (!response.ok) {
+                throw new Error('Failed to fetch aria2c status');
+            }
+            const result = await response.json();
+            if (result.success) {
+                return result.data;
+            } else {
+                throw new Error(result.message || 'Failed to get aria2c status');
+            }
+        } catch (error) {
+            console.error('Error fetching aria2c status:', error);
+            this.app.ui.showToast('Error', error.message, 'error');
+            return null;
+        }
+    }
+
+    async controlAria2cDownload(gid, action) {
+        try {
+            const response = await fetch('/api/system/aria2c/control', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ gid, action })
+            });
+            const result = await response.json();
+            if (result.success) {
+                this.app.ui.showToast('Success', result.data.message || `Action ${action} successful`, 'success');
+                return true;
+            } else {
+                throw new Error(result.message || `Failed to ${action} download`);
+            }
+        } catch (error) {
+            console.error(`Error ${action} download:`, error);
+            this.app.ui.showToast('Error', error.message, 'error');
+            return false;
+        }
+    }
+
+    async getConfig() {
+        try {
+            const response = await fetch('/api/config');
+            if (!response.ok) {
+                throw new Error(`Failed to fetch config (status: ${response.status})`);
+            }
+            const result = await response.json();
+            if (result.success) {
+                return result.data;
+            } else {
+                throw new Error(result.message || 'Failed to parse config data');
+            }
+        } catch (error) {
+            console.error('Error fetching config:', error);
+            this.app.ui.showToast('Error', 'Could not load server configuration.', 'error');
+            return null; // エラー時はnullを返す
+        }
+    }
 }

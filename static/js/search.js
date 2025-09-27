@@ -23,6 +23,7 @@ export class SearchHandler {
         
         // cdコマンドとTab補完関連の状態
         this.isCdMode = false;
+        this.isAria2cMode = false;
         this.cdCompletions = [];
         this.selectedCompletionIndex = -1;
         this.isShowingCompletions = false;
@@ -233,6 +234,7 @@ export class SearchHandler {
     handleInput(e) {
         const value = e.target.value;
         this.isCdMode = value.startsWith('cd ');
+        this.isAria2cMode = value.startsWith('aria2c ');
         
         if (this.isCdMode && this.isShowingCompletions) {
             const path = value.slice(3); // 'cd ' を除去
@@ -246,6 +248,8 @@ export class SearchHandler {
         
         if (this.isCdMode) {
             this.executeCdCommand(value);
+        } else if (this.isAria2cMode) {
+            this.executeAria2cCommand(value);
         } else {
             this.performSearch();
         }
@@ -286,6 +290,59 @@ export class SearchHandler {
         }
     }
     
+    // aria2cコマンドの実行
+    async executeAria2cCommand(command) {
+        const url = command.slice('aria2c '.length).trim();
+        if (!url) {
+            if (this.fileManager && this.fileManager.ui) {
+                this.fileManager.ui.showToast('aria2c Error', 'Please provide a URL.', 'error');
+            }
+            return;
+        }
+
+        const currentPath = this.fileManager.router.getCurrentPath();
+
+        try {
+            if (this.fileManager && this.fileManager.ui) {
+                this.fileManager.ui.showToast('aria2c', `Starting download...`, 'info');
+            }
+
+            const response = await fetch('/api/system/aria2c/download', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: url,
+                    path: currentPath
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                if (this.fileManager && this.fileManager.ui) {
+                    this.fileManager.ui.showToast('aria2c', result.message || 'Download started.', 'success');
+                }
+                const searchInput = document.querySelector('.search-input');
+                if (searchInput) {
+                    searchInput.value = '';
+                }
+                this.isAria2cMode = false;
+                this.isCdMode = false;
+            } else {
+                if (this.fileManager && this.fileManager.ui) {
+                    this.fileManager.ui.showToast('aria2c Error', result.message || 'Failed to start download.', 'error');
+                }
+            }
+        } catch (error) {
+            console.error('aria2c command error:', error);
+            if (this.fileManager && this.fileManager.ui) {
+                this.fileManager.ui.showToast('aria2c Error', `Failed to start download: ${error.message}`, 'error');
+            }
+        }
+    }
+    
     // フォルダへの移動
     async navigateToFolder(path) {
         try {
@@ -306,6 +363,7 @@ export class SearchHandler {
                     searchInput.value = '';
                 }
                 this.isCdMode = false;
+                this.isAria2cMode = false;
                 this.hideCompletions();
 
                 if (this.originalViewMode) {
@@ -890,7 +948,7 @@ export class SearchHandler {
     }
     
     // 検索モードを終了して通常表示に戻る
-    exitSearchMode() {
+    exitSearchMode(preventNavigation = false) {
         this.isInSearchMode = false;
         this.lastSearchResults = null;
         this.lastSearchTerm = '';
@@ -904,6 +962,7 @@ export class SearchHandler {
         
         // cdモード関連の状態をリセット
         this.isCdMode = false;
+        this.isAria2cMode = false;
         this.hideCompletions();
         
         // 元のビューモードに復元
@@ -912,8 +971,10 @@ export class SearchHandler {
             this.originalViewMode = null;
         }
         
-        // 通常のファイル一覧を再読み込み
-        this.fileManager.loadFiles(this.fileManager.router.getCurrentPath());
+        if (!preventNavigation) {
+            // 通常のファイル一覧を再読み込み
+            this.fileManager.loadFiles(this.fileManager.router.getCurrentPath());
+        }
     }
 
     // フォルダに移動し、検索モードを終了
@@ -936,6 +997,7 @@ export class SearchHandler {
                     searchInput.value = '';
                 }
                 this.isCdMode = false;
+                this.isAria2cMode = false;
                 this.hideCompletions();
 
                 if (this.originalViewMode) {

@@ -166,3 +166,43 @@ func (h *Handler) generateSearchCacheKey(term, path, scope string, useRegex, cas
 	hash := md5.Sum([]byte(data))
 	return "search:" + hex.EncodeToString(hash[:])
 }
+
+// 仮想パスを安全な物理パスに変換し、設定で許可されたディレクトリ内にあることを確認
+func (h *Handler) buildSafePath(virtualPath string) (string, error) {
+	physicalPath, err := h.convertToPhysicalPath(virtualPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+
+	// パスが許可されたディレクトリ内にあるか検証
+	isSafe := false
+	absPhysicalPath, err := filepath.Abs(physicalPath)
+	if err != nil {
+		return "", fmt.Errorf("could not get absolute path: %w", err)
+	}
+
+	allowedDirs := append(h.config.MountDirs, h.config.StorageDir)
+	allowedDirs = append(allowedDirs, h.config.SpecificDirs...)
+
+	for _, allowedDir := range allowedDirs {
+		absAllowedDir, err := filepath.Abs(allowedDir)
+		if err != nil {
+			continue // or log error
+		}
+		if strings.HasPrefix(absPhysicalPath, absAllowedDir) {
+			isSafe = true
+			break
+		}
+	}
+
+	if !isSafe {
+		return "", fmt.Errorf("path is not in an allowed directory: %s", virtualPath)
+	}
+
+	// .. を含むパスを拒否
+	if strings.Contains(virtualPath, "..") {
+		return "", fmt.Errorf("path contains '..': %s", virtualPath)
+	}
+
+	return physicalPath, nil
+}

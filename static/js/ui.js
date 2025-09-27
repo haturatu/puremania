@@ -584,4 +584,11 @@ export class UIManager {
             activeItem.classList.add('active');
         }
     }
+
+    updateAria2cVisibility(enabled) {
+        const aria2cBtn = document.getElementById('aria2c-status-btn');
+        if (aria2cBtn) {
+            aria2cBtn.style.display = enabled ? 'flex' : 'none';
+        }
+    }
 }

@@ -22,30 +22,13 @@
                 <i>📁</i>
                 <span>Home</span>
             </div>
-            
-            <div class="nav-item" data-path="/Documents">
-                <i>📄</i>
-                <span>Documents</span>
+
+            <div id="specific-dirs-container">
+                <!-- Specific dirs will be loaded here -->
             </div>
             
-            <div class="nav-item" data-path="/Images">
-                <i>🖼️</i>
-                <span>Images</span>
-            </div>
-            
-            <div class="nav-item" data-path="/Music">
-                <i>🎵</i>
-                <span>Music</span>
-            </div>
-            
-            <div class="nav-item" data-path="/Videos">
-                <i>🎬</i>
-                <span>Videos</span>
-            </div>
-            
-            <div class="nav-item" data-path="/Downloads">
-                <i>📥</i>
-                <span>Downloads</span>
+            <div class="nav-item" id="aria2c-status-btn" data-path="/system/aria2c" >
+                <span>aria2c</span>
             </div>
             
             <div class="storage-info">
@@ -117,5 +100,29 @@
     }
     </script>
     <script type="module" src="/static/js/app.js?=v0.0.1"></script>
+
+    <!-- Aria2c Status Modal -->
+    <div id="aria2c-status-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Aria2c Downloads</h2>
+                <span class="close-button">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="aria2c-active-downloads">
+                    <h3>Active</h3>
+                    <div class="download-list"></div>
+                </div>
+                <div id="aria2c-waiting-downloads">
+                    <h3>Waiting</h3>
+                    <div class="download-list"></div>
+                </div>
+                <div id="aria2c-stopped-downloads">
+                    <h3>Stopped/Finished</h3>
+                    <div class="download-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

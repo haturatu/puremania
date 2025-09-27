@@ -1,6 +1,10 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,15 +18,17 @@ import (
 // GetConfig - クライアントに渡す設定情報
 func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	clientConfig := struct {
-		StorageDir   string   `json:"StorageDir"`
-		MountDirs    []string `json:"MountDirs"`
-		MaxFileSize  int64    `json:"MaxFileSize"`
-		SpecificDirs []string `json:"SpecificDirs"`
+		StorageDir    string   `json:"StorageDir"`
+		MountDirs     []string `json:"MountDirs"`
+		MaxFileSize   int64    `json:"MaxFileSize"`
+		SpecificDirs  []string `json:"SpecificDirs"`
+		Aria2cEnabled bool     `json:"Aria2cEnabled"`
 	}{
-		StorageDir:   h.config.StorageDir,
-		MountDirs:    h.config.MountDirs,
-		MaxFileSize:  h.config.MaxFileSize,
-		SpecificDirs: h.config.SpecificDirs,
+		StorageDir:    h.config.StorageDir,
+		MountDirs:     h.config.MountDirs,
+		MaxFileSize:   h.config.MaxFileSize,
+		SpecificDirs:  h.config.SpecificDirs,
+		Aria2cEnabled: h.config.Aria2cEnabled,
 	}
 	h.respondSuccess(w, clientConfig)
 }
@@ -100,4 +106,192 @@ func (h *Handler) GetSpecificDirs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.respondSuccess(w, dirInfos)
+}
+
+// callAria2cRPC はAria2cのJSON-RPCを呼び出すヘルパー関数
+func (h *Handler) callAria2cRPC(method string, params ...interface{}) (interface{}, error) {
+	if h.config.Aria2cRPCURL == "" {
+		return nil, fmt.Errorf("Aria2c RPC URL is not configured")
+	}
+
+	// トークンをパラメータの先頭に追加
+	rpcParams := []interface{}{}
+	if h.config.Aria2cRPCToken != "" {
+		rpcParams = append(rpcParams, "token:"+h.config.Aria2cRPCToken)
+	}
+	rpcParams = append(rpcParams, params...)
+
+	reqBody := types.Aria2cRPCRequest{
+		Jsonrpc: "2.0",
+		ID:      "puremania",
+		Method:  method,
+		Params:  rpcParams,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.Post(h.config.Aria2cRPCURL, "application/json", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to aria2c RPC: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var rpcResp types.Aria2cRPCResponse
+	if err := json.Unmarshal(body, &rpcResp); err != nil {
+		return nil, fmt.Errorf("failed to parse aria2c RPC response: %w", err)
+	}
+
+	if rpcResp.Error != nil {
+		return nil, fmt.Errorf("aria2c RPC error: %s (code: %d)", rpcResp.Error.Message, rpcResp.Error.Code)
+	}
+
+	return rpcResp.Result, nil
+}
+
+// DownloadWithAria2c はaria2cを使ってファイルをダウンロード
+func (h *Handler) DownloadWithAria2c(w http.ResponseWriter, r *http.Request) {
+	var req types.Aria2cDownloadRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.URL == "" || req.Path == "" {
+		h.respondError(w, "URL and path are required", http.StatusBadRequest)
+		return
+	}
+
+	safePath, err := h.buildSafePath(req.Path)
+	if err != nil {
+		h.respondError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// aria2.addUriを呼び出す
+	params := []interface{}{
+		[]string{req.URL},
+		map[string]interface{}{"dir": safePath},
+	}
+	result, err := h.callAria2cRPC("aria2.addUri", params...)
+	if err != nil {
+		h.respondError(w, "Failed to start download: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	gid, ok := result.(string)
+	if !ok {
+		// 結果がGIDのスライスで返ってくる場合がある
+		if gids, ok := result.([]interface{}); ok && len(gids) > 0 {
+			if gidStr, ok := gids[0].(string); ok {
+				gid = gidStr
+			}
+		}
+	}
+	if gid == "" {
+		h.respondError(w, "Failed to get download GID from aria2c", http.StatusInternalServerError)
+		return
+	}
+
+
+	h.respondSuccess(w, map[string]string{
+		"message": "Download started successfully",
+		"gid":     gid,
+	})
+}
+
+// GetAria2cStatus はaria2cのダウンロードステータスを取得
+func (h *Handler) GetAria2cStatus(w http.ResponseWriter, r *http.Request) {
+	// tellActive, tellWaiting, tellStoppedを並行して呼び出す
+	type StatusResult struct {
+		Name   string
+		Result interface{}
+		Err    error
+	}
+
+	ch := make(chan StatusResult, 3)
+
+	methods := []string{"aria2.tellActive", "aria2.tellWaiting", "aria2.tellStopped"}
+	fields := []string{"gid", "status", "totalLength", "completedLength", "downloadSpeed", "uploadSpeed", "connections", "dir", "files", "bittorrent"}
+
+
+	for _, method := range methods {
+		go func(m string) {
+			var params []interface{}
+			if m == "aria2.tellStopped" {
+				// tellStoppedにはオフセットと数のパラメータが必要
+				params = []interface{}{0, 100} // 最新100件
+			} else {
+				params = []interface{}{fields}
+			}
+
+			res, err := h.callAria2cRPC(m, params...)
+			ch <- StatusResult{Name: m, Result: res, Err: err}
+		}(method)
+	}
+
+	statuses := make(map[string]interface{})
+	for i := 0; i < len(methods); i++ {
+		res := <-ch
+		if res.Err != nil {
+			// 一つのメソッドが失敗しても、他は成功する可能性があるので、エラーを返しつつも処理を続ける
+			statuses[res.Name] = res.Err.Error()
+		} else {
+			statuses[res.Name] = res.Result
+		}
+	}
+
+
+	h.respondSuccess(w, statuses)
+}
+
+
+// ControlAria2cDownload はaria2cのダウンロードを操作 (キャンセル、一時停止、再開)。
+func (h *Handler) ControlAria2cDownload(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		GID    string `json:"gid"`
+		Action string `json:"action"` // "cancel", "pause", "resume"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.GID == "" || req.Action == "" {
+		h.respondError(w, "GID and action are required", http.StatusBadRequest)
+		return
+	}
+
+	var method string
+	switch req.Action {
+	case "cancel":
+		method = "aria2.remove"
+	case "pause":
+		method = "aria2.pause"
+	case "resume":
+		method = "aria2.unpause"
+	case "removeResult":
+		method = "aria2.removeDownloadResult"
+	default:
+		h.respondError(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.callAria2cRPC(method, req.GID)
+	if err != nil {
+		h.respondError(w, "Failed to "+req.Action+" download: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.respondSuccess(w, map[string]interface{}{
+		"message": "Download " + req.Action + " successful",
+		"gid":     result,
+	})
 }

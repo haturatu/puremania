@@ -24,6 +24,13 @@ export class EventHandler {
             }
             return;
         }
+
+        const aria2cBtn = e.target.closest('#aria2c-status-btn');
+        if (aria2cBtn) {
+            e.preventDefault();
+            this.app.router.navigate('/system/aria2c');
+            return;
+        }
         
         // Breadcrumb clicks
         if (e.target.matches('.breadcrumb-item')) {

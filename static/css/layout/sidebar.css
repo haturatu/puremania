@@ -46,7 +46,6 @@
 }
 
 .storage-info {
-  margin-top: auto;
   padding: 15px 20px;
   border-top: 1px solid var(--border-color);
   font-size: 0.8rem;
@@ -65,4 +64,11 @@
   background-color: var(--accent-primary);
   border-radius: 3px;
   transition: width 0.3s ease;
+}
+
+/* Initially hide Aria2c button */
+#aria2c-status-btn {
+    border-top: 1px solid var(--border-color);
+    margin-top: auto;
+    display: none;
 }

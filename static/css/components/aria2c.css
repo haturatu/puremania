@@ -1,0 +1,87 @@
+/* Aria2c Page Specific Styles */
+
+.aria2c-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.aria2c-title {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: var(--text-primary);
+}
+
+.aria2c-section {
+    margin: 15px;
+}
+
+.aria2c-section h3 {
+    font-size: 1.2em;
+    margin-bottom: 10px;
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--accent-primary);
+    padding-bottom: 5px;
+}
+
+.aria2c-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.aria2c-table th,
+.aria2c-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.aria2c-table th {
+    background-color: var(--background-tertiary);
+}
+
+.aria2c-table .file-name {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 20px;
+    background-color: var(--background-tertiary);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: var(--accent-primary);
+    transition: width 0.3s ease-in-out;
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--text-primary);
+    font-size: 0.8em;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+.aria2c-table .actions {
+    white-space: nowrap;
+}
+
+.aria2c-table .actions .btn {
+    margin-right: 5px;
+}

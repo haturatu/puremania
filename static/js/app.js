@@ -9,11 +9,13 @@ import { ApiClient } from './api.js';
 import { EventHandler } from './events.js';
 import { Uploader } from './uploader.js';
 import { Util } from './util.js';
+import { Aria2cPageHandler } from './aria2c-page.js';
 
 class FileManagerApp {
     constructor() {
         this.selectedFiles = new Set();
         this.lastSelectedIndex = -1;
+        this.config = {}; // Add config property
 
         // Initialize modules
         this.router = new Router();
@@ -35,21 +37,52 @@ class FileManagerApp {
         // after the modules it depends on are available.
         this.searchHandler = new SearchHandler(this);
 
+        this.aria2cPageHandler = new Aria2cPageHandler(this);
+
         this.init();
     }
 
     async init() {
+        // Fetch config first
+        this.config = await this.api.getConfig();
+        if (!this.config) {
+            // Error is already shown by api.js
+            return; // Stop initialization if config fails
+        }
+
+        // Update UI based on config
+        this.ui.updateAria2cVisibility(this.config.Aria2cEnabled);
+
         this.events.bindEvents();
         this.searchHandler.init();
+        this.aria2cPageHandler.init();
         this.updateStorageInfo();
 
         // Load and display specific dirs
         const specificDirs = await this.api.getSpecificDirs();
         this.ui.updateSpecificDirs(specificDirs);
 
+        // Setup router with knowledge of the config
         this.router.onChange((path) => {
-            this.navigateToPath(path);
+            if (path === '/system/aria2c') {
+                if (!this.config.Aria2cEnabled) {
+                    this.ui.showToast('Info', 'Aria2c feature is not enabled.', 'info');
+                    this.router.navigate('/');
+                    return;
+                }
+                if (this.searchHandler.isInSearchMode) {
+                    this.searchHandler.exitSearchMode(true); // Pass true to prevent navigation
+                }
+                this.aria2cPageHandler.enterAria2cMode();
+            } else {
+                if (this.aria2cPageHandler.isInAria2cMode) {
+                    this.aria2cPageHandler.exitAria2cMode();
+                }
+                this.navigateToPath(path);
+            }
         });
+
+        // Initial load based on current URL is handled by the router
     }
 
     // Wrapper for API method to allow central control

@@ -15,5 +15,6 @@
 @import url('components/context-menu.css');
 @import url('components/progress.css');
 @import url('components/upload.css');
+@import url('components/aria2c.css');
 
 @import url('responsive.css');
