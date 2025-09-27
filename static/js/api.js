@@ -354,7 +354,7 @@ export class ApiClient {
         if (!confirm(`Are you sure you want to delete "${this.app.util.getBaseName(path)}?`)) return;
 
         try {
-            const response = await fetch('/api/files/batch-delete', {
+            const response = await fetch('/api/files/delete', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -384,7 +384,7 @@ export class ApiClient {
         if (!confirm(`Are you sure you want to delete ${this.app.selectedFiles.size} items?`)) return;
 
         try {
-            const response = await fetch('/api/files/batch-delete', {
+            const response = await fetch('/api/files/delete', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
