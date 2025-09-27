@@ -152,6 +152,7 @@ func main() {
 	api.HandleFunc("/files/mkdir", handler.CreateDirectory).Methods("POST")
 	api.HandleFunc("/files/move", handler.MoveFile).Methods("POST")
 	api.HandleFunc("/files/create", handler.CreateFile).Methods("POST")
+	api.HandleFunc("/files/extract", handler.ExtractFile).Methods("POST")
 	api.HandleFunc("/config", handler.GetConfig).Methods("GET")
 	api.HandleFunc("/search", handler.SearchFiles).Methods("POST")
 	api.HandleFunc("/storage-info", handler.GetStorageInfo).Methods("GET")

@@ -276,6 +276,7 @@ export class UIManager {
                     <button class="file-action-btn" data-action="rename" title="Rename (F2)">✏️</button>
                     <button class="file-action-btn" data-action="move" title="Move">➡️</button>
                     <button class="file-action-btn" data-action="delete" title="Delete">🗑</button>
+                    ${this.getFileIconClass(file) === 'archive' ? `<button class="file-action-btn" data-action="extract" title="Extract">🗜️</button>` : ''}
                 ` : `
                     <button class="file-action-btn" data-action="rename" title="Rename (F2)">✏️</button>
                     <button class="file-action-btn" data-action="move" title="Move">➡️</button>
@@ -371,6 +372,7 @@ export class UIManager {
                     <button class="file-action-btn" data-action="rename" title="Rename (F2)">✏️</button>
                     <button class="file-action-btn" data-action="move" title="Move">➡️</button>
                     <button class="file-action-btn" data-action="delete" title="Delete">🗑</button>
+                    ${this.getFileIconClass(file) === 'archive' ? `<button class="file-action-btn" data-action="extract" title="Extract">🗜️</button>` : ''}
                 ` : `
                     <button class="file-action-btn" data-action="rename" title="Rename (F2)">✏️</button>
                     <button class="file-action-btn" data-action="move" title="Move">➡️</button>

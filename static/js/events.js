@@ -95,6 +95,9 @@ export class EventHandler {
             case 'move':
                 this.app.api.moveFile(path);
                 break;
+            case 'extract':
+                this.app.api.extractFile(path);
+                break;
         }
     }
 
