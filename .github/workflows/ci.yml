@@ -17,18 +17,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
-
-      - name: Clean Go mod cache
-        run: rm -rf ~/go/pkg/mod
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          cache-dependency-path: '**/go.sum'
 
       - name: Run build script
         run: bash build.sh
@@ -44,18 +33,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
-
-      - name: Clean Go mod cache
-        run: rm -rf ~/go/pkg/mod
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          cache-dependency-path: '**/go.sum'
 
       - name: Check formatting
         run: |
