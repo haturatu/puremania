@@ -140,7 +140,11 @@ func (h *Handler) callAria2cRPC(method string, params ...interface{}) (interface
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to aria2c RPC: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			h.logger.Error("Failed to close aria2c RPC response body", "error", err)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

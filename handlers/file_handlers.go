@@ -59,7 +59,11 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return fmt.Errorf("cannot open source file: %w", err)
 		}
-		defer source.Close()
+		defer func() {
+			if err := source.Close(); err != nil {
+				h.logger.Error("Failed to close source file", "path", sourcePath, "error", err)
+			}
+		}()
 
 		format, stream, err := archives.Identify(ctx, sourcePath, source)
 		if err != nil {
@@ -84,13 +88,21 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return fmt.Errorf("could not open file in archive: %w", err)
 			}
-			defer file.Close()
+			defer func() {
+				if err := file.Close(); err != nil {
+					h.logger.Error("Failed to close file in archive", "path", f.NameInArchive, "error", err)
+				}
+			}()
 
 			createdFile, err := os.Create(dest)
 			if err != nil {
 				return fmt.Errorf("could not create destination file: %w", err)
 			}
-			defer createdFile.Close()
+			defer func() {
+				if err := createdFile.Close(); err != nil {
+					h.logger.Error("Failed to close destination file", "path", dest, "error", err)
+				}
+			}()
 
 			_, err = io.Copy(createdFile, file)
 			return err
@@ -112,7 +124,9 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err != nil {
-			os.RemoveAll(destPath)
+			if err := os.RemoveAll(destPath); err != nil {
+				h.logger.Error("Failed to remove destination path after extraction error", "path", destPath, "error", err)
+			}
 			return fmt.Errorf("extraction failed: %w", err)
 		}
 
@@ -279,7 +293,7 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 				}
 			}
 
-			mimeType := "application/octet-stream"
+			var mimeType string
 			isEditable := false
 
 			if !entry.IsDir() {
@@ -288,6 +302,8 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 					mimeType = "application/octet-stream"
 				}
 				isEditable = utils.IsTextFile(mimeType) || utils.IsEditableByExtension(entry.Name())
+			} else {
+				mimeType = "application/octet-stream"
 			}
 
 			physicalFilepath := filepath.Join(basePath, entry.Name())
@@ -384,62 +400,69 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			defer wg.Done()
 
 			file, err := fileHeader.Open()
-			if err != nil {
-				h.logger.Error("Failed to open multipart file", "filename", fileHeader.Filename, "error", err)
-				resultChan <- types.UploadResult{Path: fileHeader.Filename, Success: false}
-				return
-			}
-			defer file.Close()
-
-			relativePath := relativePaths[index]
-			normalizedRelativePath := filepath.FromSlash(relativePath)
-			targetPath := filepath.Join(fullPath, normalizedRelativePath)
-			targetDir := filepath.Dir(targetPath)
-
-			if err := os.MkdirAll(targetDir, 0755); err != nil {
-				h.logger.Error("Failed to create target directory for upload", "path", targetDir, "error", err)
-				resultChan <- types.UploadResult{Path: relativePath, Success: false}
-				return
-			}
-
-			// ファイル作成
-			dst, err := os.Create(targetPath)
-			if err != nil {
-				h.logger.Error("Failed to create destination file", "path", targetPath, "error", err)
-				resultChan <- types.UploadResult{Path: relativePath, Success: false}
-				return
-			}
-			defer func() {
-				_ = dst.Close()
-			}()
-
-			// ファイルサイズに応じた最適な保存方法を選択
-			const MiB = 1 << 20
-			const Threshold = 500 * MiB
-			var saveErr error
-
-			if fileHeader.Size > Threshold {
-				// 大きいファイルはストリームコピー
-				_, saveErr = io.Copy(dst, file)
-			} else {
-				// 小さいファイルは一括読み込み
-				data, err := io.ReadAll(file)
-				if err != nil {
-					saveErr = err
-				} else {
-					_, saveErr = dst.Write(data)
-				}
-			}
-
-			// エラーチェック
-			if saveErr != nil {
-				h.logger.Error("Failed to save uploaded file", "path", targetPath, "error", saveErr)
-				// エラー時は作成したファイルを削除
-				os.Remove(targetPath)
-				resultChan <- types.UploadResult{Path: relativePath, Success: false}
-				return
-			}
-
+							if err != nil {
+								h.logger.Error("Failed to open multipart file", "filename", fileHeader.Filename, "error", err)
+								resultChan <- types.UploadResult{Path: fileHeader.Filename, Success: false}
+								return
+							}
+							defer func() {
+								if err := file.Close(); err != nil {
+									h.logger.Error("Failed to close multipart file", "filename", fileHeader.Filename, "error", err)
+								}
+							}()
+			
+							relativePath := relativePaths[index]
+							normalizedRelativePath := filepath.FromSlash(relativePath)
+							targetPath := filepath.Join(fullPath, normalizedRelativePath)
+							targetDir := filepath.Dir(targetPath)
+			
+							if err := os.MkdirAll(targetDir, 0755); err != nil {
+								h.logger.Error("Failed to create target directory for upload", "path", targetDir, "error", err)
+								resultChan <- types.UploadResult{Path: relativePath, Success: false}
+								return
+							}
+			
+							// ファイル作成
+							dst, err := os.Create(targetPath)
+							if err != nil {
+								h.logger.Error("Failed to create destination file", "path", targetPath, "error", err)
+								resultChan <- types.UploadResult{Path: relativePath, Success: false}
+								return
+							}
+							defer func() {
+								if err := dst.Close(); err != nil {
+									h.logger.Error("Failed to close destination file for upload", "path", targetPath, "error", err)
+								}
+							}()
+			
+							// ファイルサイズに応じた最適な保存方法を選択
+							const MiB = 1 << 20
+							const Threshold = 500 * MiB
+							var saveErr error
+			
+							if fileHeader.Size > Threshold {
+								// 大きいファイルはストリームコピー
+								_, saveErr = io.Copy(dst, file)
+							} else {
+								// 小さいファイルは一括読み込み
+								data, err := io.ReadAll(file)
+								if err != nil {
+									saveErr = err
+								} else {
+									_, saveErr = dst.Write(data)
+								}
+							}
+			
+							// エラーチェック
+							if saveErr != nil {
+								h.logger.Error("Failed to save uploaded file", "path", targetPath, "error", saveErr)
+								// エラー時は作成したファイルを削除
+								if err := os.Remove(targetPath); err != nil {
+									h.logger.Error("Failed to remove partially uploaded file", "path", targetPath, "error", err)
+								}
+								resultChan <- types.UploadResult{Path: relativePath, Success: false}
+								return
+							}
 			virtualPath := h.convertToVirtualPath(targetPath)
 			resultChan <- types.UploadResult{Path: virtualPath, Success: true}
 
@@ -499,7 +522,11 @@ func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Cannot open file", http.StatusNotFound)
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			h.logger.Error("Failed to close file for download", "path", fullPath, "error", err)
+		}
+	}()
 
 	stat, err := file.Stat()
 	if err != nil {
@@ -520,6 +547,7 @@ func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filename := filepath.Base(path)
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
 
 	// http.ServeContentを使用してsendfile最適化とRange/If-Modified-Since自動処理
@@ -628,7 +656,11 @@ func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 
 	// 並列処理でzip作成
 	go func() {
-		defer pw.Close()
+		defer func() {
+			if err := pw.Close(); err != nil {
+				h.logger.Error("Failed to close pipe writer", "error", err)
+			}
+		}()
 		h.createZipArchive(pw, req.Paths)
 	}()
 
@@ -638,7 +670,11 @@ func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createZipArchive(w io.Writer, paths []string) {
 	zipWriter := zip.NewWriter(w)
-	defer zipWriter.Close()
+	defer func() {
+		if err := zipWriter.Close(); err != nil {
+			h.logger.Error("Failed to close zip writer", "error", err)
+		}
+	}()
 
 	var successfulFiles, failedFiles int64
 	var mu sync.Mutex
@@ -775,7 +811,11 @@ func (h *Handler) addFileToZip(zipWriter *zip.Writer, filePath, zipPath string, 
 		h.logger.Error("Failed to open file for zipping", "path", filePath, "error", err)
 		return false
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			h.logger.Error("Failed to close file for zipping", "path", filePath, "error", err)
+		}
+	}()
 
 	// バッファサイズ最適化
 	bufferSize := getOptimalBufferSize(info.Size())
