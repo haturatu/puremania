@@ -49,6 +49,7 @@ func (h *Handler) GetStorageInfo(w http.ResponseWriter, r *http.Request) {
 
 		err := syscall.Statfs(h.config.StorageDir, &stat)
 		if err != nil {
+			h.logger.Error("Failed to get storage stats", "path", h.config.StorageDir, "error", err)
 			return nil
 		}
 
@@ -65,7 +66,7 @@ func (h *Handler) GetStorageInfo(w http.ResponseWriter, r *http.Request) {
 	})
 
 	result := <-resultChan
-	if storageInfo, ok := result.(map[string]interface{}); ok {
+	if storageInfo, ok := result.(map[string]interface{}); ok && storageInfo != nil {
 		// 5分間キャッシュ
 		cache.Set(h.cache, cacheKey, storageInfo, 1024, CacheTTL)
 		h.respondSuccess(w, storageInfo)
@@ -102,6 +103,8 @@ func (h *Handler) GetSpecificDirs(w http.ResponseWriter, r *http.Request) {
 				Name: filepath.Base(dirPath),
 				Path: "/" + filepath.Base(dirPath), // フロントには仮想パスを渡す
 			})
+		} else if err != nil {
+			h.logger.Warn("Specific directory not found or not a directory", "path", dirPath, "error", err)
 		}
 	}
 
@@ -130,7 +133,7 @@ func (h *Handler) callAria2cRPC(method string, params ...interface{}) (interface
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal aria2c request: %w", err)
 	}
 
 	resp, err := http.Post(h.config.Aria2cRPCURL, "application/json", bytes.NewBuffer(jsonBody))
@@ -141,12 +144,12 @@ func (h *Handler) callAria2cRPC(method string, params ...interface{}) (interface
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read aria2c response body: %w", err)
 	}
 
 	var rpcResp types.Aria2cRPCResponse
 	if err := json.Unmarshal(body, &rpcResp); err != nil {
-		return nil, fmt.Errorf("failed to parse aria2c RPC response: %w", err)
+		return nil, fmt.Errorf("failed to parse aria2c RPC response: %w. Body: %s", err, string(body))
 	}
 
 	if rpcResp.Error != nil {
@@ -160,6 +163,7 @@ func (h *Handler) callAria2cRPC(method string, params ...interface{}) (interface
 func (h *Handler) DownloadWithAria2c(w http.ResponseWriter, r *http.Request) {
 	var req types.Aria2cDownloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Failed to decode aria2c download request", "error", err)
 		h.respondError(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -171,6 +175,7 @@ func (h *Handler) DownloadWithAria2c(w http.ResponseWriter, r *http.Request) {
 
 	safePath, err := h.buildSafePath(req.Path)
 	if err != nil {
+		h.logger.Error("Invalid path for aria2c download", "path", req.Path, "error", err)
 		h.respondError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -182,6 +187,7 @@ func (h *Handler) DownloadWithAria2c(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.callAria2cRPC("aria2.addUri", params...)
 	if err != nil {
+		h.logger.Error("Failed to call aria2c to start download", "url", req.URL, "path", safePath, "error", err)
 		h.respondError(w, "Failed to start download: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -196,6 +202,7 @@ func (h *Handler) DownloadWithAria2c(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if gid == "" {
+		h.logger.Error("Failed to get download GID from aria2c", "result", result)
 		h.respondError(w, "Failed to get download GID from aria2c", http.StatusInternalServerError)
 		return
 	}
@@ -239,6 +246,7 @@ func (h *Handler) GetAria2cStatus(w http.ResponseWriter, r *http.Request) {
 	for i := 0; i < len(methods); i++ {
 		res := <-ch
 		if res.Err != nil {
+			h.logger.Error("Failed to get aria2c status", "method", res.Name, "error", res.Err)
 			// 一つのメソッドが失敗しても、他は成功する可能性があるので、エラーを返しつつも処理を続ける
 			statuses[res.Name] = res.Err.Error()
 		} else {
@@ -256,6 +264,7 @@ func (h *Handler) ControlAria2cDownload(w http.ResponseWriter, r *http.Request) 
 		Action string `json:"action"` // "cancel", "pause", "resume"
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Failed to decode aria2c control request", "error", err)
 		h.respondError(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -282,6 +291,7 @@ func (h *Handler) ControlAria2cDownload(w http.ResponseWriter, r *http.Request) 
 
 	result, err := h.callAria2cRPC(method, req.GID)
 	if err != nil {
+		h.logger.Error("Failed to control aria2c download", "action", req.Action, "gid", req.GID, "error", err)
 		h.respondError(w, "Failed to "+req.Action+" download: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

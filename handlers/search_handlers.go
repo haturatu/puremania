@@ -31,6 +31,7 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Error("Failed to decode search request", "error", err)
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -55,6 +56,7 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 
 	basePath, err := h.convertToPhysicalPath(req.Path)
 	if err != nil {
+		h.logger.Error("Invalid path for search", "path", req.Path, "error", err)
 		h.respondError(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
@@ -70,6 +72,7 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		cache.Set(h.cache, cacheKey, results, int64(len(results)*200), time.Minute*2)
 		h.respondSuccess(w, results)
 	} else {
+		h.logger.Error("Search failed to return results")
 		h.respondError(w, "Search failed", http.StatusInternalServerError)
 	}
 }
@@ -93,6 +96,7 @@ func (h *Handler) performSearch(req struct {
 			regex, err = regexp.Compile("(?i)" + req.Term)
 		}
 		if err != nil {
+			h.logger.Error("Invalid regex in search", "term", req.Term, "error", err)
 			return []types.FileInfo{}
 		}
 		searchFunc = func(name string) bool {
@@ -125,6 +129,7 @@ func (h *Handler) searchCurrentParallel(path string, matchFunc func(string) bool
 
 	entries, err := os.ReadDir(path)
 	if err != nil {
+		h.logger.Error("Failed to read directory for search", "path", path, "error", err)
 		return results
 	}
 
@@ -152,6 +157,8 @@ func (h *Handler) searchCurrentParallel(path string, matchFunc func(string) bool
 					if info, err := entry.Info(); err == nil {
 						size = info.Size()
 						modTime = info.ModTime()
+					} else if !os.IsNotExist(err) {
+						h.logger.Warn("Failed to get entry info during search", "entry", entry.Name(), "error", err)
 					}
 				}
 
@@ -193,8 +200,9 @@ func (h *Handler) searchRecursiveParallel(path string, matchFunc func(string) bo
 	var mu sync.Mutex
 	resultCount := int64(0)
 
-	filepath.WalkDir(path, func(filePath string, d os.DirEntry, err error) error {
+	_ = filepath.WalkDir(path, func(filePath string, d os.DirEntry, err error) error {
 		if err != nil {
+			h.logger.Warn("Skipping path in recursive search due to error", "path", filePath, "error", err)
 			return nil // エラーをスキップして継続
 		}
 
@@ -210,6 +218,8 @@ func (h *Handler) searchRecursiveParallel(path string, matchFunc func(string) bo
 				if info, err := d.Info(); err == nil {
 					size = info.Size()
 					modTime = info.ModTime()
+				} else if !os.IsNotExist(err) {
+					h.logger.Warn("Failed to get entry info during recursive search", "entry", d.Name(), "error", err)
 				}
 			}
 
