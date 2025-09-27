@@ -400,69 +400,69 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 			defer wg.Done()
 
 			file, err := fileHeader.Open()
-							if err != nil {
-								h.logger.Error("Failed to open multipart file", "filename", fileHeader.Filename, "error", err)
-								resultChan <- types.UploadResult{Path: fileHeader.Filename, Success: false}
-								return
-							}
-							defer func() {
-								if err := file.Close(); err != nil {
-									h.logger.Error("Failed to close multipart file", "filename", fileHeader.Filename, "error", err)
-								}
-							}()
-			
-							relativePath := relativePaths[index]
-							normalizedRelativePath := filepath.FromSlash(relativePath)
-							targetPath := filepath.Join(fullPath, normalizedRelativePath)
-							targetDir := filepath.Dir(targetPath)
-			
-							if err := os.MkdirAll(targetDir, 0755); err != nil {
-								h.logger.Error("Failed to create target directory for upload", "path", targetDir, "error", err)
-								resultChan <- types.UploadResult{Path: relativePath, Success: false}
-								return
-							}
-			
-							// ファイル作成
-							dst, err := os.Create(targetPath)
-							if err != nil {
-								h.logger.Error("Failed to create destination file", "path", targetPath, "error", err)
-								resultChan <- types.UploadResult{Path: relativePath, Success: false}
-								return
-							}
-							defer func() {
-								if err := dst.Close(); err != nil {
-									h.logger.Error("Failed to close destination file for upload", "path", targetPath, "error", err)
-								}
-							}()
-			
-							// ファイルサイズに応じた最適な保存方法を選択
-							const MiB = 1 << 20
-							const Threshold = 500 * MiB
-							var saveErr error
-			
-							if fileHeader.Size > Threshold {
-								// 大きいファイルはストリームコピー
-								_, saveErr = io.Copy(dst, file)
-							} else {
-								// 小さいファイルは一括読み込み
-								data, err := io.ReadAll(file)
-								if err != nil {
-									saveErr = err
-								} else {
-									_, saveErr = dst.Write(data)
-								}
-							}
-			
-							// エラーチェック
-							if saveErr != nil {
-								h.logger.Error("Failed to save uploaded file", "path", targetPath, "error", saveErr)
-								// エラー時は作成したファイルを削除
-								if err := os.Remove(targetPath); err != nil {
-									h.logger.Error("Failed to remove partially uploaded file", "path", targetPath, "error", err)
-								}
-								resultChan <- types.UploadResult{Path: relativePath, Success: false}
-								return
-							}
+			if err != nil {
+				h.logger.Error("Failed to open multipart file", "filename", fileHeader.Filename, "error", err)
+				resultChan <- types.UploadResult{Path: fileHeader.Filename, Success: false}
+				return
+			}
+			defer func() {
+				if err := file.Close(); err != nil {
+					h.logger.Error("Failed to close multipart file", "filename", fileHeader.Filename, "error", err)
+				}
+			}()
+
+			relativePath := relativePaths[index]
+			normalizedRelativePath := filepath.FromSlash(relativePath)
+			targetPath := filepath.Join(fullPath, normalizedRelativePath)
+			targetDir := filepath.Dir(targetPath)
+
+			if err := os.MkdirAll(targetDir, 0755); err != nil {
+				h.logger.Error("Failed to create target directory for upload", "path", targetDir, "error", err)
+				resultChan <- types.UploadResult{Path: relativePath, Success: false}
+				return
+			}
+
+			// ファイル作成
+			dst, err := os.Create(targetPath)
+			if err != nil {
+				h.logger.Error("Failed to create destination file", "path", targetPath, "error", err)
+				resultChan <- types.UploadResult{Path: relativePath, Success: false}
+				return
+			}
+			defer func() {
+				if err := dst.Close(); err != nil {
+					h.logger.Error("Failed to close destination file for upload", "path", targetPath, "error", err)
+				}
+			}()
+
+			// ファイルサイズに応じた最適な保存方法を選択
+			const MiB = 1 << 20
+			const Threshold = 500 * MiB
+			var saveErr error
+
+			if fileHeader.Size > Threshold {
+				// 大きいファイルはストリームコピー
+				_, saveErr = io.Copy(dst, file)
+			} else {
+				// 小さいファイルは一括読み込み
+				data, err := io.ReadAll(file)
+				if err != nil {
+					saveErr = err
+				} else {
+					_, saveErr = dst.Write(data)
+				}
+			}
+
+			// エラーチェック
+			if saveErr != nil {
+				h.logger.Error("Failed to save uploaded file", "path", targetPath, "error", saveErr)
+				// エラー時は作成したファイルを削除
+				if err := os.Remove(targetPath); err != nil {
+					h.logger.Error("Failed to remove partially uploaded file", "path", targetPath, "error", err)
+				}
+				resultChan <- types.UploadResult{Path: relativePath, Success: false}
+				return
+			}
 			virtualPath := h.convertToVirtualPath(targetPath)
 			resultChan <- types.UploadResult{Path: virtualPath, Success: true}
 
