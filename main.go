@@ -148,7 +148,7 @@ func main() {
 	api.HandleFunc("/files/content", handler.GetFileContent).Methods("GET")
 	api.HandleFunc("/files/download-zip", handler.DownloadZip).Methods("POST")
 	api.HandleFunc("/files/save", handler.SaveFile).Methods("POST")
-	api.HandleFunc("/files/batch-delete", handler.DeleteMultipleFiles).Methods("POST")
+	api.HandleFunc("/files/delete", handler.DeleteMultipleFiles).Methods("POST")
 	api.HandleFunc("/files/mkdir", handler.CreateDirectory).Methods("POST")
 	api.HandleFunc("/files/move", handler.MoveFile).Methods("POST")
 	api.HandleFunc("/files/create", handler.CreateFile).Methods("POST")

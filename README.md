@@ -328,7 +328,7 @@ Pure Mania exposes the following RESTful API endpoints under the `/api` prefix:
 - `GET    /files/content`: Get the content of a text-based file.  
 - `POST   /files/download-zip`: Create and download a ZIP archive of multiple files.  
 - `POST   /files/save`: Save or update the content of a file.  
-- `POST   /files/batch-delete`: Delete multiple files or directories.  
+- `POST   /files/delete`: Delete multiple files or directories.  
 - `POST   /files/mkdir`: Create a new directory.  
 - `POST   /files/move`: Move a file or directory.  
 - `POST   /files/create`: Create a new empty file.
