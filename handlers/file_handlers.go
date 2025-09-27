@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,7 +19,118 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/mholt/archives"
 )
+
+// ExtractFile - アーカイブファイルを解凍する
+func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.Path == "" {
+		h.respondError(w, "Path required", http.StatusBadRequest)
+		return
+	}
+
+	sourcePath, err := h.convertToPhysicalPath(req.Path)
+	if err != nil {
+		h.respondError(w, "Invalid source path: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// 出力先ディレクトリを決定 (例: archive.zip -> archive/)
+	destPath := strings.TrimSuffix(sourcePath, filepath.Ext(sourcePath))
+
+	// 並列処理で解凍
+	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute) // 30分タイムアウト
+		defer cancel()
+
+		source, err := os.Open(sourcePath)
+		if err != nil {
+			return fmt.Errorf("cannot open source file: %w", err)
+		}
+		defer source.Close()
+
+		format, stream, err := archives.Identify(ctx, sourcePath, source)
+		if err != nil {
+			return fmt.Errorf("could not identify archive format: %w", err)
+		}
+
+		handler := func(ctx context.Context, f archives.FileInfo) error {
+			dest := filepath.Join(destPath, f.NameInArchive)
+			if !strings.HasPrefix(dest, destPath) {
+				return fmt.Errorf("unsafe file path in archive: %s", f.NameInArchive)
+			}
+
+			if f.IsDir() {
+				return os.MkdirAll(dest, f.Mode())
+			}
+
+			if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+				return err
+			}
+
+			file, err := f.Open()
+			if err != nil {
+				return fmt.Errorf("could not open file in archive: %w", err)
+			}
+			defer file.Close()
+
+			createdFile, err := os.Create(dest)
+			if err != nil {
+				return fmt.Errorf("could not create destination file: %w", err)
+			}
+			defer createdFile.Close()
+
+			_, err = io.Copy(createdFile, file)
+			return err
+		}
+
+		switch f := format.(type) {
+		case archives.Zip:
+			err = f.Extract(ctx, stream, handler)
+		case archives.Tar:
+			err = f.Extract(ctx, stream, handler)
+		case archives.SevenZip:
+			err = f.Extract(ctx, stream, handler)
+		case archives.Rar:
+			err = f.Extract(ctx, stream, handler)
+		case archives.CompressedArchive:
+			err = f.Extract(ctx, stream, handler)
+		default:
+			return fmt.Errorf("format %T is not a supported archive format for extraction", f)
+		}
+
+		if err != nil {
+			os.RemoveAll(destPath)
+			return fmt.Errorf("extraction failed: %w", err)
+		}
+
+		return nil
+	})
+
+	result := <-resultChan
+	if err, ok := result.(error); ok && err != nil {
+		h.respondError(w, "Cannot extract file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// キャッシュを無効化
+	parentDir := filepath.Dir(sourcePath)
+	cache.InvalidateByPrefix(h.cache, "list:"+h.convertToVirtualPath(parentDir))
+	cache.InvalidateByPrefix(h.cache, "search:")
+
+	h.respondSuccess(w, map[string]string{"message": "File extracted successfully"})
+}
+
 
 // Optimized buffer sizes for different operations
 const (

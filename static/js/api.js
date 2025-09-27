@@ -319,6 +319,37 @@ export class ApiClient {
         }
     }
 
+    async extractFile(path) {
+        if (!confirm(`Are you sure you want to extract "${this.app.util.getBaseName(path)}"?`)) return;
+
+        try {
+            this.app.ui.showLoading();
+            const response = await fetch('/api/files/extract', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ path: path })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.app.ui.showToast('Success', 'File extracted successfully', 'success');
+                const currentPath = this.app.router.getCurrentPath();
+                this.directoryEtags.delete(currentPath);
+                this.app.loadFiles(currentPath);
+            } else {
+                this.app.ui.showToast('Error', result.message, 'error');
+            }
+        } catch (error) {
+            this.app.ui.showToast('Error', 'Failed to extract file', 'error');
+            console.error('Error extracting file:', error);
+        } finally {
+            this.app.ui.hideLoading();
+        }
+    }
+
     async deleteFile(path) {
         if (!confirm(`Are you sure you want to delete "${this.app.util.getBaseName(path)}?`)) return;
 
