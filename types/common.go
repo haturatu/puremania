@@ -11,3 +11,9 @@ type SpecificDirInfo struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
 }
+
+// Aria2cDownloadRequest はaria2cでのダウンロードリクエスト
+type Aria2cDownloadRequest struct {
+	URL  string `json:"url"`
+	Path string `json:"path"`
+}

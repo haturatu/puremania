@@ -97,6 +97,7 @@ func main() {
 	api.HandleFunc("/storage-info", handler.GetStorageInfo).Methods("GET")
 	api.HandleFunc("/specific-dirs", handler.GetSpecificDirs).Methods("GET")
 	api.HandleFunc("/health", handler.HealthCheck).Methods("GET")
+	api.HandleFunc("/system/download", handler.DownloadWithAria2c).Methods("POST")
 
 	// 静的ファイルのサービス
 	    staticFileHandler := http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

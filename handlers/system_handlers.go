@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"puremania/cache"
 	"puremania/types"
@@ -100,4 +102,33 @@ func (h *Handler) GetSpecificDirs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.respondSuccess(w, dirInfos)
+}
+
+// aria2cを使ってファイルをダウンロード
+func (h *Handler) DownloadWithAria2c(w http.ResponseWriter, r *http.Request) {
+	var req types.Aria2cDownloadRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.URL == "" || req.Path == "" {
+		h.respondError(w, "URL and path are required", http.StatusBadRequest)
+		return
+	}
+
+	safePath, err := h.buildSafePath(req.Path)
+	if err != nil {
+		h.respondError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	cmd := exec.Command("aria2c", "--seed-time=0", "-d", safePath, req.URL)
+	err = cmd.Start() // 非同期で実行
+	if err != nil {
+		h.respondError(w, "Failed to start download: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.respondSuccess(w, map[string]string{"message": "Download started successfully"})
 }
