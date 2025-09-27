@@ -81,9 +81,9 @@ export class Aria2cPageHandler {
             return;
         }
 
-        const activeDownloads = status['aria2.tellActive'] || [];
+        const activeDownloads = Array.isArray(status['aria2.tellActive']) ? status['aria2.tellActive'] : [];
         const waitingDownloads = Array.isArray(status['aria2.tellWaiting']) ? status['aria2.tellWaiting'] : [];
-        const stoppedDownloads = status['aria2.tellStopped'] || [];
+        const stoppedDownloads = Array.isArray(status['aria2.tellStopped']) ? status['aria2.tellStopped'] : [];
 
         if (activeDownloads.length === 0 && waitingDownloads.length === 0 && stoppedDownloads.length === 0) {
             container.appendChild(this.createNoDownloadsMessage());

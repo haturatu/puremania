@@ -573,4 +573,23 @@ export class ApiClient {
             return false;
         }
     }
+
+    async getConfig() {
+        try {
+            const response = await fetch('/api/config');
+            if (!response.ok) {
+                throw new Error(`Failed to fetch config (status: ${response.status})`);
+            }
+            const result = await response.json();
+            if (result.success) {
+                return result.data;
+            } else {
+                throw new Error(result.message || 'Failed to parse config data');
+            }
+        } catch (error) {
+            console.error('Error fetching config:', error);
+            this.app.ui.showToast('Error', 'Could not load server configuration.', 'error');
+            return null; // エラー時はnullを返す
+        }
+    }
 }

@@ -11,4 +11,5 @@ type Config struct {
 	SpecificDirs   []string
 	Aria2cRPCURL   string
 	Aria2cRPCToken string
+	Aria2cEnabled  bool
 }

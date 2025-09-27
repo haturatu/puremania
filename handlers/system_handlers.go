@@ -18,15 +18,17 @@ import (
 // GetConfig - クライアントに渡す設定情報
 func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	clientConfig := struct {
-		StorageDir   string   `json:"StorageDir"`
-		MountDirs    []string `json:"MountDirs"`
-		MaxFileSize  int64    `json:"MaxFileSize"`
-		SpecificDirs []string `json:"SpecificDirs"`
+		StorageDir    string   `json:"StorageDir"`
+		MountDirs     []string `json:"MountDirs"`
+		MaxFileSize   int64    `json:"MaxFileSize"`
+		SpecificDirs  []string `json:"SpecificDirs"`
+		Aria2cEnabled bool     `json:"Aria2cEnabled"`
 	}{
-		StorageDir:   h.config.StorageDir,
-		MountDirs:    h.config.MountDirs,
-		MaxFileSize:  h.config.MaxFileSize,
-		SpecificDirs: h.config.SpecificDirs,
+		StorageDir:    h.config.StorageDir,
+		MountDirs:     h.config.MountDirs,
+		MaxFileSize:   h.config.MaxFileSize,
+		SpecificDirs:  h.config.SpecificDirs,
+		Aria2cEnabled: h.config.Aria2cEnabled,
 	}
 	h.respondSuccess(w, clientConfig)
 }

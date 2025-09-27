@@ -15,6 +15,7 @@ class FileManagerApp {
     constructor() {
         this.selectedFiles = new Set();
         this.lastSelectedIndex = -1;
+        this.config = {}; // Add config property
 
         // Initialize modules
         this.router = new Router();
@@ -42,6 +43,16 @@ class FileManagerApp {
     }
 
     async init() {
+        // Fetch config first
+        this.config = await this.api.getConfig();
+        if (!this.config) {
+            // Error is already shown by api.js
+            return; // Stop initialization if config fails
+        }
+
+        // Update UI based on config
+        this.ui.updateAria2cVisibility(this.config.Aria2cEnabled);
+
         this.events.bindEvents();
         this.searchHandler.init();
         this.aria2cPageHandler.init();
@@ -51,8 +62,14 @@ class FileManagerApp {
         const specificDirs = await this.api.getSpecificDirs();
         this.ui.updateSpecificDirs(specificDirs);
 
+        // Setup router with knowledge of the config
         this.router.onChange((path) => {
             if (path === '/system/aria2c') {
+                if (!this.config.Aria2cEnabled) {
+                    this.ui.showToast('Info', 'Aria2c feature is not enabled.', 'info');
+                    this.router.navigate('/');
+                    return;
+                }
                 if (this.searchHandler.isInSearchMode) {
                     this.searchHandler.exitSearchMode(true); // Pass true to prevent navigation
                 }
@@ -64,6 +81,8 @@ class FileManagerApp {
                 this.navigateToPath(path);
             }
         });
+
+        // Initial load based on current URL is handled by the router
     }
 
     // Wrapper for API method to allow central control

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"puremania/handlers"
 	"puremania/types"
@@ -16,38 +19,78 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func GetStorageDir(c *types.Config) string {
-	return c.StorageDir
+// generateSecureToken は暗号論的に安全なランダムトークンを生成します
+func generateSecureToken(length int) (string, error) {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
 }
 
-func GetMountDirs(c *types.Config) []string {
-	return c.MountDirs
+// startAria2cDaemon はaria2cをデーモンとして起動し、設定を返します
+func startAria2cDaemon() (rpcURL string, rpcToken string, err error) {
+	log.Println("Aria2c feature enabled. Starting aria2c daemon...")
+
+	token, err := generateSecureToken(16)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate secure token for aria2c: %w", err)
+	}
+
+	rpcPort := "6800"
+	rpcURL = fmt.Sprintf("http://localhost:%s/jsonrpc", rpcPort)
+
+	cmd := exec.Command(
+		"aria2c",
+		"--enable-rpc",
+		"--rpc-listen-all=true",
+		"--rpc-listen-port", rpcPort,
+		"--rpc-secret", token,
+		"--no-conf",
+		"--log-level=warn",
+		"--quiet=true",
+	)
+
+	// 標準出力とエラー出力を破棄
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	// 非同期でコマンドを開始
+	if err := cmd.Start(); err != nil {
+		return "", "", fmt.Errorf("failed to start aria2c process. Is aria2c installed and in your PATH?: %w", err)
+	}
+
+	log.Printf("Aria2c process started successfully with PID: %d", cmd.Process.Pid)
+
+	// プログラム終了時にaria2cプロセスも終了するようにする
+	go func() {
+		_ = cmd.Wait()
+	}()
+
+	// RPCサーバーが起動するのを少し待つ
+	time.Sleep(2 * time.Second)
+
+	return rpcURL, token, nil
 }
 
-func GetMaxFileSize(c *types.Config) int64 {
-	return c.MaxFileSize
-}
-
-func GetSpecificDirs(c *types.Config) []string {
-	return c.SpecificDirs
-}
-
-// Load は.envファイルから設定を読み込み
+// LoadConfig は.envファイルから設定を読み込みます
 func LoadConfig() *types.Config {
 	_ = godotenv.Load() // .envファイルが見つからなくてもエラーにしない
 
 	// デフォルト値
 	config := &types.Config{
-		StorageDir:      getEnv("STORAGE_DIR", "/home/"+os.Getenv("USER")),
-		MountDirs:       getEnvAsStringSlice("MOUNT_DIRS", []string{}),
-		MaxFileSize:     getEnvAsInt64("MAX_FILE_SIZE_MB", 10000),
-		Port:            getEnvAsInt("PORT", 8844),
-		ZipTimeout:      getEnvAsInt("ZIP_TIMEOUT", 300),
-		MaxZipSize:      getEnvAsInt64("MAX_ZIP_SIZE", 1024),
-		SpecificDirs:    getEnvAsStringSlice("SPECIFIC_DIRS", []string{}),
-		Aria2cRPCURL:    getEnv("ARIA2C_RPC_URL", "http://localhost:6800/jsonrpc"),
-		Aria2cRPCToken:  getEnv("ARIA2C_RPC_TOKEN", ""),
+		StorageDir:   getEnv("STORAGE_DIR", "/home/"+os.Getenv("USER")),
+		MountDirs:    getEnvAsStringSlice("MOUNT_DIRS", []string{}),
+		MaxFileSize:  getEnvAsInt64("MAX_FILE_SIZE_MB", 10000),
+		Port:         getEnvAsInt("PORT", 8844),
+		ZipTimeout:   getEnvAsInt("ZIP_TIMEOUT", 300),
+		MaxZipSize:   getEnvAsInt64("MAX_ZIP_SIZE", 1024),
+		SpecificDirs: getEnvAsStringSlice("SPECIFIC_DIRS", []string{}),
+		// Aria2cEnabled は後で設定
 	}
+
+	// ARIA2C=enable かどうかを判定
+	config.Aria2cEnabled = strings.ToLower(getEnv("ARIA2C", "disable")) == "enable"
 
 	// SpecificDirsが空の場合のデフォルト値設定
 	if len(config.SpecificDirs) == 0 {
@@ -68,6 +111,16 @@ func main() {
 	// 設定を読み込み
 	cfg := LoadConfig()
 
+	// Aria2cが有効な場合はデーモンを起動
+	if cfg.Aria2cEnabled {
+		rpcURL, rpcToken, err := startAria2cDaemon()
+		if err != nil {
+			log.Fatalf("Error starting aria2c: %v", err)
+		}
+		cfg.Aria2cRPCURL = rpcURL
+		cfg.Aria2cRPCToken = rpcToken
+	}
+
 	fmt.Printf("Server starting on port %d\n", cfg.Port)
 	fmt.Printf("Storage directory: %s\n", cfg.StorageDir)
 	if len(cfg.MountDirs) > 0 {
@@ -75,6 +128,11 @@ func main() {
 	}
 	if len(cfg.SpecificDirs) > 0 {
 		fmt.Printf("Specific directories: %v\n", cfg.SpecificDirs)
+	}
+	if cfg.Aria2cEnabled {
+		fmt.Println("Aria2c feature is enabled.")
+	} else {
+		fmt.Println("Aria2c feature is disabled.")
 	}
 
 	// ハンドラーを初期化
@@ -99,31 +157,26 @@ func main() {
 	api.HandleFunc("/storage-info", handler.GetStorageInfo).Methods("GET")
 	api.HandleFunc("/specific-dirs", handler.GetSpecificDirs).Methods("GET")
 	api.HandleFunc("/health", handler.HealthCheck).Methods("GET")
-	api.HandleFunc("/system/aria2c/download", handler.DownloadWithAria2c).Methods("POST")
-	api.HandleFunc("/system/aria2c/status", handler.GetAria2cStatus).Methods("GET")
-	api.HandleFunc("/system/aria2c/control", handler.ControlAria2cDownload).Methods("POST")
+
+	// Aria2cが有効な場合のみエンドポイントを登録
+	if cfg.Aria2cEnabled {
+		api.HandleFunc("/system/aria2c/download", handler.DownloadWithAria2c).Methods("POST")
+		api.HandleFunc("/system/aria2c/status", handler.GetAria2cStatus).Methods("GET")
+		api.HandleFunc("/system/aria2c/control", handler.ControlAria2cDownload).Methods("POST")
+	}
 
 	// 静的ファイルのサービス
-	    staticFileHandler := http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// --- START DEBUG LOGGING ---
-		requestedPath := "./static/" + r.URL.Path
-		// log.Printf("Static file requested: %s", r.URL.Path)
-		// log.Printf("Serving from filesystem path: %s", requestedPath)
-		// --- END DEBUG LOGGING ---
-
-		if strings.HasSuffix(r.URL.Path, ".js") {
-			w.Header().Set("Content-Type", "application/javascript")
-		}
-		http.ServeFile(w, r, requestedPath)
-	}))
+	staticFileHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("./static/")))
 	r.PathPrefix("/static/").Handler(staticFileHandler)
 
 	// その他のリクエストはindex.htmlを返す
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// APIパス以外はindex.htmlを返す
-		if !strings.HasPrefix(r.URL.Path, "/api/") {
+		if !strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/static/") {
 			http.ServeFile(w, r, "./static/index.html")
 		} else {
+			// muxがよしなに処理してくれるので、ここはシンプルに
+			r.URL.Path = "/" // Not foundを避けるため、ルートにフォールバック
 			http.NotFound(w, r)
 		}
 	})
@@ -141,7 +194,6 @@ func main() {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 許可するオリジンを設定（実際のデプロイ時には適切なオリジンに変更）
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Range, Content-Disposition, X-Requested-With")
@@ -149,7 +201,6 @@ func corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Max-Age", "86400") // 24時間
 
-		// Preflightリクエストへの対応
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
