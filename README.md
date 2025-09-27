@@ -56,7 +56,8 @@ That’s enough of my rambling.
   
 - **File and Directory Management:** List, create, delete, and move files and directories.  
 - **File Operations:** Upload, download, and view file content.  
-- **Bulk Operations:** Download multiple files as a ZIP archive and delete multiple files at once.  
+- **Bulk Operations:** Download multiple files as a ZIP archive and delete multiple files at once.
+- **Archive Extraction:** Decompress `.zip`, `.tar`, `.tar.gz`, `.rar`, and `.7z` files directly in the file manager.
 - **Search:** Quickly find files on your storage.  
 - **Storage Information:** View details about your storage capacity and usage.  
 - **Simple Configuration:** Easy to set up using a `.env` file.  
@@ -76,6 +77,7 @@ That’s enough of my rambling.
 This update introduces a major new feature, Aria2c integration, along with numerous fixes and refactorings to support it.
 
 ### Features
+- **Archive Extraction:** Added support for extracting various archive formats including `.zip`, `.tar`, `.tar.gz`, `.rar`, and `.7z`.
 - **Aria2c Integration (`1180f65`, `a5d48f7`, `4bd0b23`, `baa7fc5`):** Added a comprehensive integration with the `aria2c` download manager.
   - Downloads can be initiated from the search bar using the `aria2c <URL>` command.
   - A dedicated page (`/system/aria2c`) allows monitoring and control (pause, resume, cancel) of active, waiting, and stopped downloads.
@@ -329,7 +331,8 @@ Pure Mania exposes the following RESTful API endpoints under the `/api` prefix:
 - `POST   /files/batch-delete`: Delete multiple files or directories.  
 - `POST   /files/mkdir`: Create a new directory.  
 - `POST   /files/move`: Move a file or directory.  
-- `POST   /files/create`: Create a new empty file.  
+- `POST   /files/create`: Create a new empty file.
+- `POST   /files/extract`: Extract an archive file.
 - `GET    /config`: Retrieve the server's public configuration.  
 - `POST   /search`: Search for files based on a query.  
 - `GET    /storage-info`: Get information about storage usage.  
