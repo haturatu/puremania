@@ -86,20 +86,23 @@ export class Aria2cPageHandler {
         const waitingDownloads = Array.isArray(status['aria2.tellWaiting']) ? status['aria2.tellWaiting'] : [];
         let stoppedDownloads = Array.isArray(status['aria2.tellStopped']) ? status['aria2.tellStopped'] : [];
 
-        // Filter out completed torrent metadata files from the stopped list
+        // Filter the stoppedDownloads list based on torrent-specific rules
         stoppedDownloads = stoppedDownloads.filter(item => {
             if (item.bittorrent) {
-                // For torrents, only show them in the stopped list if they are truly complete.
-                // Exclude metadata files and any torrents that are not in 'complete' state (e.g. error, removed).
+                // For torrents, only show them if they are truly complete and not just metadata.
                 if (item.status === 'complete') {
-                    if (item.files && item.files.length > 0 && item.files[0].path.endsWith('.torrent')) {
-                        return false; // Is a metadata file, exclude.
+                    const totalLength = parseInt(item.totalLength, 10);
+                    // Assume torrents under 1MB are metadata/transient and hide them.
+                    if (totalLength < 1024 * 1024) {
+                        return false;
                     }
-                    return true; // Is a completed torrent, include.
-                } 
-                return false; // Is a torrent but not complete, exclude.
+                    return true; // It's a completed torrent over 1MB, so include it.
+                }
+                // It's a torrent but not in 'complete' state (e.g., error, removed), so exclude it.
+                return false;
             }
-            return true; // Not a torrent, include.
+            // It's not a torrent, so include it.
+            return true;
         });
 
         // Handle auto-removal of completed torrents
