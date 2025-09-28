@@ -6,7 +6,7 @@ export class Aria2cPageHandler {
         this.updateInterval = null;
         this.lastStatus = null;
         this.previousPath = '/'; // Store the path before entering this page
-        this.torrentsToRemove = new Set(); // Track torrents scheduled for removal
+        this.torrentsToCancel = new Set(); // Track torrents scheduled for cancellation
     }
 
     init() {
@@ -86,6 +86,26 @@ export class Aria2cPageHandler {
         const waitingDownloads = Array.isArray(status['aria2.tellWaiting']) ? status['aria2.tellWaiting'] : [];
         let stoppedDownloads = Array.isArray(status['aria2.tellStopped']) ? status['aria2.tellStopped'] : [];
 
+        // Handle auto-cancellation of completed torrents
+        for (const item of activeDownloads) {
+            const isTorrent = item.bittorrent;
+            if (!isTorrent) continue;
+
+            const totalLength = parseInt(item.totalLength, 10);
+            const completedLength = parseInt(item.completedLength, 10);
+            const progress = totalLength > 0 ? (completedLength / totalLength) * 100 : 0;
+            const gid = item.gid;
+
+            if (progress >= 100 && !this.torrentsToCancel.has(gid)) {
+                this.torrentsToCancel.add(gid);
+                setTimeout(() => {
+                    this.handleDownloadAction('cancel', gid).finally(() => {
+                        this.torrentsToCancel.delete(gid);
+                    });
+                }, 30000); // 30 seconds
+            }
+        }
+
         // Filter the stoppedDownloads list to hide transient metadata downloads.
         stoppedDownloads = stoppedDownloads.filter(item => {
             // A download is a metadata download if it is followed by another download.
@@ -100,13 +120,6 @@ export class Aria2cPageHandler {
 
             return true;
         });
-
-        // Handle auto-removal of completed torrents
-        for (const item of stoppedDownloads) {
-            const isTorrent = item.bittorrent;
-            const isComplete = item.status === 'complete';
-            const gid = item.gid;
-        }
 
         if (activeDownloads.length === 0 && waitingDownloads.length === 0 && stoppedDownloads.length === 0) {
             container.appendChild(this.createNoDownloadsMessage());
