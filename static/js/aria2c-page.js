@@ -106,15 +106,6 @@ export class Aria2cPageHandler {
             const isTorrent = item.bittorrent;
             const isComplete = item.status === 'complete';
             const gid = item.gid;
-
-            if (isTorrent && isComplete && !this.torrentsToRemove.has(gid)) {
-                this.torrentsToRemove.add(gid);
-                setTimeout(() => {
-                    this.handleDownloadAction('clearCompleted', gid).then(() => {
-                        this.torrentsToRemove.delete(gid);
-                    });
-                }, 10000); // 10-second delay
-            }
         }
 
         if (activeDownloads.length === 0 && waitingDownloads.length === 0 && stoppedDownloads.length === 0) {
