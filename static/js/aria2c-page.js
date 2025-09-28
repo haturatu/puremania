@@ -6,6 +6,7 @@ export class Aria2cPageHandler {
         this.updateInterval = null;
         this.lastStatus = null;
         this.previousPath = '/'; // Store the path before entering this page
+        this.torrentsToCancel = new Set(); // Track torrents scheduled for cancellation
     }
 
     init() {
@@ -83,7 +84,42 @@ export class Aria2cPageHandler {
 
         const activeDownloads = Array.isArray(status['aria2.tellActive']) ? status['aria2.tellActive'] : [];
         const waitingDownloads = Array.isArray(status['aria2.tellWaiting']) ? status['aria2.tellWaiting'] : [];
-        const stoppedDownloads = Array.isArray(status['aria2.tellStopped']) ? status['aria2.tellStopped'] : [];
+        let stoppedDownloads = Array.isArray(status['aria2.tellStopped']) ? status['aria2.tellStopped'] : [];
+
+        // Handle auto-cancellation of completed torrents
+        for (const item of activeDownloads) {
+            const isTorrent = item.bittorrent;
+            if (!isTorrent) continue;
+
+            const totalLength = parseInt(item.totalLength, 10);
+            const completedLength = parseInt(item.completedLength, 10);
+            const progress = totalLength > 0 ? (completedLength / totalLength) * 100 : 0;
+            const gid = item.gid;
+
+            if (progress >= 100 && !this.torrentsToCancel.has(gid)) {
+                this.torrentsToCancel.add(gid);
+                setTimeout(() => {
+                    this.handleDownloadAction('cancel', gid).finally(() => {
+                        this.torrentsToCancel.delete(gid);
+                    });
+                }, 30000); // 30 seconds
+            }
+        }
+
+        // Filter the stoppedDownloads list to hide transient metadata downloads.
+        stoppedDownloads = stoppedDownloads.filter(item => {
+            // A download is a metadata download if it is followed by another download.
+            if (item.followedBy && item.followedBy.length > 0) {
+                return false;
+            }
+
+            // For torrents, also ensure they are actually complete before showing them in this list.
+            if (item.bittorrent && item.status !== 'complete') {
+                return false;
+            }
+
+            return true;
+        });
 
         if (activeDownloads.length === 0 && waitingDownloads.length === 0 && stoppedDownloads.length === 0) {
             container.appendChild(this.createNoDownloadsMessage());

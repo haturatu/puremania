@@ -11,6 +11,7 @@ import (
 	"puremania/cache"
 	"puremania/types"
 	"puremania/worker"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -229,15 +230,16 @@ func (h *Handler) GetAria2cStatus(w http.ResponseWriter, r *http.Request) {
 	ch := make(chan StatusResult, 3)
 
 	methods := []string{"aria2.tellActive", "aria2.tellWaiting", "aria2.tellStopped"}
-	fields := []string{"gid", "status", "totalLength", "completedLength", "downloadSpeed", "uploadSpeed", "connections", "dir", "files", "bittorrent"}
+	fields := []string{"gid", "status", "totalLength", "completedLength", "downloadSpeed", "uploadSpeed", "connections", "dir", "files", "bittorrent", "followedBy"}
 
 	for _, method := range methods {
 		go func(m string) {
 			var params []interface{}
-			if m == "aria2.tellStopped" {
-				// tellStoppedにはオフセットと数のパラメータが必要
-				params = []interface{}{0, 100} // 最新100件
+			if m == "aria2.tellStopped" || m == "aria2.tellWaiting" {
+				// tellStopped and tellWaiting require offset, num, and fields
+				params = []interface{}{0, 100, fields} // Get top 100
 			} else {
+				// tellActive just takes fields
 				params = []interface{}{fields}
 			}
 
@@ -265,7 +267,7 @@ func (h *Handler) GetAria2cStatus(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ControlAria2cDownload(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		GID    string `json:"gid"`
-		Action string `json:"action"` // "cancel", "pause", "resume"
+		Action string `json:"action"` // "cancel", "pause", "resume", "clearCompleted"
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.logger.Error("Failed to decode aria2c control request", "error", err)
@@ -278,22 +280,36 @@ func (h *Handler) ControlAria2cDownload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var method string
+	var result interface{}
+	var err error
+
 	switch req.Action {
 	case "cancel":
-		method = "aria2.remove"
+		result, err = h.callAria2cRPC("aria2.remove", req.GID)
 	case "pause":
-		method = "aria2.pause"
+		result, err = h.callAria2cRPC("aria2.pause", req.GID)
 	case "resume":
-		method = "aria2.unpause"
+		result, err = h.callAria2cRPC("aria2.unpause", req.GID)
 	case "removeResult":
-		method = "aria2.removeDownloadResult"
+		result, err = h.callAria2cRPC("aria2.removeDownloadResult", req.GID)
+	case "clearCompleted":
+		// First, try to remove it as an active/paused download
+		result, err = h.callAria2cRPC("aria2.remove", req.GID)
+		if err != nil {
+			// If it fails because it's not found, it might be a completed download result
+			if strings.Contains(err.Error(), "not found") {
+				h.logger.Info("aria2.remove failed, trying aria2.removeDownloadResult", "gid", req.GID, "original_error", err.Error())
+				result, err = h.callAria2cRPC("aria2.removeDownloadResult", req.GID)
+			} else {
+				// A different error occurred with aria2.remove
+				h.logger.Error("Failed to control aria2c download with primary action", "action", req.Action, "gid", req.GID, "error", err)
+			}
+		}
 	default:
 		h.respondError(w, "Invalid action", http.StatusBadRequest)
 		return
 	}
 
-	result, err := h.callAria2cRPC(method, req.GID)
 	if err != nil {
 		h.logger.Error("Failed to control aria2c download", "action", req.Action, "gid", req.GID, "error", err)
 		h.respondError(w, "Failed to "+req.Action+" download: "+err.Error(), http.StatusInternalServerError)

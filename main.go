@@ -38,6 +38,27 @@ func startAria2cDaemon(logger *slog.Logger) (rpcURL string, rpcToken string, err
 	}
 
 	rpcPort := "6800"
+
+	// Check for existing process and kill it
+	logger.Info("Checking for existing aria2c process on port " + rpcPort)
+	pidCmd := exec.Command("lsof", "-t", "-i:"+rpcPort)
+	output, err := pidCmd.Output()
+	if err == nil && len(output) > 0 {
+		pidStr := strings.TrimSpace(string(output))
+		pid, err := strconv.Atoi(pidStr)
+		if err == nil {
+			logger.Info("Found existing process, attempting to kill it", "pid", pid)
+			process, err := os.FindProcess(pid)
+			if err == nil {
+				if err := process.Kill(); err == nil {
+					logger.Info("Process killed successfully", "pid", pid)
+					time.Sleep(1 * time.Second) // Give it a moment to release the port
+				} else {
+					logger.Warn("Failed to kill process", "pid", pid, "error", err)
+				}
+			}
+		}
+	}
 	rpcURL = fmt.Sprintf("http://localhost:%s/jsonrpc", rpcPort)
 
 	cmd := exec.Command(
