@@ -137,7 +137,7 @@
     justify-content: space-between;
 }
 
-.progress-bar {
+.download-item .progress-bar {
     grid-area: progress;
     background-color: var(--bg-tertiary);
     border-radius: 4px;
@@ -145,7 +145,7 @@
     overflow: hidden;
 }
 
-.progress {
+.progress-bar-fill {
     background-color: var(--accent-primary);
     height: 100%;
     transition: width 0.3s ease;

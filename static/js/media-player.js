@@ -92,7 +92,7 @@ export class MediaPlayer {
                 <div class="progress-container">
                     <span class="progress-time">0:00</span>
                     <div class="progress-bar">
-                        <div class="progress-filled"></div>
+                        <div class="progress-bar-fill"></div>
                         <div class="progress-handle"></div>
                     </div>
                     <span class="progress-time">0:00</span>
@@ -488,7 +488,7 @@ export class MediaPlayer {
         if (!media || !this.currentMedia) return;
         const { currentTime = 0, duration = 0 } = media;
         const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
-        this.playerElement.querySelector('.progress-filled').style.width = `${progressPercent}%`;
+        this.playerElement.querySelector('.progress-bar-fill').style.width = `${progressPercent}%`;
         const timeElements = this.playerElement.querySelectorAll('.progress-time');
         timeElements[0].textContent = this.formatTime(currentTime);
         timeElements[1].textContent = this.formatTime(duration);

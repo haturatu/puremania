@@ -52,13 +52,12 @@
     color: var(--text-secondary);
 }
 
-.progress-bar-container {
+.progress-bar {
     width: 100%;
-    height: 8px;
     background-color: var(--bg-tertiary);
     border-radius: 4px;
     overflow: hidden;
-    margin-bottom: 10px;
+    position: relative;
 }
 
 .progress-bar-fill {

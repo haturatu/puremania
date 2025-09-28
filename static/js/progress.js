@@ -26,7 +26,7 @@ export class ProgressManager {
                 <div class="progress-info">
                     <span class="progress-current">Preparing files...</span>
                 </div>
-                <div class="progress-bar-container">
+                <div class="progress-bar">
                     <div class="progress-bar-fill"></div>
                 </div>
                 <div class="progress-details">
