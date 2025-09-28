@@ -84,7 +84,18 @@ export class Aria2cPageHandler {
 
         const activeDownloads = Array.isArray(status['aria2.tellActive']) ? status['aria2.tellActive'] : [];
         const waitingDownloads = Array.isArray(status['aria2.tellWaiting']) ? status['aria2.tellWaiting'] : [];
-        const stoppedDownloads = Array.isArray(status['aria2.tellStopped']) ? status['aria2.tellStopped'] : [];
+        let stoppedDownloads = Array.isArray(status['aria2.tellStopped']) ? status['aria2.tellStopped'] : [];
+
+        // Filter out completed torrent metadata files from the stopped list
+        stoppedDownloads = stoppedDownloads.filter(item => {
+            if (item.bittorrent && item.status === 'complete' && item.files && item.files.length > 0) {
+                const fileName = item.files[0].path;
+                if (fileName.endsWith('.torrent')) {
+                    return false; // Exclude completed .torrent metadata files
+                }
+            }
+            return true;
+        });
 
         // Handle auto-removal of completed torrents
         const allDownloads = [...activeDownloads, ...stoppedDownloads];
