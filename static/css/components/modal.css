@@ -137,7 +137,7 @@
     justify-content: space-between;
 }
 
-.progress-bar {
+.download-item .progress-bar {
     grid-area: progress;
     background-color: var(--bg-tertiary);
     border-radius: 4px;

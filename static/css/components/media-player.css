@@ -91,7 +91,7 @@
   min-width: 40px;
 }
 
-.progress-bar {
+.media-player .progress-bar {
   flex: 1;
   height: 4px;
   background-color: var(--bg-tertiary);
