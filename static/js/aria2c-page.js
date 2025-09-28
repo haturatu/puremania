@@ -6,6 +6,7 @@ export class Aria2cPageHandler {
         this.updateInterval = null;
         this.lastStatus = null;
         this.previousPath = '/'; // Store the path before entering this page
+        this.torrentsToRemove = new Set(); // Track torrents scheduled for removal
     }
 
     init() {
@@ -84,6 +85,23 @@ export class Aria2cPageHandler {
         const activeDownloads = Array.isArray(status['aria2.tellActive']) ? status['aria2.tellActive'] : [];
         const waitingDownloads = Array.isArray(status['aria2.tellWaiting']) ? status['aria2.tellWaiting'] : [];
         const stoppedDownloads = Array.isArray(status['aria2.tellStopped']) ? status['aria2.tellStopped'] : [];
+
+        // Handle auto-removal of completed torrents
+        const allDownloads = [...activeDownloads, ...stoppedDownloads];
+        for (const item of allDownloads) {
+            const isTorrent = item.bittorrent;
+            const isComplete = item.totalLength > 0 && item.completedLength === item.totalLength;
+            const gid = item.gid;
+
+            if (isTorrent && isComplete && !this.torrentsToRemove.has(gid)) {
+                this.torrentsToRemove.add(gid);
+                setTimeout(() => {
+                    this.handleDownloadAction('removeResult', gid).then(() => {
+                        this.torrentsToRemove.delete(gid);
+                    });
+                }, 10000); // 10-second delay
+            }
+        }
 
         if (activeDownloads.length === 0 && waitingDownloads.length === 0 && stoppedDownloads.length === 0) {
             container.appendChild(this.createNoDownloadsMessage());
