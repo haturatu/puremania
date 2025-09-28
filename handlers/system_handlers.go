@@ -230,14 +230,14 @@ func (h *Handler) GetAria2cStatus(w http.ResponseWriter, r *http.Request) {
 	ch := make(chan StatusResult, 3)
 
 	methods := []string{"aria2.tellActive", "aria2.tellWaiting", "aria2.tellStopped"}
-	fields := []string{"gid", "status", "totalLength", "completedLength", "downloadSpeed", "uploadSpeed", "connections", "dir", "files", "bittorrent"}
+	fields := []string{"gid", "status", "totalLength", "completedLength", "downloadSpeed", "uploadSpeed", "connections", "dir", "files", "bittorrent", "followedBy"}
 
 	for _, method := range methods {
 		go func(m string) {
 			var params []interface{}
 			if m == "aria2.tellStopped" {
-				// tellStoppedにはオフセットと数のパラメータが必要
-				params = []interface{}{0, 100} // 最新100件
+				// tellStoppedにはオフセット、数、そしてフィールドのパラメータが必要
+				params = []interface{}{0, 100, fields} // 最新100件
 			} else {
 				params = []interface{}{fields}
 			}
