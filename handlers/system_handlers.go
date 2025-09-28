@@ -235,10 +235,11 @@ func (h *Handler) GetAria2cStatus(w http.ResponseWriter, r *http.Request) {
 	for _, method := range methods {
 		go func(m string) {
 			var params []interface{}
-			if m == "aria2.tellStopped" {
-				// tellStoppedにはオフセット、数、そしてフィールドのパラメータが必要
-				params = []interface{}{0, 100, fields} // 最新100件
+			if m == "aria2.tellStopped" || m == "aria2.tellWaiting" {
+				// tellStopped and tellWaiting require offset, num, and fields
+				params = []interface{}{0, 100, fields} // Get top 100
 			} else {
+				// tellActive just takes fields
 				params = []interface{}{fields}
 			}
 
