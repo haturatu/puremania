@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pure Mania</title>
-    <link rel="stylesheet" href="/static/css/style.css?=v0.0.2">
-    <link rel="stylesheet" href="/static/css/masonry.css?=v0.0.1">
+    <link rel="stylesheet" href="/static/css/style.css?=v0.0.3">
+    <link rel="stylesheet" href="/static/css/masonry.css?=v0.0.2">
     <style>
     .cm-editor { border: 1px solid #ddd; }
     </style>
@@ -99,7 +99,7 @@
       }
     }
     </script>
-    <script type="module" src="/static/js/app.js?=v0.0.1"></script>
+    <script type="module" src="/static/js/app.js?=v0.0.2"></script>
 
     <!-- Aria2c Status Modal -->
     <div id="aria2c-status-modal" class="modal" style="display: none;">
