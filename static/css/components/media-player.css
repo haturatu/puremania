@@ -101,14 +101,14 @@
   position: relative;
 }
 
-.progress-filled {
+.progress-bar-fill {
   height: 100%;
   background-color: var(--accent-primary);
   border-radius: 2px;
   width: 0%;
 }
 
-.progress-bar:hover .progress-handle {
+.progress-bar:hover .progress-bar-fill {
   opacity: 1;
 }
 

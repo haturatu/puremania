@@ -213,8 +213,8 @@ export class Aria2cPageHandler {
             <td class="file-name" title="${fileName}">${fileName}</td>
             <td>${this.fileManager.ui.formatFileSize(totalLength)}</td>
             <td>
-                <div class="progress-bar-container">
-                    <div class="progress-bar" style="width: ${progress.toFixed(2)}%;"></div>
+                <div class="progress-bar">
+                    <div class="progress-bar-fill" style="width: ${progress.toFixed(2)}%;"></div>
                     <span class="progress-text">${progress.toFixed(2)}%</span>
                 </div>
             </td>

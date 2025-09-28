@@ -145,7 +145,7 @@
     overflow: hidden;
 }
 
-.progress {
+.progress-bar-fill {
     background-color: var(--accent-primary);
     height: 100%;
     transition: width 0.3s ease;
