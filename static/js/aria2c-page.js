@@ -98,10 +98,9 @@ export class Aria2cPageHandler {
         });
 
         // Handle auto-removal of completed torrents
-        const allDownloads = [...activeDownloads, ...stoppedDownloads];
-        for (const item of allDownloads) {
+        for (const item of stoppedDownloads) {
             const isTorrent = item.bittorrent;
-            const isComplete = item.totalLength > 0 && item.completedLength === item.totalLength;
+            const isComplete = item.status === 'complete';
             const gid = item.gid;
 
             if (isTorrent && isComplete && !this.torrentsToRemove.has(gid)) {
