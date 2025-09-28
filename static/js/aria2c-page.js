@@ -96,7 +96,7 @@ export class Aria2cPageHandler {
             if (isTorrent && isComplete && !this.torrentsToRemove.has(gid)) {
                 this.torrentsToRemove.add(gid);
                 setTimeout(() => {
-                    this.handleDownloadAction('removeResult', gid).then(() => {
+                    this.handleDownloadAction('cancel', gid).then(() => {
                         this.torrentsToRemove.delete(gid);
                     });
                 }, 10000); // 10-second delay
