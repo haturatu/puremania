@@ -797,15 +797,6 @@ func (h *Handler) addFileToZip(zipWriter *zip.Writer, filePath, zipPath string, 
 	header.Name = filepath.ToSlash(zipPath)
 	header.Method = zip.Deflate
 
-	mu.Lock()
-	writer, err := zipWriter.CreateHeader(header)
-	mu.Unlock()
-
-	if err != nil {
-		h.logger.Error("Failed to create zip header for file", "path", zipPath, "error", err)
-		return false
-	}
-
 	file, err := os.Open(filePath)
 	if err != nil {
 		h.logger.Error("Failed to open file for zipping", "path", filePath, "error", err)
@@ -817,14 +808,20 @@ func (h *Handler) addFileToZip(zipWriter *zip.Writer, filePath, zipPath string, 
 		}
 	}()
 
+	mu.Lock()
+	defer mu.Unlock()
+
+	writer, err := zipWriter.CreateHeader(header)
+	if err != nil {
+		h.logger.Error("Failed to create zip header for file", "path", zipPath, "error", err)
+		return false
+	}
+
 	// バッファサイズ最適化
 	bufferSize := getOptimalBufferSize(info.Size())
 	buffer := make([]byte, bufferSize)
 
-	mu.Lock()
 	_, err = io.CopyBuffer(writer, file, buffer)
-	mu.Unlock()
-
 	if err != nil {
 		h.logger.Error("Failed to copy file content to zip", "path", filePath, "error", err)
 	}
