@@ -1,3 +1,4 @@
+import { getTemplateContent } from './template.js';
 
 export class Aria2cPageHandler {
     constructor(fileManager) {
@@ -26,7 +27,6 @@ export class Aria2cPageHandler {
         this.loadAria2cStatus();
         this.updateInterval = setInterval(() => this.loadAria2cStatus(), 2000); // Update every 2 seconds
         
-        // Hide file browser elements not relevant to this page
         const breadcrumbs = document.querySelector('.breadcrumbs');
         if (breadcrumbs) breadcrumbs.style.display = 'none';
     }
@@ -38,11 +38,9 @@ export class Aria2cPageHandler {
         this.updateInterval = null;
         this.lastStatus = null;
 
-        // Restore file browser elements
         const breadcrumbs = document.querySelector('.breadcrumbs');
         if (breadcrumbs) breadcrumbs.style.display = '';
 
-        // Navigate back to the previous path
         this.fileManager.router.navigate(this.previousPath);
     }
 
@@ -56,7 +54,6 @@ export class Aria2cPageHandler {
                 this.render(result.data);
             } else {
                 this.fileManager.ui.showToast('Aria2c Error', result.message || 'Could not fetch status', 'error');
-                // Stop trying if there is a persistent error
                 clearInterval(this.updateInterval);
             }
         } catch (error) {
@@ -72,7 +69,7 @@ export class Aria2cPageHandler {
         const container = document.querySelector('.file-browser');
         if (!container) return;
 
-        container.innerHTML = ''; // Clear previous content
+        container.innerHTML = '';
 
         const header = this.createHeader();
         container.appendChild(header);
@@ -86,11 +83,8 @@ export class Aria2cPageHandler {
         const waitingDownloads = Array.isArray(status['aria2.tellWaiting']) ? status['aria2.tellWaiting'] : [];
         let stoppedDownloads = Array.isArray(status['aria2.tellStopped']) ? status['aria2.tellStopped'] : [];
 
-        // Handle auto-cancellation of completed torrents
         for (const item of activeDownloads) {
-            const isTorrent = item.bittorrent;
-            if (!isTorrent) continue;
-
+            if (!item.bittorrent) continue;
             const totalLength = parseInt(item.totalLength, 10);
             const completedLength = parseInt(item.completedLength, 10);
             const progress = totalLength > 0 ? (completedLength / totalLength) * 100 : 0;
@@ -102,22 +96,13 @@ export class Aria2cPageHandler {
                     this.handleDownloadAction('cancel', gid).finally(() => {
                         this.torrentsToCancel.delete(gid);
                     });
-                }, 30000); // 30 seconds
+                }, 30000);
             }
         }
 
-        // Filter the stoppedDownloads list to hide transient metadata downloads.
         stoppedDownloads = stoppedDownloads.filter(item => {
-            // A download is a metadata download if it is followed by another download.
-            if (item.followedBy && item.followedBy.length > 0) {
-                return false;
-            }
-
-            // For torrents, also ensure they are actually complete before showing them in this list.
-            if (item.bittorrent && item.status !== 'complete') {
-                return false;
-            }
-
+            if (item.followedBy && item.followedBy.length > 0) return false;
+            if (item.bittorrent && item.status !== 'complete') return false;
             return true;
         });
 
@@ -136,26 +121,17 @@ export class Aria2cPageHandler {
     createHeader() {
         const header = document.createElement('div');
         header.className = 'aria2c-header';
-        header.innerHTML = `
-            <div class="aria2c-title">Aria2c Downloads</div>
-            <div class="aria2c-controls">
-                <button class="aria2c-back-btn btn">
-                    <i class="fas fa-arrow-left"></i> Back to Files
-                </button>
-            </div>
-        `;
+        const template = getTemplateContent('/static/templates/components/aria2c_header.html');
+        header.appendChild(template);
         header.querySelector('.aria2c-back-btn').addEventListener('click', () => this.exitAria2cMode());
         return header;
     }
 
     createNoDownloadsMessage() {
         const noResults = document.createElement('div');
-        noResults.className = 'no-search-results'; // Re-use style
-        noResults.innerHTML = `
-            <div class="no-search-results-icon">📥</div>
-            <div class="no-search-results-text">No active or recent downloads</div>
-            <div class="no-search-results-subtext">Use 'aria2c <URL>' in the search bar to start a new download.</div>
-        `;
+        noResults.className = 'no-search-results';
+        const template = getTemplateContent('/static/templates/components/aria2c_no_downloads.html');
+        noResults.appendChild(template);
         return noResults;
     }
 
@@ -178,24 +154,14 @@ export class Aria2cPageHandler {
     createTable(downloads, isActive) {
         const table = document.createElement('table');
         table.className = 'table-view aria2c-table';
-        table.innerHTML = `
-            <thead>
-                <tr>
-                    <th>File Name</th>
-                    <th>Size</th>
-                    <th>Progress</th>
-                    <th>Status</th>
-                    <th>Speed</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-        `;
-        const tbody = document.createElement('tbody');
+        const template = getTemplateContent('/static/templates/components/aria2c_table.html');
+        table.appendChild(template);
+        
+        const tbody = table.querySelector('tbody');
         downloads.forEach(item => {
             const tr = this.createTableRow(item, isActive);
             tbody.appendChild(tr);
         });
-        table.appendChild(tbody);
         return table;
     }
 
@@ -203,27 +169,23 @@ export class Aria2cPageHandler {
         const tr = document.createElement('tr');
         tr.dataset.gid = item.gid;
 
+        const template = getTemplateContent('/static/templates/components/aria2c_table_row.html');
         const fileName = item.files && item.files.length > 0 ? this.getFileName(item.files[0].path) : 'N/A';
         const totalLength = parseInt(item.totalLength, 10);
         const completedLength = parseInt(item.completedLength, 10);
         const progress = totalLength > 0 ? (completedLength / totalLength) * 100 : 0;
         const downloadSpeed = parseInt(item.downloadSpeed, 10);
 
-        tr.innerHTML = `
-            <td class="file-name" title="${fileName}">${fileName}</td>
-            <td>${this.fileManager.ui.formatFileSize(totalLength)}</td>
-            <td>
-                <div class="progress-bar">
-                    <div class="progress-bar-fill" style="width: ${progress.toFixed(2)}%;"></div>
-                    <span class="progress-text">${progress.toFixed(2)}%</span>
-                </div>
-            </td>
-            <td>${item.status}</td>
-            <td>${this.fileManager.ui.formatFileSize(downloadSpeed)}/s</td>
-            <td class="actions">
-                ${this.createActionButtons(item.status, item.gid)}
-            </td>
-        `;
+        template.querySelector('.file-name').textContent = fileName;
+        template.querySelector('.file-name').title = fileName;
+        template.querySelector('.file-size').textContent = this.fileManager.ui.formatFileSize(totalLength);
+        template.querySelector('.progress-bar-fill').style.width = `${progress.toFixed(2)}%`;
+        template.querySelector('.progress-text').textContent = `${progress.toFixed(2)}%`;
+        template.querySelector('.status').textContent = item.status;
+        template.querySelector('.speed').textContent = `${this.fileManager.ui.formatFileSize(downloadSpeed)}/s`;
+        template.querySelector('.actions').innerHTML = this.createActionButtons(item.status, item.gid);
+        
+        tr.appendChild(template);
         return tr;
     }
     
@@ -266,10 +228,7 @@ export class Aria2cPageHandler {
 
     async handleDownloadAction(action, gid) {
         let apiAction = action;
-        let method = 'POST';
-        
         if (action === 'clear') {
-            // 'clear' is a frontend action, translates to 'removeResult' on the backend
             apiAction = 'removeResult';
         }
 
@@ -282,7 +241,7 @@ export class Aria2cPageHandler {
             const result = await response.json();
             if (result.success) {
                 this.fileManager.ui.showToast('Aria2c', `Action '${action}' successful for GID ${gid}.`, 'success');
-                this.loadAria2cStatus(); // Refresh list
+                this.loadAria2cStatus();
             } else {
                 this.fileManager.ui.showToast('Aria2c Error', result.message || `Action '${action}' failed.`, 'error');
             }

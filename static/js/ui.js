@@ -1,3 +1,5 @@
+import { getTemplateContent } from './template.js';
+
 export class UIManager {
     constructor(app) {
         this.app = app;
@@ -19,17 +21,10 @@ export class UIManager {
         const isNewFolder = currentPath !== this.previousPath;
         this.previousPath = currentPath;
 
-        // 新しいフォルダに移動したときだけデフォルトソート順を評価する
         if (isNewFolder) {
             const musicFileCount = files.filter(file => file.mime_type && file.mime_type.startsWith('audio/')).length;
-            if (musicFileCount >= 10) {
-                this.sortState.field = 'name';
-                this.sortState.direction = 'asc';
-            } else {
-                // デフォルトのソート順に戻す
-                this.sortState.field = 'type';
-                this.sortState.direction = 'desc';
-            }
+            this.sortState.field = musicFileCount >= 10 ? 'name' : 'type';
+            this.sortState.direction = musicFileCount >= 10 ? 'asc' : 'desc';
         }
 
         container.innerHTML = '';
@@ -43,23 +38,11 @@ export class UIManager {
         }
 
         const sortedFiles = this.sortFiles(files);
-
-        const imageCount = sortedFiles.filter(file =>
-            file.mime_type && file.mime_type.startsWith('image/')
-        ).length;
-        
+        const imageCount = sortedFiles.filter(f => f.mime_type && f.mime_type.startsWith('image/')).length;
         const hasMasonrySupport = imageCount >= 10;
 
-        // Default to masonry view when entering a new folder with enough images
-        if (isNewFolder && hasMasonrySupport) {
-            this.viewMode = 'masonry';
-        }
-
-        // Fallback to grid if masonry is selected but there are no images
-        if (this.viewMode === 'masonry' && imageCount === 0) {
-            this.viewMode = 'grid';
-        }
-
+            if (isNewFolder && hasMasonrySupport) this.viewMode = 'masonry';
+            if (this.viewMode === 'masonry' && !hasMasonrySupport) this.viewMode = 'grid';
         if (this.viewMode === 'masonry') {
             this.renderMasonryView(sortedFiles, container);
         } else {
@@ -70,69 +53,64 @@ export class UIManager {
     renderToolbar(container) {
         const toolbar = document.createElement('div');
         toolbar.className = 'toolbar';
-        toolbar.innerHTML = `
-            <button class="toolbar-btn" data-action="upload" title="Upload (Ctrl+U)">📂 Upload</button>
-            <button class="toolbar-btn" data-action="new-folder" title="New Folder (Ctrl+Shift+N)">📁 New Folder</button>
-            <button class="toolbar-btn" data-action="new-file" title="New File (Ctrl+N)">📄 New File</button>
-            <button class="toolbar-btn" data-action="download" title="Download Selected" ${this.app.selectedFiles.size === 0 ? 'disabled' : ''}>⬇ Download</button>
-            <button class="toolbar-btn" data-action="move" title="Move Selected" ${this.app.selectedFiles.size === 0 ? 'disabled' : ''}>➡️ Move</button>
-            <button class="toolbar-btn" data-action="delete" title="Delete Selected (Delete)" ${this.app.selectedFiles.size === 0 ? 'disabled' : ''}>🗑️ Delete</button>
-        `;
+        const template = getTemplateContent('/static/templates/components/toolbar.html');
+        toolbar.appendChild(template);
         container.appendChild(toolbar);
     }
 
     renderUploadArea(container) {
         const uploadArea = document.createElement('div');
         uploadArea.className = 'upload-area';
-        uploadArea.innerHTML = `
-            <div class="upload-icon">📁</div>
-            <div class="upload-text">Drop files or folders here to upload</div>
-            <div class="upload-subtext">or use the buttons below</div>
-            <input type="file" class="upload-input-files" multiple hidden>
-            <input type="file" class="upload-input-folders" webkitdirectory hidden>
-            <div class="upload-buttons">
-                <button type="button" class="btn-select-files">📄 Select Files</button>
-                <button type="button" class="btn-select-folders">📂 Select Folder</button>
-            </div>
-            <div class="upload-info">
-                <div class="upload-feature">• Files will be uploaded to: <span class="upload-path">${this.app.router.getCurrentPath()}</span></div>
-            </div>
-        `;
+        const template = getTemplateContent('/static/templates/components/upload_area.html');
+        template.querySelector('.upload-path').textContent = this.app.router.getCurrentPath();
+        uploadArea.appendChild(template);
         container.appendChild(uploadArea);
     }
 
     renderEmptyState(container) {
         const noFiles = document.createElement('div');
         noFiles.className = 'no-files';
-        noFiles.innerHTML = `
-            <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
-                <div style="font-size: 3rem; margin-bottom: 20px; opacity: 0.5;">📁</div>
-                <div style="font-size: 1.2rem; margin-bottom: 10px;">No files found</div>
-                <div style="font-size: 0.9rem; opacity: 0.8;">Upload files or create new ones to get started</div>
-            </div>
-        `;
+        const template = getTemplateContent('/static/templates/components/empty_state.html');
+        noFiles.appendChild(template);
         container.appendChild(noFiles);
     }
 
-    renderStandardView(files, container, hasMasonrySupport = false) {
+    createViewToggle(hasMasonrySupport = false) {
         const viewToggle = document.createElement('div');
         viewToggle.className = 'view-toggle';
-        viewToggle.innerHTML = `
-            <button class="view-toggle-btn ${this.viewMode === 'grid' ? 'active' : ''}" data-view="grid">Grid</button>
-            <button class="view-toggle-btn ${this.viewMode === 'list' ? 'active' : ''}" data-view="list">List</button>
-            ${hasMasonrySupport ? `<button class="view-toggle-btn" data-view="masonry">Masonry</button>` : ''}
-        `;
+        const template = getTemplateContent('/static/templates/components/view_toggle.html');
+        
+        const activeBtn = template.querySelector(`[data-view="${this.viewMode}"]`);
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+        }
+
+        if (hasMasonrySupport) {
+            const masonryBtn = document.createElement('button');
+            masonryBtn.className = 'view-toggle-btn';
+            masonryBtn.dataset.view = 'masonry';
+            masonryBtn.textContent = 'Masonry';
+            if (this.viewMode === 'masonry') {
+                masonryBtn.classList.add('active');
+            }
+            template.appendChild(masonryBtn);
+        }
+        viewToggle.appendChild(template);
+        return viewToggle;
+    }
+
+    renderStandardView(files, container, hasMasonrySupport = false) {
+        const viewToggle = this.createViewToggle(hasMasonrySupport);
         container.appendChild(viewToggle);
 
         const fileContainer = document.createElement('div');
         fileContainer.className = this.viewMode === 'list' ? 'table-view-container' : 'file-grid';
-
+        
         if (this.viewMode === 'list') {
             this.renderListView(files, fileContainer);
         } else {
             this.renderGridView(files, fileContainer);
         }
-
         container.appendChild(fileContainer);
     }
 
@@ -147,31 +125,12 @@ export class UIManager {
         const table = document.createElement('table');
         table.className = 'table-view';
 
-        const thead = document.createElement('thead');
-        thead.innerHTML = `
-            <tr>
-                <th class="sortable ${this.sortState.field === 'name' ? this.sortState.direction : ''}" data-sort="name">
-                    Name ${this.sortState.field === 'name' ? (this.sortState.direction === 'asc' ? '↑' : '↓') : ''}
-                </th>
-                <th class="sortable ${this.sortState.field === 'size' ? this.sortState.direction : ''}" data-sort="size">
-                    Size ${this.sortState.field === 'size' ? (this.sortState.direction === 'asc' ? '↑' : '↓') : ''}
-                </th>
-                <th class="sortable ${this.sortState.field === 'modified' ? this.sortState.direction : ''}" data-sort="modified">
-                    Modified ${this.sortState.field === 'modified' ? (this.sortState.direction === 'asc' ? '↑' : '↓') : ''}
-                </th>
-                <th class="sortable ${this.sortState.field === 'type' ? this.sortState.direction : ''}" data-sort="type">
-                    Type ${this.sortState.field === 'type' ? (this.sortState.direction === 'asc' ? '↑' : '↓') : ''}
-                </th>
-                <th>Actions</th>
-            </tr>
-        `;
-        table.appendChild(thead);
-
+        const thead = this.createListViewHeader(this.sortState.field, this.sortState.direction);
+        
         thead.querySelectorAll('.sortable').forEach(header => {
-            header.addEventListener('click', (e) => {
-                this.setSort(e.currentTarget.dataset.sort);
-            });
+            header.addEventListener('click', (e) => this.setSort(e.currentTarget.dataset.sort));
         });
+        table.appendChild(thead);
 
         const tbody = document.createElement('tbody');
         files.forEach(file => {
@@ -181,6 +140,20 @@ export class UIManager {
 
         table.appendChild(tbody);
         container.appendChild(table);
+    }
+
+    createListViewHeader(sortField, sortDirection) {
+        const thead = document.createElement('thead');
+        const headerTemplate = getTemplateContent('/static/templates/components/list_view_header.html');
+        const headerRow = headerTemplate.querySelector('tr');
+        
+        const sortableHeader = headerRow.querySelector(`[data-sort="${sortField}"]`);
+        if(sortableHeader) {
+            sortableHeader.classList.add(sortDirection);
+            sortableHeader.textContent += sortDirection === 'asc' ? ' ↑' : ' ↓';
+        }
+        thead.appendChild(headerRow);
+        return thead;
     }
 
     setSort(field) {
@@ -195,65 +168,45 @@ export class UIManager {
 
     sortFiles(files) {
         return [...files].sort((a, b) => {
-            let valueA, valueB;
+            const field = this.sortState.field;
+            const dir = this.sortState.direction === 'asc' ? 1 : -1;
+            
+            let valA = field === 'name' ? a.name.toLowerCase() : (a[field] || 0);
+            let valB = field === 'name' ? b.name.toLowerCase() : (b[field] || 0);
 
-            switch (this.sortState.field) {
-                case 'name':
-                    valueA = a.name.toLowerCase();
-                    valueB = b.name.toLowerCase();
-                    break;
-                case 'size':
-                    valueA = a.size || 0;
-                    valueB = b.size || 0;
-                    break;
-                case 'modified':
-                    valueA = new Date(a.mod_time).getTime();
-                    valueB = new Date(b.mod_time).getTime();
-                    break;
-                case 'type':
-                    valueA = a.is_dir ? 'dir' : (a.mime_type || 'file');
-                    valueB = b.is_dir ? 'dir' : (b.mime_type || 'file');
-                    break;
-                default:
-                    valueA = a.name.toLowerCase();
-                    valueB = b.name.toLowerCase();
+            if (field === 'type') {
+                valA = a.is_dir ? 'dir' : (a.mime_type || 'file');
+                valB = b.is_dir ? 'dir' : (b.mime_type || 'file');
+            }
+            if (field === 'modified') {
+                valA = new Date(a.mod_time).getTime();
+                valB = new Date(b.mod_time).getTime();
             }
 
-            if (valueA < valueB) {
-                return this.sortState.direction === 'asc' ? -1 : 1;
-            }
-            if (valueA > valueB) {
-                return this.sortState.direction === 'asc' ? 1 : -1;
-            }
+            if (valA < valB) return -1 * dir;
+            if (valA > valB) return 1 * dir;
             return 0;
         });
     }
 
     renderMasonryView(files, container) {
-        const imageFiles = files.filter(file =>
-            file.mime_type && file.mime_type.startsWith('image/')
-        );
-
-        const otherFiles = files.filter(file =>
-            !file.mime_type || !file.mime_type.startsWith('image/')
-        );
+        const imageFiles = files.filter(f => f.mime_type && f.mime_type.startsWith('image/'));
+        const otherFiles = files.filter(f => !f.mime_type || !f.mime_type.startsWith('image/'));
 
         const viewToggle = document.createElement('div');
         viewToggle.className = 'view-toggle';
-        viewToggle.innerHTML = `
-            <button class="view-toggle-btn ${this.viewMode === 'grid' ? 'active' : ''}" data-view="grid">Grid</button>
-            <button class="view-toggle-btn ${this.viewMode === 'list' ? 'active' : ''}" data-view="list">List</button>
-            <button class="view-toggle-btn ${this.viewMode === 'masonry' ? 'active' : ''}" data-view="masonry">Masonry</button>
-        `;
+        const template = getTemplateContent('/static/templates/components/view_toggle.html');
+        template.querySelector(`[data-view="grid"]`).classList.remove('active');
+        const masonryBtn = document.createElement('button');
+        masonryBtn.className = 'view-toggle-btn active';
+        masonryBtn.dataset.view = 'masonry';
+        masonryBtn.textContent = 'Masonry';
+        template.appendChild(masonryBtn);
+        viewToggle.appendChild(template);
         container.appendChild(viewToggle);
 
-        if (imageFiles.length > 0) {
-            this.renderImageSection(imageFiles, container);
-        }
-
-        if (otherFiles.length > 0) {
-            this.renderOtherFilesSection(otherFiles, container);
-        }
+        if (imageFiles.length > 0) this.renderImageSection(imageFiles, container);
+        if (otherFiles.length > 0) this.renderOtherFilesSection(otherFiles, container);
     }
 
     createTableRow(file) {
@@ -261,30 +214,17 @@ export class UIManager {
         tr.className = 'file-item';
         this.setFileItemData(tr, file);
 
-        tr.innerHTML = `
-            <td>
-                <div class="file-icon ${this.getFileIconClass(file)}"></div>
-                <span class="file-name">${file.name}</span>
-            </td>
-            <td>${file.is_dir ? '-' : this.formatFileSize(file.size)}</td>
-            <td>${new Date(file.mod_time).toLocaleString()}</td>
-            <td>${file.is_dir ? 'Folder' : (file.mime_type || 'Unknown')}</td>
-            <td>
-                ${!file.is_dir ? `
-                    <button class="file-action-btn" data-action="download" title="Download">⬇</button>
-                    ${file.is_editable ? `<button class="file-action-btn" data-action="edit" title="Edit">✏</button>` : ''}
-                    <button class="file-action-btn" data-action="rename" title="Rename (F2)">✏️</button>
-                    <button class="file-action-btn" data-action="move" title="Move">➡️</button>
-                    <button class="file-action-btn" data-action="delete" title="Delete">🗑</button>
-                    ${this.getFileIconClass(file) === 'archive' ? `<button class="file-action-btn" data-action="extract" title="Extract">🗜️</button>` : ''}
-                ` : `
-                    <button class="file-action-btn" data-action="rename" title="Rename (F2)">✏️</button>
-                    <button class="file-action-btn" data-action="move" title="Move">➡️</button>
-                    <button class="file-action-btn" data-action="delete" title="Delete">🗑</button>
-                `}
-            </td>
-        `;
+        const template = getTemplateContent('/static/templates/components/list_view_item.html');
+        template.querySelector('.file-icon').className = `file-icon ${this.getFileIconClass(file)}`;
+        template.querySelector('.file-name').textContent = file.name;
+        template.querySelector('.file-size').textContent = file.is_dir ? '-' : this.formatFileSize(file.size);
+        template.querySelector('.file-mod-time').textContent = new Date(file.mod_time).toLocaleString();
+        template.querySelector('.file-mime-type').textContent = file.is_dir ? 'Folder' : (file.mime_type || 'Unknown');
+        
+        const actionsContainer = template.querySelector('.file-actions');
+        this.renderFileActions(actionsContainer, file);
 
+        tr.appendChild(template);
         return tr;
     }
 
@@ -293,62 +233,41 @@ export class UIManager {
         item.className = 'masonry-item';
         this.setFileItemData(item, file);
 
-        item.style.gridRowEnd = 'span 20';
+        const template = getTemplateContent('/static/templates/components/masonry_item.html');
+        const img = template.querySelector('.masonry-image');
+        img.src = `/api/files/content?path=${encodeURIComponent(file.path)}`;
+        img.alt = file.name;
+        img.onload = () => item.style.gridRowEnd = `span ${Math.round((img.naturalHeight / img.naturalWidth) * 20)}`;
+        img.onerror = () => img.style.display = 'none';
 
-        item.innerHTML = `
-            <img src="/api/files/content?path=${encodeURIComponent(file.path)}" 
-                 alt="${file.name}" 
-                 class="masonry-image"
-                 onload="this.closest('.masonry-item').style.gridRowEnd = 'span ' + Math.round((this.naturalHeight / this.naturalWidth) * 20)"
-                 onerror="this.style.display='none'">
-            <div class="masonry-info">
-                <div class="masonry-name">${file.name}</div>
-                <div class="masonry-size">${this.formatFileSize(file.size)}</div>
-            </div>
-            <div class="file-actions">
-                <button class="file-action-btn" data-action="download" title="Download">⬇</button>
-                <button class="file-action-btn" data-action="rename" title="Rename">✏️</button>
-                <button class="file-action-btn" data-action="move" title="Move">➡️</button>
-                <button class="file-action-btn" data-action="delete" title="Delete">🗑</button>
-            </div>
-        `;
-
+        template.querySelector('.masonry-name').textContent = file.name;
+        template.querySelector('.masonry-size').textContent = this.formatFileSize(file.size);
+        
+        item.appendChild(template);
         return item;
     }
 
     renderImageSection(imageFiles, container) {
-        const masonryTitle = document.createElement('h3');
-        masonryTitle.textContent = 'Images';
-        masonryTitle.style.margin = '20px 0 10px';
-        masonryTitle.style.color = 'var(--accent-primary)';
-        container.appendChild(masonryTitle);
+        const title = document.createElement('h3');
+        title.textContent = 'Images';
+        title.style.cssText = 'margin: 20px 0 10px; color: var(--accent-primary);';
+        container.appendChild(title);
 
         const masonryGrid = document.createElement('div');
         masonryGrid.className = 'masonry-grid';
-
-        imageFiles.forEach(file => {
-            const masonryItem = this.createMasonryItem(file);
-            masonryGrid.appendChild(masonryItem);
-        });
-
+        imageFiles.forEach(file => masonryGrid.appendChild(this.createMasonryItem(file)));
         container.appendChild(masonryGrid);
     }
 
     renderOtherFilesSection(otherFiles, container) {
-        const otherTitle = document.createElement('h3');
-        otherTitle.textContent = 'Other Files';
-        otherTitle.style.margin = '30px 0 10px';
-        otherTitle.style.color = 'var(--accent-primary)';
-        container.appendChild(otherTitle);
+        const title = document.createElement('h3');
+        title.textContent = 'Other Files';
+        title.style.cssText = 'margin: 30px 0 10px; color: var(--accent-primary);';
+        container.appendChild(title);
 
         const fileGrid = document.createElement('div');
         fileGrid.className = 'file-grid';
-
-        otherFiles.forEach(file => {
-            const fileItem = this.createFileItem(file);
-            fileGrid.appendChild(fileItem);
-        });
-
+        otherFiles.forEach(file => fileGrid.appendChild(this.createFileItem(file)));
         container.appendChild(fileGrid);
     }
 
@@ -357,111 +276,68 @@ export class UIManager {
         fileItem.className = 'file-item';
         this.setFileItemData(fileItem, file);
 
-        const iconClass = this.getFileIconClass(file);
+        const template = getTemplateContent('/static/templates/components/grid_view_item.html');
+        template.querySelector('.file-icon').className = `file-icon ${this.getFileIconClass(file)}`;
+        template.querySelector('.file-name').textContent = file.name;
+        template.querySelector('.file-info').textContent = file.is_dir ? 'Folder' : this.formatFileSize(file.size);
+        
+        const actionsContainer = template.querySelector('.file-actions');
+        this.renderFileActions(actionsContainer, file);
 
-        fileItem.innerHTML = `
-            <div class="file-icon ${iconClass}"></div>
-            <div class="file-name">${file.name}</div>
-            <div class="file-info">
-                ${file.is_dir ? 'Folder' : this.formatFileSize(file.size)}
-            </div>
-            <div class="file-actions">
-                ${!file.is_dir ? `
-                    <button class="file-action-btn" data-action="download" title="Download">⬇</button>
-                    ${file.is_editable ? `<button class="file-action-btn" data-action="edit" title="Edit">✏</button>` : ''}
-                    <button class="file-action-btn" data-action="rename" title="Rename (F2)">✏️</button>
-                    <button class="file-action-btn" data-action="move" title="Move">➡️</button>
-                    <button class="file-action-btn" data-action="delete" title="Delete">🗑</button>
-                    ${this.getFileIconClass(file) === 'archive' ? `<button class="file-action-btn" data-action="extract" title="Extract">🗜️</button>` : ''}
-                ` : `
-                    <button class="file-action-btn" data-action="rename" title="Rename (F2)">✏️</button>
-                    <button class="file-action-btn" data-action="move" title="Move">➡️</button>
-                    <button class="file-action-btn" data-action="delete" title="Delete">🗑</button>
-                `}
-            </div>
-        `;
-
+        fileItem.appendChild(template);
         return fileItem;
+    }
+    
+    renderFileActions(container, file) {
+        const templateFile = file.is_dir ? '/static/templates/components/folder_actions.html' : '/static/templates/components/file_actions.html';
+        const template = getTemplateContent(templateFile);
+
+        if (!file.is_dir) {
+            if (!file.is_editable) {
+                const editBtn = template.querySelector('[data-action="edit"]');
+                if (editBtn) editBtn.remove();
+            }
+            if (this.getFileIconClass(file) !== 'archive') {
+                const extractBtn = template.querySelector('[data-action="extract"]');
+                if (extractBtn) extractBtn.remove();
+            }
+        }
+        container.appendChild(template);
     }
 
     setFileItemData(element, file) {
         element.dataset.path = file.path;
-        element.dataset.isDir = file.is_dir ? "true" : "false";
+        element.dataset.isDir = file.is_dir;
         element.dataset.mimeType = file.mime_type || '';
-        element.dataset.isEditable = file.is_editable ? "true" : "false";
-        element.dataset.isMount = file.is_mount ? "true" : "false";
+        element.dataset.isEditable = file.is_editable;
+        element.dataset.isMount = file.is_mount;
     }
 
     getFileIconClass(file) {
         if (file.is_dir) return 'folder';
         if (file.is_mount) return 'mount';
-
         const mime = file.mime_type || '';
-        const name = file.name || '';
-        const ext = name.split('.').pop()?.toLowerCase() || '';
-
-        const mimeMap = {
-            'image/': 'image',
-            'video/': 'video',
-            'audio/': 'audio',
-            'text/': 'document',
-            'javascript': 'code',
-            'python': 'code',
-            'java': 'code',
-            'c+': 'code',
-            'html': 'code',
-            'css': 'code',
-            'php': 'code',
-            'zip': 'archive',
-            'rar': 'archive',
-            '7z': 'archive',
-            'tar': 'archive',
-            'gz': 'archive'
-        };
-
-        for (const [key, value] of Object.entries(mimeMap)) {
-            if (mime.includes(key) || (key.length > 10 && mime.startsWith(key))) {
-                return value;
-            }
-        }
-
-        if (file.is_editable) return 'document';
-
-        const extMap = {
-            archive: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'],
-            code: ['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'html', 'htm', 'css', 'scss', 'less', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'sql', 'sh', 'bash', 'zsh', 'ps1', 'bat', 'cmd'],
-            document: ['txt', 'md', 'markdown', 'json', 'xml', 'yml', 'yaml', 'ini', 'conf', 'cfg', 'log'],
-            image: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'],
-            video: ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'],
-            audio: ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a']
-        };
-
-        for (const [type, extensions] of Object.entries(extMap)) {
-            if (extensions.includes(ext)) {
-                return type;
-            }
-        }
-
+        if (mime.startsWith('image/')) return 'image';
+        if (mime.startsWith('video/')) return 'video';
+        if (mime.startsWith('audio/')) return 'audio';
+        if (mime.startsWith('text/') || file.is_editable) return 'document';
+        if (['zip', 'rar', '7z', 'tar', 'gz'].some(ext => file.name.endsWith(ext))) return 'archive';
         return 'file';
     }
 
     formatFileSize(bytes) {
         if (bytes === 0) return '0 B';
-
         const k = 1024;
         const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
     }
 
     updateBreadcrumb(path) {
         const breadcrumb = document.querySelector('.breadcrumb');
         if (!breadcrumb) return;
-
         breadcrumb.innerHTML = '';
-
-        const parts = path.split('/').filter(part => part !== '');
+        const parts = path.split('/').filter(Boolean);
         let currentPath = '';
 
         const rootItem = document.createElement('span');
@@ -470,14 +346,12 @@ export class UIManager {
         rootItem.dataset.path = '/';
         breadcrumb.appendChild(rootItem);
 
-        parts.forEach((part) => {
+        parts.forEach(part => {
             const separator = document.createElement('span');
             separator.className = 'breadcrumb-separator';
             separator.textContent = '/';
             breadcrumb.appendChild(separator);
-
             currentPath += '/' + part;
-
             const item = document.createElement('span');
             item.className = 'breadcrumb-item';
             item.textContent = part;
@@ -487,14 +361,17 @@ export class UIManager {
     }
 
     updateToolbar() {
+        const hasSelection = this.app.selectedFiles.size > 0;
         const downloadBtn = document.querySelector('[data-action="download"]');
-        const moveBtn = document.querySelector('[data-action="move"]');
-        const deleteBtn = document.querySelector('[data-action="delete"]');
-
-        if (downloadBtn && moveBtn && deleteBtn) {
-            const hasSelection = this.app.selectedFiles.size > 0;
+        if (downloadBtn) {
             downloadBtn.disabled = !hasSelection;
+        }
+        const moveBtn = document.querySelector('[data-action="move"]');
+        if (moveBtn) {
             moveBtn.disabled = !hasSelection;
+        }
+        const deleteBtn = document.querySelector('[data-action="delete"]');
+        if (deleteBtn) {
             deleteBtn.disabled = !hasSelection;
         }
     }
@@ -506,34 +383,22 @@ export class UIManager {
 
     showToast(title, message, type = 'info') {
         const toastContainer = document.getElementById('toast-container');
-        if (!toastContainer) {
-            console.error('Toast container not found!');
-            return;
-        }
+        if (!toastContainer) return;
 
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
-
-        toast.innerHTML = `
-            <div class="toast-content">
-                <div class="toast-title">${title}</div>
-                <div class="toast-message">${message}</div>
-            </div>
-            <button class="toast-close">&times;</button>
-        `;
-
+        const template = getTemplateContent('/static/templates/components/toast.html');
+        template.querySelector('.toast-title').textContent = title;
+        template.querySelector('.toast-message').textContent = message;
+        toast.appendChild(template);
+        
         toastContainer.appendChild(toast);
-
-        const closeButton = toast.querySelector('.toast-close');
 
         const removeToast = () => {
             toast.style.opacity = '0';
-            // Add a transition for the fade-out effect
-            toast.style.transition = 'opacity 0.3s ease';
             setTimeout(() => toast.remove(), 300);
         };
-
-        closeButton.addEventListener('click', removeToast);
+        toast.querySelector('.toast-close').addEventListener('click', removeToast);
         setTimeout(removeToast, 5000);
     }
 
@@ -548,49 +413,32 @@ export class UIManager {
     updateSpecificDirs(dirs) {
         const container = document.getElementById('specific-dirs-container');
         if (!container) return;
-
-        container.innerHTML = ''; // Clear existing items
-
-        const iconMap = {
-            'Documents': '📄',
-            'Images': '🖼️',
-            'Music': '🎵',
-            'Videos': '🎬',
-            'Downloads': '📥',
-            'default': '📂' // Generic folder icon
-        };
+        container.innerHTML = '';
+        
+        const iconMap = { 'Documents': '📄', 'Images': '🖼️', 'Music': '🎵', 'Videos': '🎬', 'Downloads': '📥', 'default': '📂' };
 
         dirs.forEach(dir => {
             const navItem = document.createElement('div');
             navItem.className = 'nav-item';
-            navItem.dataset.path = dir.path; // Use virtual path from API
-
-            const icon = iconMap[dir.name] || iconMap['default'];
-
-            navItem.innerHTML = `
-                <i>${icon}</i>
-                <span>${dir.name}</span>
-            `;
+            navItem.dataset.path = dir.path;
+            
+            const template = getTemplateContent('/static/templates/components/nav_item.html');
+            template.querySelector('i').textContent = iconMap[dir.name] || iconMap['default'];
+            template.querySelector('span').textContent = dir.name;
+            navItem.appendChild(template);
+            
             container.appendChild(navItem);
         });
     }
 
     updateSidebarActiveState(path) {
-        const navItems = document.querySelectorAll('.sidebar .nav-item');
-        navItems.forEach(item => {
-            item.classList.remove('active');
-        });
-
+        document.querySelectorAll('.sidebar .nav-item.active').forEach(item => item.classList.remove('active'));
         const activeItem = document.querySelector(`.sidebar .nav-item[data-path="${path}"]`);
-        if (activeItem) {
-            activeItem.classList.add('active');
-        }
+        if (activeItem) activeItem.classList.add('active');
     }
 
     updateAria2cVisibility(enabled) {
         const aria2cBtn = document.getElementById('aria2c-status-btn');
-        if (aria2cBtn) {
-            aria2cBtn.style.display = enabled ? 'flex' : 'none';
-        }
+        if (aria2cBtn) aria2cBtn.style.display = enabled ? 'flex' : 'none';
     }
 }

@@ -1,0 +1,33 @@
+<template id="search-modal-template">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Search Options</div>
+            <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="search-option">
+                <label>
+                    <input type="checkbox" id="search-use-regex">
+                    Use regular expression
+                </label>
+            </div>
+            <div class="search-option">
+                <label>
+                    <input type="checkbox" id="search-case-sensitive">
+                    Case sensitive
+                </label>
+            </div>
+            <div class="search-option">
+                <label>Search scope:</label>
+                <select id="search-scope">
+                    <option value="current">Current folder</option>
+                    <option value="recursive">All subfolders</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-primary" id="search-apply">Apply</button>
+            <button class="btn" id="search-cancel">Cancel</button>
+        </div>
+    </div>
+</template>

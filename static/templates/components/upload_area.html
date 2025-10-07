@@ -1,0 +1,14 @@
+<template id="upload-area-template">
+    <div class="upload-icon">📁</div>
+    <div class="upload-text">Drop files or folders here to upload</div>
+    <div class="upload-subtext">or use the buttons below</div>
+    <input type="file" class="upload-input-files" multiple hidden>
+    <input type="file" class="upload-input-folders" webkitdirectory hidden>
+    <div class="upload-buttons">
+        <button type="button" class="btn-select-files">📄 Select Files</button>
+        <button type="button" class="btn-select-folders">📂 Select Folder</button>
+    </div>
+    <div class="upload-info">
+        <div class="upload-feature">• Files will be uploaded to: <span class="upload-path"></span></div>
+    </div>
+</template>

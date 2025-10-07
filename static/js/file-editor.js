@@ -82,8 +82,6 @@ export class FileEditor {
         // Initialize Vim mode state from localStorage
         this.vimModeEnabled = this.isPC ? JSON.parse(localStorage.getItem('vimModeEnabled')) ?? true : false;
 
-        this.init();
-
         // Define custom VIM commands if on PC
         if (this.isPC) {
             this.defineVimCommands();

@@ -1,3 +1,5 @@
+import { normalizePath } from './util.js';
+
 export class Router {
     constructor() {
         this.routes = {};
@@ -75,7 +77,7 @@ export class Router {
      * @param {string} path - 移動先のパス
      */
     navigate(path) {
-        const cleanPath = this.normalizePath(path);
+        const cleanPath = normalizePath(path);
         
         if (cleanPath === this.currentPath) return;
         
@@ -90,7 +92,7 @@ export class Router {
      * @param {string} path - 更新するパス
      */
     updatePath(path) {
-        const cleanPath = this.normalizePath(path);
+        const cleanPath = normalizePath(path);
         
         console.log('Updating path to:', cleanPath);
         
@@ -129,7 +131,7 @@ export class Router {
     getCurrentPath() {
         let path = this._extractPathFromURL();
         path = this._decodePath(path);
-        return this.normalizePath(path);
+        return normalizePath(path);
     }
 
     /**
@@ -166,30 +168,6 @@ export class Router {
             console.warn('Failed to decode path:', path, error);
             return path;
         }
-    }
-
-    /**
-     * パスの正規化
-     * @param {string} path - 正規化するパス
-     * @returns {string} 正規化されたパス
-     */
-    normalizePath(path) {
-        if (!path || path === '' || path === '/') {
-            return '/';
-        }
-        
-        // 先頭にスラッシュを追加
-        let cleanPath = path.startsWith('/') ? path : '/' + path;
-        
-        // 重複するスラッシュを除去
-        cleanPath = cleanPath.replace(/\/+/g, '/');
-        
-        // 末尾のスラッシュを除去（ルート以外）
-        if (cleanPath.length > 1 && cleanPath.endsWith('/')) {
-            cleanPath = cleanPath.slice(0, -1);
-        }
-        
-        return cleanPath;
     }
 
     /**

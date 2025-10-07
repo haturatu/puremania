@@ -21,8 +21,6 @@ export class MediaPlayer {
 
         this.currentDirectory = '';
         this.albumArtCache = new Map();
-
-        this.init();
     }
 
     init() {

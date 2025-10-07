@@ -214,6 +214,13 @@ export class EventHandler {
     handleFileClick(fileItem, event) {
         const path = fileItem.dataset.path;
         const isSelected = this.app.selectedFiles.has(path);
+
+        // On mobile, if an item is already selected and it's the only one, the next tap opens it.
+        if (!this.app.isPC && isSelected && this.app.selectedFiles.size === 1) {
+            this.handleFileDoubleClick(fileItem);
+            return;
+        }
+
         const fileItems = Array.from(document.querySelectorAll('.file-item, .masonry-item'));
         const currentIndex = fileItems.indexOf(fileItem);
         
@@ -258,7 +265,7 @@ export class EventHandler {
         const mimeType = fileItem.dataset.mimeType || '';
 
         if (this.app.searchHandler && this.app.searchHandler.isInSearchMode && isDir) {
-            this.app.searchHandler.navigateToFolderAndExitSearch(path);
+            this.app.searchHandler.navigateToFolder(path);
             return;
         }
         
