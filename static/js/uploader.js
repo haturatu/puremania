@@ -4,6 +4,16 @@ export class Uploader {
         this._processingDrop = false;
     }
 
+    showUploadDialog() {
+        const uploadFilesInput = document.querySelector('.upload-input-files');
+        if (uploadFilesInput) {
+            uploadFilesInput.click();
+        } else {
+            console.error("Upload file input not found.");
+            this.app.ui.showToast('Error', 'Could not initiate upload. Input not found.', 'error');
+        }
+    }
+
     bindUploadEvents() {
         const uploadArea = document.querySelector('.upload-area');
         if (!uploadArea) return;
