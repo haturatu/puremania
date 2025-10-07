@@ -5,6 +5,7 @@ export class ImageViewer {
         this.currentImageIndex = 0;
         this.images = [];
         this.isOpen = false;
+        this.navTimeout = null;
     }
     
     init() {
@@ -26,11 +27,13 @@ export class ImageViewer {
         this.titleElement = viewer.querySelector('.modal-title');
         this.nameElement = viewer.querySelector('.image-name');
         this.sizeElement = viewer.querySelector('.image-size');
+        this.prevButton = viewer.querySelector('.prev');
+        this.nextButton = viewer.querySelector('.next');
     }
     
     bindEvents() {
-        this.viewerElement.querySelector('.prev').addEventListener('click', () => this.showPrevious());
-        this.viewerElement.querySelector('.next').addEventListener('click', () => this.showNext());
+        this.prevButton.addEventListener('click', () => this.showPrevious());
+        this.nextButton.addEventListener('click', () => this.showNext());
         this.viewerElement.querySelector('.modal-close').addEventListener('click', () => this.close());
         
         document.addEventListener('keydown', (e) => {
@@ -76,12 +79,14 @@ export class ImageViewer {
         this.viewerElement.style.display = 'flex';
         this.isOpen = true;
         document.body.style.overflow = 'hidden';
+        this.showNavButtons();
     }
     
     close() {
         this.viewerElement.style.display = 'none';
         this.isOpen = false;
         document.body.style.overflow = '';
+        clearTimeout(this.navTimeout);
     }
     
     showImage(index) {
@@ -106,5 +111,20 @@ export class ImageViewer {
         if (this.images.length <= 1) return;
         let newIndex = (this.currentImageIndex + 1) % this.images.length;
         this.showImage(newIndex);
+    }
+
+    showNavButtons() {
+        clearTimeout(this.navTimeout);
+        this.prevButton.classList.remove('nav-hidden');
+        this.nextButton.classList.remove('nav-hidden');
+        
+        this.navTimeout = setTimeout(() => {
+            this.hideNavButtons();
+        }, 5000);
+    }
+
+    hideNavButtons() {
+        this.prevButton.classList.add('nav-hidden');
+        this.nextButton.classList.add('nav-hidden');
     }
 }

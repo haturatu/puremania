@@ -226,3 +226,8 @@
     border: none;
     cursor: pointer;
 }
+
+.image-nav.nav-hidden {
+    opacity: 0;
+    pointer-events: none;
+}
