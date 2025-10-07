@@ -106,7 +106,7 @@
   text-align: center;
 }
 
-.file-actions {
+div.file-item .file-actions {
   position: absolute;
   top: 5px;
   right: 5px;
@@ -114,7 +114,7 @@
   transition: opacity 0.3s ease;
 }
 
-.file-item:hover .file-actions {
+div.file-item:hover .file-actions {
   opacity: 1;
 }
 

@@ -1,3 +1,5 @@
+import { getTemplateContent } from './template.js';
+
 export class ProgressManager {
     constructor() {
         this.progressOverlay = null;
@@ -7,7 +9,6 @@ export class ProgressManager {
         this.timerInterval = null;
         this.lastUpdateTime = 0;
         this.updateThrottle = 250; // ms
-        this.init();
     }
 
     init() {
@@ -17,26 +18,8 @@ export class ProgressManager {
     createProgressOverlay() {
         const overlay = document.createElement('div');
         overlay.className = 'progress-overlay';
-        overlay.innerHTML = `
-            <div class="progress-modal">
-                <div class="progress-header">
-                    <div class="progress-title">Uploading Files</div>
-                    <button class="progress-close" style="display: none;">&times;</button>
-                </div>
-                <div class="progress-info">
-                    <span class="progress-current">Preparing files...</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-bar-fill"></div>
-                </div>
-                <div class="progress-details">
-                    <span class="progress-percentage">0%</span>
-                    <span class="progress-stats">0 files processed</span>
-                    <span class="progress-time">Elapsed: 0s</span>
-                </div>
-                <div class="progress-status">Initializing...</div>
-            </div>
-        `;
+        const template = getTemplateContent('/static/templates/components/progress_overlay.html');
+        overlay.appendChild(template);
 
         document.body.appendChild(overlay);
         this.progressOverlay = overlay;

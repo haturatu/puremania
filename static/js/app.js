@@ -10,43 +10,48 @@ import { EventHandler } from './events.js';
 import { Uploader } from './uploader.js';
 import { Util } from './util.js';
 import { Aria2cPageHandler } from './aria2c-page.js';
+import { loadTemplates } from './template.js';
 
 class FileManagerApp {
     constructor() {
         this.selectedFiles = new Set();
         this.lastSelectedIndex = -1;
-        this.config = {}; // Add config property
+        this.config = {};
+        this.isPC = !/Mobi|Android/i.test(navigator.userAgent);
 
-        // Initialize modules
+        // Initialize modules that don't depend on templates in their constructor
         this.router = new Router();
-        this.progressManager = new ProgressManager();
-        
-        // Foundational modules that other modules depend on
         this.util = new Util(this);
-        this.ui = new UIManager(this);
         this.api = new ApiClient(this);
         this.uploader = new Uploader(this);
         this.events = new EventHandler(this);
-
-        // Modules with dependencies
+        this.ui = new UIManager(this);
+        
+        // These will be initialized properly in the init method
+        this.progressManager = new ProgressManager();
         this.editor = new FileEditor(this);
         this.mediaPlayer = new MediaPlayer(this);
         this.imageViewer = new ImageViewer(this);
-        
-        // SearchHandler depends on many other modules, so it should be initialized 
-        // after the modules it depends on are available.
         this.searchHandler = new SearchHandler(this);
-
         this.aria2cPageHandler = new Aria2cPageHandler(this);
-
-        this.init();
     }
 
     async init() {
+        // Initialize modules that need templates
+        this.progressManager.init();
+        this.imageViewer.init();
+        this.searchHandler.init();
+        
+        // These might not have been converted to templates, but it's good practice
+        // to have an init method for consistency. Let's assume they have one.
+        // We need to check their implementation and add init() if it's missing.
+        if(typeof this.editor.init === 'function') this.editor.init();
+        if(typeof this.mediaPlayer.init === 'function') this.mediaPlayer.init();
+
+
         // Fetch config first
         this.config = await this.api.getConfig();
         if (!this.config) {
-            // Error is already shown by api.js
             return; // Stop initialization if config fails
         }
 
@@ -54,7 +59,6 @@ class FileManagerApp {
         this.ui.updateAria2cVisibility(this.config.Aria2cEnabled);
 
         this.events.bindEvents();
-        this.searchHandler.init();
         this.aria2cPageHandler.init();
         this.updateStorageInfo();
 
@@ -62,7 +66,7 @@ class FileManagerApp {
         const specificDirs = await this.api.getSpecificDirs();
         this.ui.updateSpecificDirs(specificDirs);
 
-        // Setup router with knowledge of the config
+        // Setup router
         this.router.onChange((path) => {
             if (path === '/system/aria2c') {
                 if (!this.config.Aria2cEnabled) {
@@ -71,7 +75,7 @@ class FileManagerApp {
                     return;
                 }
                 if (this.searchHandler.isInSearchMode) {
-                    this.searchHandler.exitSearchMode(true); // Pass true to prevent navigation
+                    this.searchHandler.exitSearchMode(true);
                 }
                 this.aria2cPageHandler.enterAria2cMode();
             } else {
@@ -81,19 +85,15 @@ class FileManagerApp {
                 this.navigateToPath(path);
             }
         });
-
-        // Initial load based on current URL is handled by the router
     }
 
-    // Wrapper for API method to allow central control
     async loadFiles(path) {
         await this.api.loadFiles(path);
-        // After files are loaded and UI is rendered, bind events to the new elements
         this.uploader.bindUploadEvents();
     }
 
-    navigateToPath(path) {
-        this.loadFiles(path);
+    async navigateToPath(path) {
+        await this.loadFiles(path);
         this.clearSelection();
     }
 
@@ -142,8 +142,7 @@ class FileManagerApp {
 
     async updateStorageInfo() {
         try {
-            const response = await fetch('/api/storage-info');
-            const result = await response.json();
+            const result = await this.api.getStorageInfo();
             if (result.success) {
                 const info = result.data;
                 const usagePercentage = (info.used / info.total) * 100;
@@ -159,6 +158,36 @@ class FileManagerApp {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    new FileManagerApp();
-});
+async function main() {
+    const templatePaths = [
+        '/static/templates/components/toolbar.html',
+        '/static/templates/components/upload_area.html',
+        '/static/templates/components/empty_state.html',
+        '/static/templates/components/view_toggle.html',
+        '/static/templates/components/list_view_header.html',
+        '/static/templates/components/list_view_item.html',
+        '/static/templates/components/grid_view_item.html',
+        '/static/templates/components/file_actions.html',
+        '/static/templates/components/folder_actions.html',
+        '/static/templates/components/toast.html',
+        '/static/templates/components/nav_item.html',
+        '/static/templates/components/masonry_item.html',
+        '/static/templates/components/progress_overlay.html',
+        '/static/templates/components/aria2c_header.html',
+        '/static/templates/components/aria2c_no_downloads.html',
+        '/static/templates/components/aria2c_table.html',
+        '/static/templates/components/aria2c_table_row.html',
+        '/static/templates/components/image_viewer.html',
+        '/static/templates/components/completion_dropdown.html',
+        '/static/templates/components/completion_item.html',
+        '/static/templates/components/search_modal.html',
+        '/static/templates/components/search_results_header.html',
+        '/static/templates/components/search_no_results.html'
+    ];
+    await loadTemplates(templatePaths);
+
+    const app = new FileManagerApp();
+    await app.init();
+}
+
+document.addEventListener('DOMContentLoaded', main);

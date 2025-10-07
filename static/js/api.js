@@ -1,17 +1,15 @@
 export class ApiClient {
     constructor(app) {
         this.app = app;
-        this.directoryEtags = new Map(); // ETagを保存するマップ
-        this.directoryCache = new Map(); // ディレクトリの内容をキャッシュするマップ
+        this.directoryEtags = new Map();
+        this.directoryCache = new Map();
     }
 
-    async loadFiles(path) {
+    async getFiles(path) {
         try {
-            this.app.ui.showLoading();
-            
             const headers = {};
             const etag = this.directoryEtags.get(path);
-            if (etag) {
+            if (etag && this.directoryCache.has(path)) {
                 headers['If-None-Match'] = etag;
             }
 
@@ -19,49 +17,52 @@ export class ApiClient {
 
             if (response.status === 304) {
                 console.log(`Content for ${path} not modified. Using cache.`);
-                if (this.directoryCache.has(path)) {
-                    const cachedData = this.directoryCache.get(path);
-                    this.app.ui.displayFiles(cachedData);
-                    this.app.ui.updateBreadcrumb(path);
-                    this.app.ui.updateSidebarActiveState(path);
-                    this.app.router.updatePath(path);
-                    this.app.ui.updateToolbar();
-                }
-                return;
+                return this.directoryCache.get(path);
             }
 
             if (!response.ok) {
                 const errorResult = await response.json().catch(() => null);
-                const message = errorResult?.message || `Failed to load files (status: ${response.status})`;
-                this.app.ui.showToast('Error', message, 'error');
-                this.app.ui.displayFiles([]);
-                this.app.router.updatePath(path);
-                return;
+                throw new Error(errorResult?.message || `Failed to fetch files (status: ${response.status})`);
             }
             
             const newEtag = response.headers.get('ETag');
-            if (newEtag) {
-                this.directoryEtags.set(path, newEtag);
-            }
-
             const result = await response.json();
             
             if (result.success) {
                 const files = result.data || [];
-                this.directoryCache.set(path, files); // キャッシュに保存
+                if (newEtag) {
+                    this.directoryEtags.set(path, newEtag);
+                }
+                this.directoryCache.set(path, files);
+                return files;
+            } else {
+                throw new Error(result.message || 'API returned success:false');
+            }
+        } catch (error) {
+            console.error(`Error in getFiles for path ${path}:`, error);
+            return null;
+        }
+    }
+
+    async loadFiles(path) {
+        try {
+            this.app.ui.showLoading();
+            const files = await this.getFiles(path);
+
+            if (files !== null) {
                 this.app.ui.displayFiles(files);
                 this.app.ui.updateBreadcrumb(path);
                 this.app.ui.updateSidebarActiveState(path);
                 this.app.router.updatePath(path);
                 this.app.ui.updateToolbar();
             } else {
-                this.app.ui.showToast('Error', result.message, 'error');
+                this.app.ui.showToast('Error', `Failed to load directory: ${path}`, 'error');
                 this.app.ui.displayFiles([]);
                 this.app.router.updatePath(path);
             }
         } catch (error) {
-            this.app.ui.showToast('Error', 'Failed to load files', 'error');
-            console.error('Error loading files:', error);
+            this.app.ui.showToast('Error', 'An unexpected error occurred while loading files.', 'error');
+            console.error('Error in loadFiles:', error);
             this.app.ui.displayFiles([]);
             this.app.router.updatePath(path);
         } finally {
@@ -620,7 +621,57 @@ export class ApiClient {
         } catch (error) {
             console.error('Error fetching config:', error);
             this.app.ui.showToast('Error', 'Could not load server configuration.', 'error');
-            return null; // エラー時はnullを返す
+            return null;
+        }
+    }
+
+    async search(term, path, options, limit, offset) {
+        const body = {
+            term: term,
+            path: path,
+            useRegex: options.useRegex,
+            caseSensitive: options.caseSensitive,
+            scope: options.scope,
+            maxResults: 10000, // This seems high, but matching original logic
+            offset: offset,
+            limit: limit
+        };
+
+        const response = await fetch('/api/search', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+        
+        return await response.json();
+    }
+
+    async startAria2cDownload(url, path) {
+        const response = await fetch('/api/system/aria2c/download', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                url: url,
+                path: path
+            })
+        });
+        return await response.json();
+    }
+
+    async getStorageInfo() {
+        try {
+            const response = await fetch('/api/storage-info');
+            if (!response.ok) {
+                throw new Error(`Failed to fetch storage info (status: ${response.status})`);
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching storage info:', error);
+            return { success: false, message: error.message };
         }
     }
 }
