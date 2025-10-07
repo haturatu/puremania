@@ -614,12 +614,5 @@ export class MediaPlayer {
         this.currentDirectory = '';
     }
 
-    destroy() {
-        this.stop();
-        this.albumArtCache.forEach(url => {
-            if (url.startsWith('blob:')) URL.revokeObjectURL(url);
-        });
-        this.albumArtCache.clear();
-        if (this.playerElement) this.playerElement.remove();
-    }
+
 }

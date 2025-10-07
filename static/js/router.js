@@ -63,14 +63,7 @@ export class Router {
         }
     }
 
-    /**
-     * ルートとコールバックを登録
-     * @param {string} path - ルートパス
-     * @param {Function} callback - コールバック関数
-     */
-    add(path, callback) {
-        this.routes[path] = callback;
-    }
+
 
     /**
      * 指定したパスにナビゲート（履歴に追加）
@@ -255,26 +248,7 @@ export class Router {
         return path.split('/').filter(part => part !== '');
     }
 
-    /**
-     * ルートパラメータの抽出
-     * @param {string} route - ルートパターン
-     * @param {string} path - 対象パス
-     * @returns {Object} パラメータのオブジェクト
-     */
-    getParams(route, path) {
-        const params = {};
-        const routeParts = this._splitPath(route);
-        const pathParts = this._splitPath(path);
-        
-        routeParts.forEach((routePart, i) => {
-            if (routePart.startsWith(':')) {
-                const paramName = routePart.substring(1);
-                params[paramName] = decodeURIComponent(pathParts[i] || '');
-            }
-        });
-        
-        return params;
-    }
+
 
     /**
      * ルート変更コールバックの登録
@@ -291,26 +265,5 @@ export class Router {
         }
     }
 
-    /**
-     * ブラウザの戻るボタン
-     */
-    back() {
-        history.back();
-    }
 
-    /**
-     * ブラウザの進むボタン
-     */
-    forward() {
-        history.forward();
-    }
-
-    /**
-     * 現在のパスを強制的に再ロード
-     */
-    refresh() {
-        if (this.onRouteChange) {
-            this.onRouteChange(this.currentPath);
-        }
-    }
 }

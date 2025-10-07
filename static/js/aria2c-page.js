@@ -46,20 +46,15 @@ export class Aria2cPageHandler {
 
     async loadAria2cStatus() {
         try {
-            const response = await fetch('/api/system/aria2c/status');
-            const result = await response.json();
-
-            if (result.success) {
-                this.lastStatus = result.data;
-                this.render(result.data);
+            const status = await this.fileManager.api.getAria2cStatus();
+            if (status) {
+                this.lastStatus = status;
+                this.render(status);
             } else {
-                this.fileManager.ui.showToast('Aria2c Error', result.message || 'Could not fetch status', 'error');
+                // API method failed and should have shown a toast.
+                // Stop polling.
                 clearInterval(this.updateInterval);
             }
-        } catch (error) {
-            console.error('Aria2c status fetch error:', error);
-            this.fileManager.ui.showToast('Aria2c Error', 'Failed to connect to server for status', 'error');
-            clearInterval(this.updateInterval);
         } finally {
             this.fileManager.ui.hideLoading();
         }
@@ -232,22 +227,10 @@ export class Aria2cPageHandler {
             apiAction = 'removeResult';
         }
 
-        try {
-            const response = await fetch('/api/system/aria2c/control', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: apiAction, gid: gid })
-            });
-            const result = await response.json();
-            if (result.success) {
-                this.fileManager.ui.showToast('Aria2c', `Action '${action}' successful for GID ${gid}.`, 'success');
-                this.loadAria2cStatus();
-            } else {
-                this.fileManager.ui.showToast('Aria2c Error', result.message || `Action '${action}' failed.`, 'error');
-            }
-        } catch (error) {
-            console.error(`Aria2c action '${action}' error:`, error);
-            this.fileManager.ui.showToast('Aria2c Error', `Failed to perform action '${action}'.`, 'error');
+        const success = await this.fileManager.api.controlAria2cDownload(gid, apiAction);
+        
+        if (success) {
+            this.loadAria2cStatus();
         }
     }
 }
