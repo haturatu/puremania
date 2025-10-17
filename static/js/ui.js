@@ -41,14 +41,18 @@ export class UIManager {
 
         const sortedFiles = this.sortFiles(files);
         const imageCount = sortedFiles.filter(f => f.mime_type && f.mime_type.startsWith('image/')).length;
+        const videoCount = sortedFiles.filter(f => f.mime_type && f.mime_type.startsWith('video/')).length;
         const hasMasonrySupport = imageCount >= 10;
+        const hasVideoSupport = videoCount > 0;
 
             if (isNewFolder && hasMasonrySupport) this.viewMode = 'masonry';
+            // if (isNewFolder && hasVideoSupport && !hasMasonrySupport) this.viewMode = 'video';
             if (this.viewMode === 'masonry' && !hasMasonrySupport) this.viewMode = 'grid';
+            if (this.viewMode === 'video' && !hasVideoSupport) this.viewMode = 'grid';
         if (this.viewMode === 'masonry') {
             this.renderMasonryView(sortedFiles, container);
         } else {
-            this.renderStandardView(sortedFiles, container, hasMasonrySupport);
+            this.renderStandardView(sortedFiles, container, hasMasonrySupport, hasVideoSupport);
         }
     }
 
@@ -108,7 +112,7 @@ export class UIManager {
         container.appendChild(noFiles);
     }
 
-    createViewToggle(hasMasonrySupport = false) {
+    createViewToggle(hasMasonrySupport = false, hasVideoSupport = false) {
         const viewToggle = document.createElement('div');
         viewToggle.className = 'view-toggle';
         const template = getTemplateContent('/static/templates/components/view_toggle.html');
@@ -128,23 +132,55 @@ export class UIManager {
             }
             template.appendChild(masonryBtn);
         }
+
+        if (!hasVideoSupport) {
+            const videoBtn = template.querySelector('[data-view="video"]');
+            if (videoBtn) {
+                videoBtn.remove();
+            }
+        }
+
         viewToggle.appendChild(template);
         return viewToggle;
     }
 
-    renderStandardView(files, container, hasMasonrySupport = false) {
-        const viewToggle = this.createViewToggle(hasMasonrySupport);
+    renderStandardView(files, container, hasMasonrySupport = false, hasVideoSupport = false) {
+        const viewToggle = this.createViewToggle(hasMasonrySupport, hasVideoSupport);
         container.appendChild(viewToggle);
 
         const fileContainer = document.createElement('div');
-        fileContainer.className = this.viewMode === 'list' ? 'table-view-container' : 'file-grid';
-        
         if (this.viewMode === 'list') {
+            fileContainer.className = 'table-view-container';
             this.renderListView(files, fileContainer);
+        } else if (this.viewMode === 'video') {
+            fileContainer.className = 'video-grid';
+            this.renderVideoView(files, fileContainer);
         } else {
+            fileContainer.className = 'file-grid';
             this.renderGridView(files, fileContainer);
         }
         container.appendChild(fileContainer);
+    }
+
+    renderVideoView(files, container) {
+        const videoFiles = files.filter(f => f.mime_type && f.mime_type.startsWith('video/'));
+        videoFiles.forEach(file => {
+            const videoItem = this.createVideoItem(file);
+            container.appendChild(videoItem);
+        });
+    }
+
+    createVideoItem(file) {
+        const template = getTemplateContent('/static/templates/components/video_view_item.html');
+        const videoItem = template.querySelector('.video-card');
+        this.setFileItemData(videoItem, file);
+
+        videoItem.querySelector('.video-thumbnail img').src = `/api/files/thumbnail?path=${encodeURIComponent(file.path)}`;
+        videoItem.querySelector('.video-thumbnail img').alt = file.name;
+        videoItem.querySelector('.video-title').textContent = file.name;
+        videoItem.querySelector('.video-meta').textContent = `${this.formatFileSize(file.size)} \u00B7 ${new Date(file.mod_time).toLocaleDateString()}`;
+
+        return videoItem;
     }
 
     renderGridView(files, container) {

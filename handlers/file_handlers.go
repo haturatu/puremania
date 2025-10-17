@@ -3,12 +3,15 @@ package handlers
 import (
 	"archive/zip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"puremania/cache"
 	"puremania/types"
@@ -22,6 +25,72 @@ import (
 
 	"github.com/mholt/archives"
 )
+
+const (
+	thumbnailDir = ".cache/thumbnails"
+)
+
+func (h *Handler) generateThumbnail(videoPath, thumbnailPath string) error {
+	// timeout context
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// ffmpeg command to generate thumbnail
+	cmd := exec.CommandContext(ctx, "ffmpeg", "-i", videoPath, "-ss", "00:00:01", "-vframes", "1", "-vf", "thumbnail,scale=320:-1", "-y", thumbnailPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// Check if the error is due to context timeout
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("ffmpeg command timed out")
+		}
+		return fmt.Errorf("failed to generate thumbnail: %w. Output: %s", err, string(output))
+	}
+	return nil
+}
+
+func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
+	// ensure thumbnail directory exists
+	if err := os.MkdirAll(thumbnailDir, 0755); err != nil {
+		h.logger.Error("Failed to create thumbnail directory", "path", thumbnailDir, "error", err)
+		h.respondError(w, "Cannot create thumbnail directory", http.StatusInternalServerError)
+		return
+	}
+
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		h.respondError(w, "Path required", http.StatusBadRequest)
+		return
+	}
+
+	fullPath, err := h.convertToPhysicalPath(path)
+	if err != nil {
+		h.logger.Error("Invalid path for thumbnail", "path", path, "error", err)
+		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+  // generate thumbnail filename based on SHA256 hash of the path
+	hash := sha256.Sum256([]byte(path))
+	thumbnailFilename := hex.EncodeToString(hash[:]) + ".jpg"
+	thumbnailPath := filepath.Join(thumbnailDir, thumbnailFilename)
+
+	// check if thumbnail already exists
+	if _, err := os.Stat(thumbnailPath); err == nil {
+		http.ServeFile(w, r, thumbnailPath)
+		return
+	}
+
+	// generate thumbnail
+	if err := h.generateThumbnail(fullPath, thumbnailPath); err != nil {
+		h.logger.Error("Failed to generate thumbnail", "path", fullPath, "error", err)
+		// respond with placeholder image or error
+		h.respondError(w, "Cannot generate thumbnail", http.StatusInternalServerError)
+		return
+	}
+
+	// serve the generated thumbnail
+	http.ServeFile(w, r, thumbnailPath)
+}
 
 // ExtractFile - アーカイブファイルを解凍する
 func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {

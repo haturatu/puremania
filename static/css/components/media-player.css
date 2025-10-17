@@ -218,3 +218,7 @@
 .minimize-btn:hover {
   color: var(--accent-primary);
 }
+
+.media-player.video-mode .media-info {
+  display: none;
+}
