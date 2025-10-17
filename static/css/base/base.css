@@ -42,3 +42,7 @@ body {
 .drag-handle:hover {
   color: var(--accent-primary);
 }
+
+.hidden {
+    display: none !important;
+}

@@ -18,6 +18,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  flex-grow: 1;
 }
 
 .breadcrumb-item {
@@ -32,4 +33,9 @@
 .breadcrumb-separator {
   margin: 0 8px;
   color: var(--text-secondary);
+}
+
+#toggle-file-browser-extensions-btn {
+    padding: 5px 10px;
+    font-size: 1.2em;
 }

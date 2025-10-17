@@ -10,6 +10,7 @@ export class UIManager {
             field: 'type',
             direction: 'desc'
         };
+        this.fileBrowserExtensionsVisible = false;
     }
 
     displayFiles(files) {
@@ -28,6 +29,7 @@ export class UIManager {
         }
 
         container.innerHTML = '';
+        this.renderHeaderToggle();
 
         this.renderToolbar(container);
         this.renderUploadArea(container);
@@ -50,9 +52,37 @@ export class UIManager {
         }
     }
 
+    renderHeaderToggle() {
+        const header = document.querySelector('.header');
+        let toggleBtn = header.querySelector('#toggle-file-browser-extensions-btn');
+        if (!toggleBtn) {
+            toggleBtn = document.createElement('button');
+            toggleBtn.className = 'toolbar-btn';
+            toggleBtn.id = 'toggle-file-browser-extensions-btn';
+            toggleBtn.textContent = '☰';
+            toggleBtn.title = 'Toggle toolbar and upload';
+            header.appendChild(toggleBtn);
+        }
+    }
+
+    toggleFileBrowserExtensions() {
+        this.fileBrowserExtensionsVisible = !this.fileBrowserExtensionsVisible;
+        const toolbar = document.querySelector('.toolbar');
+        const uploadArea = document.querySelector('.upload-area');
+        if (toolbar) {
+            toolbar.classList.toggle('hidden', !this.fileBrowserExtensionsVisible);
+        }
+        if (uploadArea) {
+            uploadArea.classList.toggle('hidden', !this.fileBrowserExtensionsVisible);
+        }
+    }
+
     renderToolbar(container) {
         const toolbar = document.createElement('div');
         toolbar.className = 'toolbar';
+        if (!this.fileBrowserExtensionsVisible) {
+            toolbar.classList.add('hidden');
+        }
         const template = getTemplateContent('/static/templates/components/toolbar.html');
         toolbar.appendChild(template);
         container.appendChild(toolbar);
@@ -61,6 +91,9 @@ export class UIManager {
     renderUploadArea(container) {
         const uploadArea = document.createElement('div');
         uploadArea.className = 'upload-area';
+        if (!this.fileBrowserExtensionsVisible) {
+            uploadArea.classList.add('hidden');
+        }
         const template = getTemplateContent('/static/templates/components/upload_area.html');
         template.querySelector('.upload-path').textContent = this.app.router.getCurrentPath();
         uploadArea.appendChild(template);
@@ -193,16 +226,7 @@ export class UIManager {
         const imageFiles = files.filter(f => f.mime_type && f.mime_type.startsWith('image/'));
         const otherFiles = files.filter(f => !f.mime_type || !f.mime_type.startsWith('image/'));
 
-        const viewToggle = document.createElement('div');
-        viewToggle.className = 'view-toggle';
-        const template = getTemplateContent('/static/templates/components/view_toggle.html');
-        template.querySelector(`[data-view="grid"]`).classList.remove('active');
-        const masonryBtn = document.createElement('button');
-        masonryBtn.className = 'view-toggle-btn active';
-        masonryBtn.dataset.view = 'masonry';
-        masonryBtn.textContent = 'Masonry';
-        template.appendChild(masonryBtn);
-        viewToggle.appendChild(template);
+        const viewToggle = this.createViewToggle(true);
         container.appendChild(viewToggle);
 
         if (imageFiles.length > 0) this.renderImageSection(imageFiles, container);

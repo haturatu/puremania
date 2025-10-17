@@ -67,6 +67,11 @@ export class EventHandler {
             this.app.ui.setViewMode(e.target.dataset.view);
             return;
         }
+
+        if (e.target.id === 'toggle-file-browser-extensions-btn') {
+            this.app.ui.toggleFileBrowserExtensions();
+            return;
+        }
         
         // Toolbar buttons
         if (e.target.matches('.toolbar-btn')) {
