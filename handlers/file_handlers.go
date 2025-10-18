@@ -69,7 +69,7 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-  // generate thumbnail filename based on SHA256 hash of the path
+	// generate thumbnail filename based on SHA256 hash of the path
 	hash := sha256.Sum256([]byte(path))
 	thumbnailFilename := hex.EncodeToString(hash[:]) + ".jpg"
 	thumbnailPath := filepath.Join(thumbnailDir, thumbnailFilename)
