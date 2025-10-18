@@ -45,7 +45,7 @@ export class EventHandler {
         // File action button clicks
         if (e.target.matches('.file-action-btn, .file-action-btn *')) {
             const button = e.target.closest('.file-action-btn');
-            const fileItem = e.target.closest('.file-item, .masonry-item');
+            const fileItem = e.target.closest('.file-item, .masonry-item, .video-card');
             if (button && fileItem) {
                 e.stopPropagation();
                 this.handleFileActionClick(button, fileItem);
@@ -54,8 +54,8 @@ export class EventHandler {
         }
         
         // File item clicks
-        if (e.target.matches('.file-item, .masonry-item') || e.target.closest('.file-item, .masonry-item')) {
-            const fileItem = e.target.closest('.file-item, .masonry-item');
+        if (e.target.matches('.file-item, .masonry-item, .video-card') || e.target.closest('.file-item, .masonry-item, .video-card')) {
+            const fileItem = e.target.closest('.file-item, .masonry-item, .video-card');
             if (fileItem) {
                 this.handleFileClick(fileItem, e);
             }
@@ -144,8 +144,8 @@ export class EventHandler {
     }
 
     handleDoubleClick(e) {
-        if (e.target.matches('.file-item, .masonry-item') || e.target.closest('.file-item, .masonry-item')) {
-            const fileItem = e.target.closest('.file-item, .masonry-item');
+        if (e.target.matches('.file-item, .masonry-item, .video-card') || e.target.closest('.file-item, .masonry-item, .video-card')) {
+            const fileItem = e.target.closest('.file-item, .masonry-item, .video-card');
             if (fileItem) {
                 this.handleFileDoubleClick(fileItem);
             }
@@ -226,7 +226,7 @@ export class EventHandler {
             return;
         }
 
-        const fileItems = Array.from(document.querySelectorAll('.file-item, .masonry-item'));
+        const fileItems = Array.from(document.querySelectorAll('.file-item, .masonry-item, .video-card'));
         const currentIndex = fileItems.indexOf(fileItem);
         
         if (event.shiftKey && this.app.lastSelectedIndex !== -1 && this.app.lastSelectedIndex !== currentIndex) {

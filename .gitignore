@@ -9,3 +9,6 @@ npm-debug.log
 # Build artifacts
 static/dist/
 puremania
+
+# Cache
+.cache/
