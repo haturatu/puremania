@@ -81,7 +81,12 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// generate thumbnail
-	if err := h.generateThumbnail(fullPath, thumbnailPath); err != nil {
+	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
+		return h.generateThumbnail(fullPath, thumbnailPath)
+	})
+
+	result := <-resultChan
+	if err, ok := result.(error); ok && err != nil {
 		h.logger.Error("Failed to generate thumbnail", "path", fullPath, "error", err)
 		// respond with placeholder image or error
 		h.respondError(w, "Cannot generate thumbnail", http.StatusInternalServerError)
