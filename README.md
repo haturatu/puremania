@@ -5,7 +5,7 @@
 - [Pure Mania](#pure-mania)
 - [Why did I make this?](#why-did-i-make-this)
   - [Features](#features)
-  - [Recent Changes (2025-09-27)](#recent-changes-2025-09-27)
+  - [Recent Changes (2025-10-18)](#recent-changes-2025-10-18)
   - [Getting Started](#getting-started)
     - [IP Address Firewall Configuration](#ip-address-firewall-configuration)
     - [Prerequisites](#prerequisites)
@@ -72,22 +72,28 @@ That’s enough of my rambling.
   - Playlist repeat functionality.
   - Caches album art at the directory level to reduce redundant API calls. It looks for `cover.jpg`, `cover.jpeg`, `cover.png`, `folder.jpg`, or `album.jpg` in the same directory as the music file.
 
-## Recent Changes (2025-09-27)
+## Recent Changes (2025-10-18)
 
-This update introduces a major new feature, Aria2c integration, along with numerous fixes and refactorings to support it.
+This update focuses on improving the CI/CD pipeline, enhancing the user interface, and fixing several bugs.
 
-### Features
-- **Archive Extraction:** Added support for extracting various archive formats including `.zip`, `.tar`, `.tar.gz`, `.rar`, and `.7z`.
-- **Aria2c Integration (`1180f65`, `a5d48f7`, `4bd0b23`, `baa7fc5`):** Added a comprehensive integration with the `aria2c` download manager.
-  - Downloads can be initiated from the search bar using the `aria2c <URL>` command.
-  - A dedicated page (`/system/aria2c`) allows monitoring and control (pause, resume, cancel) of active, waiting, and stopped downloads.
-  - The `aria2c` daemon process is now automatically and securely managed by the Pure Mania backend. This feature can be enabled by setting `ARIA2C=enable` in the `.env` file.
-
-### Bug Fixes & Refactoring
-- **Aria2c Process Management (`1180f65`):** Refactored the `aria2c` daemon startup logic to ensure reliable and secure process management, resolving persistent authorization errors by managing the process lifecycle directly and isolating it from user configuration files.
-- **Frontend Stability & Routing (`e372bf9`):** Fixed several frontend issues related to feature detection and routing, ensuring a smoother user experience. The application now correctly shows or hides UI elements based on whether optional features are enabled.
-- **Go Backend Refactoring (`8489799`):** Restructured Go type definitions into a centralized `types/` package for better code organization and maintainability.
-- **Build Process (`689883e`):** Added `go vet` to the build script to improve code quality and catch potential issues early.
+- **CI/CD:**
+    - Introduced semantic versioning. (f5fd93e)
+    - Improved caching in the CI pipeline. (3100607, e78f178, 24bea80)
+- **UI:**
+    - The tool view is now hidden by default. (63ff1eb)
+    - The navigation buttons in the image viewer now disappear after 5 seconds. (92cca3f)
+    - Fixed issues with the upload button and progress bar. (7ca6219, aabd730, 774e9bd)
+- **Refactoring:**
+    - Refactored the frontend to avoid using `innerHTML`. (95db07c)
+    - Removed unused methods. (9f20a1e)
+    - Componentized the HTML. (93554a2)
+- **Bug Fixes:**
+    - Fixed a bug where downloading a folder resulted in a 0-byte file. (ed66568)
+    - Fixed several issues with torrent and magnet link handling in the aria2c integration. (b70ef80, 01c7cf3, 94ec1c4, 2839f5e, d925bc0, 24282c9, 1257c8b, bfe913d, d0a8dbf, b3804c3, 34a540f)
+    - The `batch-delete` API endpoint has been renamed to `delete`. (4b2f9b4)
+- **Other:**
+    - Updated the static file version. (624b748)
+    - Added support for `slog`. (7bb201a)
 
 ## Getting Started  
   
@@ -336,6 +342,8 @@ Pure Mania exposes the following RESTful API endpoints under the `/api` prefix:
 - `GET    /config`: Retrieve the server's public configuration.  
 - `POST   /search`: Search for files based on a query.  
 - `GET    /storage-info`: Get information about storage usage.  
+- `GET    /specific-dirs`: Get the list of user-defined specific directories.
+- `GET    /health`: Health check endpoint.
 - `POST   /system/aria2c/download`: (Aria2c enabled) Start a new download.  
 - `GET    /system/aria2c/status`: (Aria2c enabled) Get the status of all downloads.  
 - `POST   /system/aria2c/control`: (Aria2c enabled) Control a download (pause, resume, cancel).  
