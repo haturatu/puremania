@@ -227,9 +227,8 @@ export class MediaPlayer {
         this.clearPlaylist();
         this.currentMedia = { type: 'video', path };
         this.isPlaying = true;
-        this.updateMediaInfo(path);
+        this.playerElement.classList.add('video-mode');
         this.updatePlayButton();
-        this.show();
         this.showVideoModal();
     }
 
@@ -239,6 +238,7 @@ export class MediaPlayer {
             this.hide();
             return;
         }
+        this.playerElement.classList.remove('video-mode');
         const media = this.playlist[this.currentIndex];
         this.currentMedia = { type: 'audio', path: media.path };
         this.audioElement.src = `/api/files/download?path=${encodeURIComponent(media.path)}`;
@@ -444,6 +444,7 @@ export class MediaPlayer {
         if (this.videoElement) this.videoElement.src = '';
         this.closeVideoModal();
         this.currentMedia = null;
+        this.playerElement.classList.remove('video-mode');
     }
 
     seekTo(percent) {
@@ -564,6 +565,7 @@ export class MediaPlayer {
         this.modalVideoElement = null;
         this.isVideoModalOpen = false;
         this.pause();
+        this.hide();
     }
 
     async getAlbumArt(filePath) {

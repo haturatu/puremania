@@ -133,7 +133,7 @@ class FileManagerApp {
     }
 
     clearSelection() {
-        document.querySelectorAll('.file-item.selected, .masonry-item.selected').forEach(item => {
+        document.querySelectorAll('.file-item.selected, .masonry-item.selected, .video-card.selected').forEach(item => {
             item.classList.remove('selected');
         });
         this.selectedFiles.clear();
@@ -182,7 +182,8 @@ async function main() {
         '/static/templates/components/completion_item.html',
         '/static/templates/components/search_modal.html',
         '/static/templates/components/search_results_header.html',
-        '/static/templates/components/search_no_results.html'
+        '/static/templates/components/search_no_results.html',
+        '/static/templates/components/video_view_item.html'
     ];
     await loadTemplates(templatePaths);
 
