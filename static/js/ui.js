@@ -175,12 +175,36 @@ export class UIManager {
         const videoItem = template.querySelector('.video-card');
         this.setFileItemData(videoItem, file);
 
-        videoItem.querySelector('.video-thumbnail img').src = `/api/files/thumbnail?path=${encodeURIComponent(file.path)}`;
-        videoItem.querySelector('.video-thumbnail img').alt = file.name;
+        const thumbnailUrl = `/api/files/thumbnail?path=${encodeURIComponent(file.path)}`;
+        const thumbnailImg = videoItem.querySelector('.video-thumbnail img');
+        
+        this.loadImageWithRetry(thumbnailImg, thumbnailUrl);
+
+        thumbnailImg.alt = file.name;
         videoItem.querySelector('.video-title').textContent = file.name;
         videoItem.querySelector('.video-meta').textContent = `${this.formatFileSize(file.size)} \u00B7 ${new Date(file.mod_time).toLocaleDateString()}`;
 
         return videoItem;
+    }
+
+    loadImageWithRetry(imgElement, src, retries = 3, delay = 1000) {
+        let attempts = 0;
+
+        const loadImage = () => {
+            imgElement.src = `${src}${src.includes('?') ? '&' : '?'}v=${new Date().getTime() + attempts}`;
+        };
+
+        imgElement.onerror = () => {
+            attempts++;
+            if (attempts < retries) {
+                setTimeout(loadImage, delay);
+            } else {
+                // Optional: Set a fallback image or handle the final failure
+                console.error(`Failed to load image after ${retries} attempts: ${src}`);
+            }
+        };
+
+        loadImage();
     }
 
     renderGridView(files, container) {
