@@ -50,7 +50,7 @@ export class UIManager {
             if (this.viewMode === 'masonry' && !hasMasonrySupport) this.viewMode = 'grid';
             if (this.viewMode === 'video' && !hasVideoSupport) this.viewMode = 'grid';
         if (this.viewMode === 'masonry') {
-            this.renderMasonryView(sortedFiles, container);
+            this.renderMasonryView(sortedFiles, container, hasVideoSupport);
         } else {
             this.renderStandardView(sortedFiles, container, hasMasonrySupport, hasVideoSupport);
         }
@@ -282,11 +282,11 @@ export class UIManager {
         });
     }
 
-    renderMasonryView(files, container) {
+    renderMasonryView(files, container, hasVideoSupport = false) {
         const imageFiles = files.filter(f => f.mime_type && f.mime_type.startsWith('image/'));
         const otherFiles = files.filter(f => !f.mime_type || !f.mime_type.startsWith('image/'));
 
-        const viewToggle = this.createViewToggle(true);
+        const viewToggle = this.createViewToggle(true, hasVideoSupport);
         container.appendChild(viewToggle);
 
         if (imageFiles.length > 0) this.renderImageSection(imageFiles, container);
