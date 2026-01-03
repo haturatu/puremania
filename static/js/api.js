@@ -411,7 +411,9 @@ export class ApiClient {
     }
 
     downloadFile(path) {
-        window.open(`/api/files/download?path=${encodeURIComponent(path)}`, '_blank');
+        // window.open can be blocked by iOS Safari popup blockers.
+        // Changing window.location.href is more reliable for downloads.
+        window.location.href = `/api/files/download?path=${encodeURIComponent(path)}`;
     }
 
     async downloadSelected() {
@@ -503,7 +505,11 @@ export class ApiClient {
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
+                
+                // Delay revoking the object URL to allow iOS Safari time to process the download
+                setTimeout(() => {
+                    window.URL.revokeObjectURL(url);
+                }, 30000); // 30 seconds delay
                 
                 let message = `Downloaded ${successfulFiles} files successfully`;
                 if (failedFiles > 0) {

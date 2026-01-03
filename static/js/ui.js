@@ -319,10 +319,13 @@ export class UIManager {
 
         const template = getTemplateContent('/static/templates/components/masonry_item.html');
         const img = template.querySelector('.masonry-image');
-        img.src = `/api/files/content?path=${encodeURIComponent(file.path)}`;
+        
         img.alt = file.name;
         img.onload = () => item.style.gridRowEnd = `span ${Math.round((img.naturalHeight / img.naturalWidth) * 20)}`;
         img.onerror = () => img.style.display = 'none';
+        
+        // Set src last to ensure onload/onerror handlers are ready
+        img.src = `/api/files/content?path=${encodeURIComponent(file.path)}`;
 
         template.querySelector('.masonry-name').textContent = file.name;
         template.querySelector('.masonry-size').textContent = this.formatFileSize(file.size);

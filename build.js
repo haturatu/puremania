@@ -7,5 +7,6 @@ esbuild.build({
     format: 'esm',
     minify: true,
     sourcemap: true,
+    target: ['es2020'],
     logLevel: 'info',
 }).catch(() => process.exit(1));
