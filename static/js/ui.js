@@ -23,9 +23,11 @@ export class UIManager {
         this.previousPath = currentPath;
 
         if (isNewFolder) {
+            const imageFileCount = files.filter(file => file.mime_type && file.mime_type.startsWith('image/')).length;
             const musicFileCount = files.filter(file => file.mime_type && file.mime_type.startsWith('audio/')).length;
-            this.sortState.field = musicFileCount >= 10 ? 'name' : 'type';
-            this.sortState.direction = musicFileCount >= 10 ? 'asc' : 'desc';
+            const shouldPreferNameSort = imageFileCount >= 10 || musicFileCount >= 10;
+            this.sortState.field = shouldPreferNameSort ? 'name' : 'type';
+            this.sortState.direction = shouldPreferNameSort ? 'asc' : 'desc';
         }
 
         container.innerHTML = '';
