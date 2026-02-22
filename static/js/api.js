@@ -26,6 +26,39 @@ export class ApiClient {
         }
     }
 
+    async requestJson(url, {
+        context = url,
+        fallbackMessage = 'Request failed',
+        toastOnError = true,
+        validateSuccess = false
+    } = {}) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                let apiError = null;
+                try {
+                    apiError = await response.json();
+                } catch (_) {
+                    // ignore parse errors for non-JSON error bodies
+                }
+                throw new Error(this.getApiErrorMessage(apiError, `${fallbackMessage} (status: ${response.status})`));
+            }
+
+            const result = await response.json();
+            if (validateSuccess && !result.success) {
+                throw new Error(this.getApiErrorMessage(result, fallbackMessage));
+            }
+            return result;
+        } catch (error) {
+            if (toastOnError) {
+                this.notifyApiError(error.message || fallbackMessage, { error, context });
+            } else {
+                console.error(`Error ${context}:`, error);
+            }
+            return null;
+        }
+    }
+
     invalidateDirectory(path) {
         if (!path) return;
         this.directoryEtags.delete(path);
@@ -483,38 +516,27 @@ export class ApiClient {
     }
 
     async getSpecificDirs() {
-        try {
-            const response = await fetch('/api/specific-dirs');
-            const result = await response.json();
-            
-            if (result.success) {
-                return result.data;
-            } else {
-                this.notifyApiError('Failed to load specific directories');
-                return [];
-            }
-        } catch (error) {
-            this.notifyApiError('Failed to load specific directories', { error, context: 'fetching specific dirs' });
+        const result = await this.requestJson('/api/specific-dirs', {
+            context: 'fetching specific dirs',
+            fallbackMessage: 'Failed to load specific directories',
+            validateSuccess: true
+        });
+        if (!result) {
             return [];
         }
+        return result.data;
     }
 
     async getAria2cStatus() {
-        try {
-            const response = await fetch('/api/system/aria2c/status');
-            if (!response.ok) {
-                throw new Error('Failed to fetch aria2c status');
-            }
-            const result = await response.json();
-            if (result.success) {
-                return result.data;
-            } else {
-                throw new Error(result.message || 'Failed to get aria2c status');
-            }
-        } catch (error) {
-            this.notifyApiError(error.message, { error, context: 'fetching aria2c status' });
+        const result = await this.requestJson('/api/system/aria2c/status', {
+            context: 'fetching aria2c status',
+            fallbackMessage: 'Failed to fetch aria2c status',
+            validateSuccess: true
+        });
+        if (!result) {
             return null;
         }
+        return result.data;
     }
 
     async controlAria2cDownload(gid, action) {
@@ -540,21 +562,15 @@ export class ApiClient {
     }
 
     async getConfig() {
-        try {
-            const response = await fetch('/api/config');
-            if (!response.ok) {
-                throw new Error(`Failed to fetch config (status: ${response.status})`);
-            }
-            const result = await response.json();
-            if (result.success) {
-                return result.data;
-            } else {
-                throw new Error(result.message || 'Failed to parse config data');
-            }
-        } catch (error) {
-            this.notifyApiError('Could not load server configuration.', { error, context: 'fetching config' });
+        const result = await this.requestJson('/api/config', {
+            context: 'fetching config',
+            fallbackMessage: 'Could not load server configuration.',
+            validateSuccess: true
+        });
+        if (!result) {
             return null;
         }
+        return result.data;
     }
 
     async search(term, path, options, limit, offset) {
@@ -595,15 +611,11 @@ export class ApiClient {
     }
 
     async getStorageInfo() {
-        try {
-            const response = await fetch('/api/storage-info');
-            if (!response.ok) {
-                throw new Error(`Failed to fetch storage info (status: ${response.status})`);
-            }
-            return await response.json();
-        } catch (error) {
-            console.error('Error fetching storage info:', error);
-            return { success: false, message: error.message };
-        }
+        const result = await this.requestJson('/api/storage-info', {
+            context: 'fetching storage info',
+            fallbackMessage: 'Failed to fetch storage info',
+            toastOnError: false
+        });
+        return result || { success: false, message: 'Failed to fetch storage info' };
     }
 }
