@@ -453,8 +453,13 @@ export class SearchHandler {
             return;
         }
 
-        if (this.fileManager.ui.viewMode === 'list') this.renderListView(pageResults, container);
-        else this.renderGridView(pageResults, container);
+        this.fileManager.ui.renderSearchResultsFiles(
+            pageResults,
+            container,
+            this.sortField,
+            this.sortDirection,
+            (field) => this.setSort(field)
+        );
 
         if (totalPages > 1) {
             const footerPagination = document.createElement('div');
@@ -482,28 +487,6 @@ export class SearchHandler {
         if (!preventNavigation) {
             this.fileManager.loadFiles(this.fileManager.router.getCurrentPath());
         }
-    }
-
-    renderGridView(files, container) {
-        const fileGrid = document.createElement('div');
-        fileGrid.className = 'file-grid';
-        files.forEach(file => fileGrid.appendChild(this.fileManager.ui.createFileItem(file)));
-        container.appendChild(fileGrid);
-    }
-
-    renderListView(files, container) {
-        const tableContainer = document.createElement('div');
-        tableContainer.className = 'table-view-container';
-        const table = document.createElement('table');
-        table.className = 'table-view';
-        const thead = this.fileManager.ui.createListViewHeader(this.sortField, this.sortDirection);
-        thead.querySelectorAll('.sortable').forEach(th => th.addEventListener('click', () => this.setSort(th.dataset.sort)));
-        table.appendChild(thead);
-        const tbody = document.createElement('tbody');
-        files.forEach(file => tbody.appendChild(this.fileManager.ui.createTableRow(file)));
-        table.appendChild(tbody);
-        tableContainer.appendChild(table);
-        container.appendChild(tableContainer);
     }
 
     createPaginationControls(currentPage, totalPages) {

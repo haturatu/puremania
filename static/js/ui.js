@@ -214,15 +214,16 @@ export class UIManager {
         });
     }
 
-    renderListView(files, container) {
+    createListViewTable(files, sortField, sortDirection, onSort) {
         const table = document.createElement('table');
         table.className = 'table-view';
 
-        const thead = this.createListViewHeader(this.sortState.field, this.sortState.direction);
-        
-        thead.querySelectorAll('.sortable').forEach(header => {
-            header.addEventListener('click', (e) => this.setSort(e.currentTarget.dataset.sort));
-        });
+        const thead = this.createListViewHeader(sortField, sortDirection);
+        if (typeof onSort === 'function') {
+            thead.querySelectorAll('.sortable').forEach(header => {
+                header.addEventListener('click', (e) => onSort(e.currentTarget.dataset.sort));
+            });
+        }
         table.appendChild(thead);
 
         const tbody = document.createElement('tbody');
@@ -232,7 +233,32 @@ export class UIManager {
         });
 
         table.appendChild(tbody);
+        return table;
+    }
+
+    renderListView(files, container) {
+        const table = this.createListViewTable(
+            files,
+            this.sortState.field,
+            this.sortState.direction,
+            (field) => this.setSort(field)
+        );
         container.appendChild(table);
+    }
+
+    renderSearchResultsFiles(files, container, sortField, sortDirection, onSort) {
+        if (this.viewMode === 'list') {
+            const tableContainer = document.createElement('div');
+            tableContainer.className = 'table-view-container';
+            tableContainer.appendChild(this.createListViewTable(files, sortField, sortDirection, onSort));
+            container.appendChild(tableContainer);
+            return;
+        }
+
+        const fileGrid = document.createElement('div');
+        fileGrid.className = 'file-grid';
+        this.renderGridView(files, fileGrid);
+        container.appendChild(fileGrid);
     }
 
     createListViewHeader(sortField, sortDirection) {
