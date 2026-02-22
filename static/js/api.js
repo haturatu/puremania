@@ -5,6 +5,69 @@ export class ApiClient {
         this.directoryCache = new Map();
     }
 
+    async postJson(url, payload) {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        return await response.json();
+    }
+
+    invalidateDirectory(path) {
+        if (!path) return;
+        this.directoryEtags.delete(path);
+        this.directoryCache.delete(path);
+    }
+
+    invalidateDirectories(paths) {
+        paths.forEach(path => this.invalidateDirectory(path));
+    }
+
+    async refreshCurrentDirectory(extraPaths = [], clearSelection = false) {
+        const currentPath = this.app.router.getCurrentPath();
+        this.invalidateDirectories([currentPath, ...extraPaths]);
+        if (clearSelection) {
+            this.app.clearSelection();
+        }
+        await this.app.loadFiles(currentPath);
+    }
+
+    async runMutation({
+        endpoint,
+        payload,
+        successMessage,
+        errorMessage,
+        showLoading = false,
+        onSuccess = null,
+        logContext = endpoint
+    }) {
+        try {
+            if (showLoading) this.app.ui.showLoading();
+            const result = await this.postJson(endpoint, payload);
+
+            if (!result.success) {
+                this.app.ui.showToast('Error', result.message, 'error');
+                return { success: false, result };
+            }
+
+            if (successMessage) {
+                this.app.ui.showToast('Success', successMessage, 'success');
+            }
+
+            if (onSuccess) {
+                await onSuccess(result);
+            }
+            return { success: true, result };
+        } catch (error) {
+            this.app.ui.showToast('Error', errorMessage, 'error');
+            console.error(`Error ${logContext}:`, error);
+            return { success: false, error };
+        } finally {
+            if (showLoading) this.app.ui.hideLoading();
+        }
+    }
+
     async getFiles(path) {
         try {
             const headers = {};
@@ -75,37 +138,16 @@ export class ApiClient {
         if (!newName) return;
         
         const newPath = this.app.util.getParentPath(path) + '/' + newName;
-        
-        try {
-            this.app.ui.showLoading();
-            
-            const response = await fetch('/api/files/move', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    sourcePath: path,
-                    targetPath: newPath
-                })
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                this.app.ui.showToast('Success', 'File renamed successfully', 'success');
-                const currentPath = this.app.router.getCurrentPath();
-                this.directoryEtags.delete(currentPath);
-                this.app.loadFiles(currentPath);
-            } else {
-                this.app.ui.showToast('Error', result.message, 'error');
-            }
-        } catch (error) {
-            this.app.ui.showToast('Error', 'Failed to rename file', 'error');
-            console.error('Error renaming file:', error);
-        } finally {
-            this.app.ui.hideLoading();
-        }
+
+        await this.runMutation({
+            endpoint: '/api/files/move',
+            payload: { sourcePath: path, targetPath: newPath },
+            successMessage: 'File renamed successfully',
+            errorMessage: 'Failed to rename file',
+            showLoading: true,
+            onSuccess: async () => this.refreshCurrentDirectory(),
+            logContext: 'renaming file'
+        });
     }
 
     async moveFile(sourcePath) {
@@ -130,37 +172,17 @@ export class ApiClient {
             return;
         }
         
-        try {
-            this.app.ui.showLoading();
-            
-            const response = await fetch('/api/files/move', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    sourcePath: sourcePath,
-                    targetPath: targetPath
-                })
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                this.app.ui.showToast('Success', `Moved "${fileName}" successfully`, 'success');
-                const currentPath = this.app.router.getCurrentPath();
-                this.directoryEtags.delete(this.app.util.getParentPath(sourcePath));
-                this.directoryEtags.delete(targetDir);
-                this.app.loadFiles(currentPath);
-            } else {
-                this.app.ui.showToast('Error', result.message, 'error');
-            }
-        } catch (error) {
-            this.app.ui.showToast('Error', 'Failed to move file', 'error');
-            console.error('Error moving file:', error);
-        } finally {
-            this.app.ui.hideLoading();
-        }
+        await this.runMutation({
+            endpoint: '/api/files/move',
+            payload: { sourcePath, targetPath },
+            successMessage: `Moved "${fileName}" successfully`,
+            errorMessage: 'Failed to move file',
+            showLoading: true,
+            onSuccess: async () => {
+                await this.refreshCurrentDirectory([this.app.util.getParentPath(sourcePath), targetDir]);
+            },
+            logContext: 'moving file'
+        });
     }
 
     async moveSelected() {
@@ -204,18 +226,7 @@ export class ApiClient {
                 }
                 
                 try {
-                    const response = await fetch('/api/files/move', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            sourcePath: sourcePath,
-                            targetPath: targetPath
-                        })
-                    });
-                    
-                    const result = await response.json();
+                    const result = await this.postJson('/api/files/move', { sourcePath, targetPath });
                     
                     if (result.success) {
                         successCount++;
@@ -234,11 +245,7 @@ export class ApiClient {
                 } else {
                     this.app.ui.showToast('Success', message, 'success');
                 }
-                const currentPath = this.app.router.getCurrentPath();
-                this.directoryEtags.delete(currentPath);
-                this.directoryEtags.delete(targetDir);
-                this.app.loadFiles(currentPath);
-                this.app.clearSelection();
+                await this.refreshCurrentDirectory([targetDir], true);
             } else {
                 this.app.ui.showToast('Error', 'All items failed to move', 'error');
             }
@@ -253,161 +260,77 @@ export class ApiClient {
     async createNewFolder() {
         const folderName = prompt('Enter folder name:');
         if (!folderName) return;
-        
-        try {
-            const response = await fetch('/api/files/mkdir', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    path: this.app.router.getCurrentPath(),
-                    name: folderName
-                })
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                this.app.ui.showToast('Success', 'Folder created successfully', 'success');
-                const currentPath = this.app.router.getCurrentPath();
-                this.directoryEtags.delete(currentPath);
-                this.app.loadFiles(currentPath);
-            } else {
-                this.app.ui.showToast('Error', result.message, 'error');
-            }
-        } catch (error) {
-            this.app.ui.showToast('Error', 'Failed to create folder', 'error');
-            console.error('Error creating folder:', error);
-        }
+
+        await this.runMutation({
+            endpoint: '/api/files/mkdir',
+            payload: { path: this.app.router.getCurrentPath(), name: folderName },
+            successMessage: 'Folder created successfully',
+            errorMessage: 'Failed to create folder',
+            onSuccess: async () => this.refreshCurrentDirectory(),
+            logContext: 'creating folder'
+        });
     }
 
     async createNewFile() {
         const fileName = prompt('Enter file name:');
         if (!fileName) return;
-        
-        try {
-            const response = await fetch('/api/files/create', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    path: this.app.router.getCurrentPath(),
-                    name: fileName
-                })
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                this.app.ui.showToast('Success', 'File created successfully', 'success');
-                const currentPath = this.app.router.getCurrentPath();
-                this.directoryEtags.delete(currentPath);
-                this.app.loadFiles(currentPath);
-                
+
+        await this.runMutation({
+            endpoint: '/api/files/create',
+            payload: { path: this.app.router.getCurrentPath(), name: fileName },
+            successMessage: 'File created successfully',
+            errorMessage: 'Failed to create file',
+            onSuccess: async (result) => {
+                await this.refreshCurrentDirectory();
                 if (this.app.util.isEditableFile(result.data.path)) {
                     setTimeout(() => {
                         this.app.editFile(result.data.path);
                     }, 500);
                 }
-            } else {
-                this.app.ui.showToast('Error', result.message, 'error');
-            }
-        } catch (error) {
-            this.app.ui.showToast('Error', 'Failed to create file', 'error');
-            console.error('Error creating file:', error);
-        }
+            },
+            logContext: 'creating file'
+        });
     }
 
     async extractFile(path) {
         if (!confirm(`Are you sure you want to extract "${this.app.util.getBaseName(path)}"?`)) return;
 
-        try {
-            this.app.ui.showLoading();
-            const response = await fetch('/api/files/extract', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ path: path })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                this.app.ui.showToast('Success', 'File extracted successfully', 'success');
-                const currentPath = this.app.router.getCurrentPath();
-                this.directoryEtags.delete(currentPath);
-                this.app.loadFiles(currentPath);
-            } else {
-                this.app.ui.showToast('Error', result.message, 'error');
-            }
-        } catch (error) {
-            this.app.ui.showToast('Error', 'Failed to extract file', 'error');
-            console.error('Error extracting file:', error);
-        } finally {
-            this.app.ui.hideLoading();
-        }
+        await this.runMutation({
+            endpoint: '/api/files/extract',
+            payload: { path },
+            successMessage: 'File extracted successfully',
+            errorMessage: 'Failed to extract file',
+            showLoading: true,
+            onSuccess: async () => this.refreshCurrentDirectory(),
+            logContext: 'extracting file'
+        });
     }
 
     async deleteFile(path) {
         if (!confirm(`Are you sure you want to delete "${this.app.util.getBaseName(path)}?`)) return;
 
-        try {
-            const response = await fetch('/api/files/delete', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ paths: [path] })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                this.app.ui.showToast('Success', 'File deleted successfully', 'success');
-                this.app.clearSelection();
-                const currentPath = this.app.router.getCurrentPath();
-                this.directoryEtags.delete(currentPath);
-                this.app.loadFiles(currentPath);
-            } else {
-                this.app.ui.showToast('Error', result.message, 'error');
-            }
-        } catch (error) {
-            this.app.ui.showToast('Error', 'Failed to delete file', 'error');
-            console.error('Error deleting file:', error);
-        }
+        await this.runMutation({
+            endpoint: '/api/files/delete',
+            payload: { paths: [path] },
+            successMessage: 'File deleted successfully',
+            errorMessage: 'Failed to delete file',
+            onSuccess: async () => this.refreshCurrentDirectory([], true),
+            logContext: 'deleting file'
+        });
     }
 
     async deleteSelectedFiles() {
         if (this.app.selectedFiles.size === 0) return;
         if (!confirm(`Are you sure you want to delete ${this.app.selectedFiles.size} items?`)) return;
 
-        try {
-            const response = await fetch('/api/files/delete', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ paths: Array.from(this.app.selectedFiles) })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                this.app.ui.showToast('Success', 'Files deleted successfully', 'success');
-                this.app.clearSelection();
-                const currentPath = this.app.router.getCurrentPath();
-                this.directoryEtags.delete(currentPath);
-                this.app.loadFiles(currentPath);
-            } else {
-                this.app.ui.showToast('Error', result.message, 'error');
-            }
-        } catch (error) {
-            this.app.ui.showToast('Error', 'Failed to delete files', 'error');
-            console.error('Error deleting files:', error);
-        }
+        await this.runMutation({
+            endpoint: '/api/files/delete',
+            payload: { paths: Array.from(this.app.selectedFiles) },
+            successMessage: 'Files deleted successfully',
+            errorMessage: 'Failed to delete files',
+            onSuccess: async () => this.refreshCurrentDirectory([], true),
+            logContext: 'deleting files'
+        });
     }
 
     downloadFile(path) {
