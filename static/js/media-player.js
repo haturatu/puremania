@@ -13,6 +13,7 @@ export class MediaPlayer {
         this.videoModal = null;
         this.modalVideoElement = null;
         this.previousVolume = this.volume;
+        this.boundVideoModalKeydown = (e) => this.handleVideoModalKeydown(e);
 
         this.playbackMode = {
             main: 'off', // off, shuffle, smart_shuffle, repeat_one
@@ -227,8 +228,12 @@ export class MediaPlayer {
         this.clearPlaylist();
         this.currentMedia = { type: 'video', path };
         this.isPlaying = true;
+        this.isMinimized = false;
+        this.playerElement.classList.remove('minimized');
         this.playerElement.classList.add('video-mode');
+        this.updateVideoInfo(path);
         this.updatePlayButton();
+        this.show();
         this.showVideoModal();
     }
 
@@ -482,6 +487,16 @@ export class MediaPlayer {
         }
     }
 
+    updateVideoInfo(path) {
+        const fileName = path.split('/').pop();
+        const folderName = path.split('/').slice(0, -1).pop() || '';
+        this.playerElement.querySelector('.media-title').textContent = fileName;
+        this.playerElement.querySelector('.media-artist').textContent = folderName || 'Video';
+        this.playerElement.querySelector('.media-album').textContent = 'Video playback';
+        this.playerElement.querySelector('.minimized-title').textContent = `${folderName ? `${folderName} - ` : ''}${fileName}`;
+        this.playerElement.querySelector('.media-thumbnail').src = this.getDefaultAlbumArt();
+    }
+
     updateProgress() {
         let media = this.currentMedia?.type === 'audio' ? this.audioElement : this.modalVideoElement;
         if (!media || !this.currentMedia) return;
@@ -491,6 +506,13 @@ export class MediaPlayer {
         const timeElements = this.playerElement.querySelectorAll('.progress-time');
         timeElements[0].textContent = this.formatTime(currentTime);
         timeElements[1].textContent = this.formatTime(duration);
+    }
+
+    resetProgressUI() {
+        this.playerElement.querySelector('.progress-bar-fill').style.width = '0%';
+        const timeElements = this.playerElement.querySelectorAll('.progress-time');
+        timeElements[0].textContent = '0:00';
+        timeElements[1].textContent = '0:00';
     }
 
     updatePlayButton() {
@@ -526,16 +548,20 @@ export class MediaPlayer {
 
     showVideoModal() {
         if (this.isVideoModalOpen) return;
+        const fileName = this.currentMedia.path.split('/').pop();
         const modal = document.createElement('div');
         modal.className = 'modal-overlay video-modal';
         modal.innerHTML = `
             <div class="modal">
                 <div class="modal-header">
-                    <div class="modal-title">${this.currentMedia.path.split('/').pop()}</div>
+                    <div class="video-modal-header-main">
+                        <div class="modal-title" title="${fileName}">${fileName}</div>
+                        <div class="video-modal-meta">Esc: close / Space: play-pause / ← →: seek 5s</div>
+                    </div>
                     <button class="modal-close">&times;</button>
                 </div>
-                <div class="modal-body">
-                    <video controls autoplay style="width: 100%; max-height: 70vh;"></video>
+                <div class="modal-body video-modal-body">
+                    <video class="video-modal-player" controls autoplay playsinline></video>
                 </div>
             </div>
         `;
@@ -548,6 +574,9 @@ export class MediaPlayer {
         document.body.appendChild(modal);
         this.videoModal = modal;
         this.isVideoModalOpen = true;
+        document.addEventListener('keydown', this.boundVideoModalKeydown);
+        video.focus();
+        video.addEventListener('loadedmetadata', () => this.updateProgress());
         video.addEventListener('play', () => { this.isPlaying = true; this.updatePlayButton(); });
         video.addEventListener('pause', () => { this.isPlaying = false; this.updatePlayButton(); });
         video.addEventListener('timeupdate', () => this.updateProgress());
@@ -556,6 +585,7 @@ export class MediaPlayer {
 
     closeVideoModal() {
         if (!this.videoModal) return;
+        document.removeEventListener('keydown', this.boundVideoModalKeydown);
         if (this.modalVideoElement) {
             this.modalVideoElement.pause();
             this.modalVideoElement.src = '';
@@ -564,8 +594,43 @@ export class MediaPlayer {
         this.videoModal = null;
         this.modalVideoElement = null;
         this.isVideoModalOpen = false;
-        this.pause();
-        this.hide();
+        if (this.currentMedia?.type === 'video') {
+            this.isPlaying = false;
+            this.currentMedia = null;
+            this.playerElement.classList.remove('video-mode');
+            this.updatePlayButton();
+            this.resetProgressUI();
+            this.hide();
+        }
+    }
+
+    handleVideoModalKeydown(e) {
+        if (!this.isVideoModalOpen || !this.modalVideoElement) return;
+        const targetTag = e.target?.tagName;
+        if (targetTag === 'INPUT' || targetTag === 'TEXTAREA') return;
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            this.closeVideoModal();
+            return;
+        }
+        if (e.key === ' ') {
+            e.preventDefault();
+            this.togglePlayPause();
+            return;
+        }
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            this.modalVideoElement.currentTime = Math.max(0, this.modalVideoElement.currentTime - 5);
+            return;
+        }
+        if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            this.modalVideoElement.currentTime = Math.min(
+                this.modalVideoElement.duration || Infinity,
+                this.modalVideoElement.currentTime + 5
+            );
+        }
     }
 
     async getAlbumArt(filePath) {

@@ -6,7 +6,8 @@
 }
 
 .video-card {
-    background-color: var(--color-background-secondary);
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     overflow: hidden;
     cursor: pointer;
@@ -22,7 +23,7 @@
     position: relative;
     width: 100%;
     padding-top: 56.25%; /* 16:9 Aspect Ratio */
-    background-color: var(--color-background-tertiary);
+    background-color: var(--bg-tertiary);
 }
 
 .video-thumbnail img {
@@ -41,7 +42,7 @@
 .video-title {
     font-size: 1rem;
     font-weight: 500;
-    color: var(--color-text-primary);
+    color: var(--text-primary);
     margin: 0 0 8px 0;
     white-space: nowrap;
     overflow: hidden;
@@ -50,6 +51,6 @@
 
 .video-meta {
     font-size: 0.8rem;
-    color: var(--color-text-secondary);
+    color: var(--text-secondary);
     margin: 0;
 }
