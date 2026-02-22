@@ -72,28 +72,20 @@ That’s enough of my rambling.
   - Playlist repeat functionality.
   - Caches album art at the directory level to reduce redundant API calls. It looks for `cover.jpg`, `cover.jpeg`, `cover.png`, `folder.jpg`, or `album.jpg` in the same directory as the music file.
 
-## Recent Changes (2025-10-18)
+## Recent Changes (2026-02-22)
 
-This update focuses on improving the CI/CD pipeline, enhancing the user interface, and fixing several bugs.
+This update focuses on security hardening for filesystem operations while keeping the current "local/WireGuard-first" design philosophy.
 
-- **CI/CD:**
-    - Introduced semantic versioning. (f5fd93e)
-    - Improved caching in the CI pipeline. (3100607, e78f178, 24bea80)
-- **UI:**
-    - The tool view is now hidden by default. (63ff1eb)
-    - The navigation buttons in the image viewer now disappear after 5 seconds. (92cca3f)
-    - Fixed issues with the upload button and progress bar. (7ca6219, aabd730, 774e9bd)
-- **Refactoring:**
-    - Refactored the frontend to avoid using `innerHTML`. (95db07c)
-    - Removed unused methods. (9f20a1e)
-    - Componentized the HTML. (93554a2)
+- **Security:**
+    - Hardened virtual path to physical path conversion with strict allowed-directory boundary checks.
+    - Added safer path-join validation to prevent traversal attempts in archive extraction and upload flows.
+    - Improved validation for upload `relativePath` handling to reject unsafe paths.
+    - Strengthened archive extraction path checks to reduce Zip Slip risk.
 - **Bug Fixes:**
-    - Fixed a bug where downloading a folder resulted in a 0-byte file. (ed66568)
-    - Fixed several issues with torrent and magnet link handling in the aria2c integration. (b70ef80, 01c7cf3, 94ec1c4, 2839f5e, d925bc0, 24282c9, 1257c8b, bfe913d, d0a8dbf, b3804c3, 34a540f)
-    - The `batch-delete` API endpoint has been renamed to `delete`. (4b2f9b4)
-- **Other:**
-    - Updated the static file version. (624b748)
-    - Added support for `slog`. (7bb201a)
+    - Fixed multiple path traversal edge cases in file operation endpoints.
+    - Improved error handling for rejected unsafe file paths.
+- **Notes:**
+    - The project still assumes trusted-network deployment (e.g., local/WireGuard), but dangerous filesystem edge cases are now handled more defensively.
 
 ## Getting Started  
   
