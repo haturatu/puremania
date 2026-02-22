@@ -168,45 +168,7 @@ div.file-item:hover .file-actions {
   background-color: var(--bg-secondary);
 }
 
-/* ファイルタイプ別カラー表示 */
-/* 全体のファイルグリッド */
-.file-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
-    padding: 20px;
-    background-color: #1e1e1e; /* ダーク背景 */
-}
-
-/* ファイル項目の共通部分 */
-.file-item {
-    background-color: #2c2c2c;
-    border: 1px solid #444;
-    border-radius: 6px;
-    padding: 12px;
-    transition: background-color 0.2s ease, transform 0.2s ease;
-    cursor: pointer;
-    color: #ddd;
-}
-
-.file-item:hover {
-    background-color: #3a3a3a;
-    transform: translateY(-2px);
-}
-
-/* アイコンと名前 */
-.file-icon {
-    font-size: 24px;
-    margin-bottom: 8px;
-}
-
-.file-name {
-    font-size: 14px;
-    font-weight: bold;
-    word-break: break-all;
-}
-
-/* ls --color=auto 風の色分け */
+/* File type name colors (ls --color=auto style) */
 /* ディレクトリ: 青 */
 .file-item[data-is-dir="true"] .file-name {
     color: #4da6ff;
@@ -244,10 +206,4 @@ div.file-item:hover .file-actions {
 /* テキストファイル: 白 */
 .file-item[data-mime-type="text/plain"] .file-name {
     color: #ffffff;
-}
-
-/* ファイルアイテムの選択状態 */
-.file-item.selected {
-    border-color: var(--accent-primary);
-    background-color: rgba(0, 255, 65, 0.1);
 }

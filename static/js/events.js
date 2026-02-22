@@ -16,19 +16,13 @@ export class EventHandler {
 
     handleClick(e) {
         // Navigation clicks
-        if (e.target.matches('.nav-item')) {
+        const navItem = e.target.closest('.nav-item');
+        if (navItem) {
             e.preventDefault();
-            const path = e.target.dataset.path;
+            const path = navItem.dataset.path;
             if (path) {
                 this.app.router.navigate(path);
             }
-            return;
-        }
-
-        const aria2cBtn = e.target.closest('#aria2c-status-btn');
-        if (aria2cBtn) {
-            e.preventDefault();
-            this.app.router.navigate('/system/aria2c');
             return;
         }
         
