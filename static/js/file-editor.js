@@ -18,6 +18,7 @@ import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
 import { xml } from "@codemirror/lang-xml";
 import { markdown } from "@codemirror/lang-markdown";
+import { createModalOverlay } from "./modal.js";
 
 const getLanguageName = (filePath) => {
     const extension = filePath.split('.').pop().toLowerCase();
@@ -103,10 +104,6 @@ export class FileEditor {
     }
 
     createEditorElement() {
-        const editor = document.createElement('div');
-        editor.className = 'modal-overlay editor-modal';
-        editor.style.display = 'none';
-
         const vimToggleHTML = this.isPC ? `
             <div class="vim-toggle">
                 <label for="vim-mode-toggle" class="vim-toggle-label">Vim</label>
@@ -114,7 +111,7 @@ export class FileEditor {
             </div>
         ` : '';
 
-        editor.innerHTML = `
+        const editorMarkup = `
             <div class="modal">
                 <div class="modal-header">
                     <div class="editor-filename"></div>
@@ -140,7 +137,7 @@ export class FileEditor {
             </div>
         `;
 
-        document.body.appendChild(editor);
+        const editor = createModalOverlay({ className: 'editor-modal', hidden: true, content: editorMarkup });
         this.editorElement = editor;
         this.editorContainer = editor.querySelector('.editor-container');
         this.filenameElement = editor.querySelector('.editor-filename');
@@ -315,4 +312,3 @@ export class FileEditor {
         setTimeout(() => toast.remove(), 3000);
     }
 }
-

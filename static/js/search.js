@@ -1,4 +1,5 @@
 import { getTemplateContent } from './template.js';
+import { createModalOverlay, bindModalClose } from './modal.js';
 
 export class SearchHandler {
     constructor(fileManager) {
@@ -295,12 +296,8 @@ export class SearchHandler {
     }
 
     createSearchModal() {
-        const modal = document.createElement('div');
-        modal.className = 'modal-overlay search-modal';
-        modal.style.display = 'none';
         const template = getTemplateContent('/static/templates/components/search_modal.html');
-        modal.appendChild(template);
-        document.body.appendChild(modal);
+        const modal = createModalOverlay({ className: 'search-modal', hidden: true, content: template });
         this.searchModal = modal;
 
         modal.querySelector('#search-apply').addEventListener('click', () => {
@@ -308,7 +305,7 @@ export class SearchHandler {
             this.hideSearchOptions();
         });
         modal.querySelector('#search-cancel').addEventListener('click', () => this.hideSearchOptions());
-        modal.querySelector('.modal-close').addEventListener('click', () => this.hideSearchOptions());
+        bindModalClose(modal, { onClose: () => this.hideSearchOptions() });
     }
 
     showSearchOptions() {

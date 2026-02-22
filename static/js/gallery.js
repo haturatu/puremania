@@ -1,4 +1,5 @@
 import { getTemplateContent } from './template.js';
+import { createModalOverlay, bindModalClose } from './modal.js';
 
 export class ImageViewer {
     constructor() {
@@ -14,14 +15,8 @@ export class ImageViewer {
     }
     
     createViewerElement() {
-        const viewer = document.createElement('div');
-        viewer.className = 'modal-overlay image-viewer';
-        viewer.style.display = 'none';
-        
         const template = getTemplateContent('/static/templates/components/image_viewer.html');
-        viewer.appendChild(template);
-        
-        document.body.appendChild(viewer);
+        const viewer = createModalOverlay({ className: 'image-viewer', hidden: true, content: template });
         this.viewerElement = viewer;
         this.imageElement = viewer.querySelector('img');
         this.titleElement = viewer.querySelector('.modal-title');
@@ -34,7 +29,7 @@ export class ImageViewer {
     bindEvents() {
         this.prevButton.addEventListener('click', () => this.showPrevious());
         this.nextButton.addEventListener('click', () => this.showNext());
-        this.viewerElement.querySelector('.modal-close').addEventListener('click', () => this.close());
+        bindModalClose(this.viewerElement, { onClose: () => this.close() });
         
         document.addEventListener('keydown', (e) => {
             if (!this.isOpen) return;

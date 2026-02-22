@@ -1,3 +1,5 @@
+import { createModalOverlay, bindModalClose } from './modal.js';
+
 export class MediaPlayer {
     constructor() {
         this.audioElement = null;
@@ -14,6 +16,7 @@ export class MediaPlayer {
         this.modalVideoElement = null;
         this.previousVolume = this.volume;
         this.boundVideoModalKeydown = (e) => this.handleVideoModalKeydown(e);
+        this.unbindVideoModalClose = null;
 
         this.playbackMode = {
             main: 'off', // off, shuffle, smart_shuffle, repeat_one
@@ -549,9 +552,9 @@ export class MediaPlayer {
     showVideoModal() {
         if (this.isVideoModalOpen) return;
         const fileName = this.currentMedia.path.split('/').pop();
-        const modal = document.createElement('div');
-        modal.className = 'modal-overlay video-modal';
-        modal.innerHTML = `
+        const modal = createModalOverlay({
+            className: 'video-modal',
+            content: `
             <div class="modal">
                 <div class="modal-header">
                     <div class="video-modal-header-main">
@@ -564,14 +567,16 @@ export class MediaPlayer {
                     <video class="video-modal-player" controls autoplay playsinline></video>
                 </div>
             </div>
-        `;
+        `
+        });
         const video = modal.querySelector('video');
         video.src = `/api/files/download?path=${encodeURIComponent(this.currentMedia.path)}`;
         video.volume = this.volume;
         this.modalVideoElement = video;
-        modal.querySelector('.modal-close').addEventListener('click', () => this.closeVideoModal());
-        modal.addEventListener('click', (e) => { if (e.target === modal) this.closeVideoModal(); });
-        document.body.appendChild(modal);
+        this.unbindVideoModalClose = bindModalClose(modal, {
+            onClose: () => this.closeVideoModal(),
+            closeOnBackdrop: true
+        });
         this.videoModal = modal;
         this.isVideoModalOpen = true;
         document.addEventListener('keydown', this.boundVideoModalKeydown);
@@ -586,6 +591,10 @@ export class MediaPlayer {
     closeVideoModal() {
         if (!this.videoModal) return;
         document.removeEventListener('keydown', this.boundVideoModalKeydown);
+        if (this.unbindVideoModalClose) {
+            this.unbindVideoModalClose();
+            this.unbindVideoModalClose = null;
+        }
         if (this.modalVideoElement) {
             this.modalVideoElement.pause();
             this.modalVideoElement.src = '';
