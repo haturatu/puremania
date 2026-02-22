@@ -143,6 +143,12 @@ After building and configuring, you can run the application:
 ```  
 We place static assets in the static directory, but as long as you can call the API implemented on the Go side, anything will work. The frontend is only there for my own convenience.  
 
+If you are using an older iOS device and the UI does not load correctly, switch to the local bundled JavaScript mode:
+
+```bash
+./jsload.sh local
+```
+
 ### Supervisor (Optional)
 To run Pure Mania as a background service, you can use a process manager like `supervisord`. Here’s an example configuration:  
  
