@@ -49,8 +49,11 @@ func (h *Handler) convertToVirtualPath(physicalPath string) string {
 
 // 仮想パスを物理パスに変換するメソッド
 func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
+	var physicalPath string
+
 	if virtualPath == "" || virtualPath == "/" {
-		return h.config.StorageDir, nil
+		physicalPath = h.config.StorageDir
+		return h.ensurePathInAllowedDirs(physicalPath)
 	}
 
 	// SpecificDirs のチェック
@@ -60,13 +63,15 @@ func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
 		virtualDirPrefix := "/" + dirName
 
 		if virtualPath == virtualDirPrefix {
-			return specificDir, nil
+			physicalPath = specificDir
+			return h.ensurePathInAllowedDirs(physicalPath)
 		}
 		if strings.HasPrefix(virtualPath, virtualDirPrefix+"/") {
 			// TrimPrefixは /dirName/ を取り除く
 			relPath := strings.TrimPrefix(virtualPath, virtualDirPrefix+"/")
 			// filepath.JoinはOS依存のセパレータを使うので正しい
-			return filepath.Join(specificDir, relPath), nil
+			physicalPath = filepath.Join(specificDir, relPath)
+			return h.ensurePathInAllowedDirs(physicalPath)
 		}
 	}
 
@@ -77,17 +82,20 @@ func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
 		for _, mountDir := range h.config.MountDirs {
 			if filepath.Base(mountDir) == mountName {
 				if len(parts) == 1 {
-					return mountDir, nil
+					physicalPath = mountDir
+					return h.ensurePathInAllowedDirs(physicalPath)
 				} else {
 					relPath := strings.Join(parts[1:], "/")
-					return filepath.Join(mountDir, relPath), nil
+					physicalPath = filepath.Join(mountDir, relPath)
+					return h.ensurePathInAllowedDirs(physicalPath)
 				}
 			}
 		}
 	}
 
 	// デフォルトはストレージディレクトリ内
-	return filepath.Join(h.config.StorageDir, strings.TrimPrefix(virtualPath, "/")), nil
+	physicalPath = filepath.Join(h.config.StorageDir, strings.TrimPrefix(virtualPath, "/"))
+	return h.ensurePathInAllowedDirs(physicalPath)
 }
 
 func (h *Handler) respondSuccess(w http.ResponseWriter, data interface{}) {
@@ -185,9 +193,11 @@ func (h *Handler) buildSafePath(virtualPath string) (string, error) {
 		return "", fmt.Errorf("invalid path: %w", err)
 	}
 
-	// パスが許可されたディレクトリ内にあるか検証
-	isSafe := false
-	absPhysicalPath, err := filepath.Abs(physicalPath)
+	return physicalPath, nil
+}
+
+func (h *Handler) ensurePathInAllowedDirs(path string) (string, error) {
+	absPhysicalPath, err := filepath.Abs(path)
 	if err != nil {
 		return "", fmt.Errorf("could not get absolute path: %w", err)
 	}
@@ -206,16 +216,32 @@ func (h *Handler) buildSafePath(virtualPath string) (string, error) {
 		}
 		absAllowedDir = filepath.Clean(absAllowedDir)
 		if isPathWithin(absAllowedDir, absPhysicalPath) {
-			isSafe = true
-			break
+			return absPhysicalPath, nil
 		}
 	}
 
-	if !isSafe {
-		return "", fmt.Errorf("path is not in an allowed directory: %s", virtualPath)
+	return "", fmt.Errorf("path is not in an allowed directory: %s", path)
+}
+
+func secureJoin(basePath, relPath string) (string, error) {
+	absBasePath, err := filepath.Abs(basePath)
+	if err != nil {
+		return "", fmt.Errorf("could not get absolute base path: %w", err)
+	}
+	absBasePath = filepath.Clean(absBasePath)
+
+	joinedPath := filepath.Join(absBasePath, relPath)
+	absJoinedPath, err := filepath.Abs(joinedPath)
+	if err != nil {
+		return "", fmt.Errorf("could not get absolute joined path: %w", err)
+	}
+	absJoinedPath = filepath.Clean(absJoinedPath)
+
+	if !isPathWithin(absBasePath, absJoinedPath) {
+		return "", fmt.Errorf("unsafe path: %s", relPath)
 	}
 
-	return physicalPath, nil
+	return absJoinedPath, nil
 }
 
 func isPathWithin(basePath, targetPath string) bool {

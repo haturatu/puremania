@@ -145,8 +145,8 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		handler := func(ctx context.Context, f archives.FileInfo) error {
-			dest := filepath.Join(destPath, f.NameInArchive)
-			if !strings.HasPrefix(dest, destPath) {
+			dest, err := secureJoin(destPath, f.NameInArchive)
+			if err != nil {
 				return fmt.Errorf("unsafe file path in archive: %s", f.NameInArchive)
 			}
 
@@ -487,7 +487,12 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 			relativePath := relativePaths[index]
 			normalizedRelativePath := filepath.FromSlash(relativePath)
-			targetPath := filepath.Join(fullPath, normalizedRelativePath)
+			targetPath, err := secureJoin(fullPath, normalizedRelativePath)
+			if err != nil {
+				h.logger.Warn("Rejected unsafe upload relative path", "base", fullPath, "relative_path", relativePath, "error", err)
+				resultChan <- types.UploadResult{Path: relativePath, Success: false}
+				return
+			}
 			targetDir := filepath.Dir(targetPath)
 
 			if err := os.MkdirAll(targetDir, 0755); err != nil {
