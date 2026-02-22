@@ -52,13 +52,11 @@
     vertical-align: middle;
 }
 
-.aria2c-table .progress-bar {
+.aria2c-table .ui-progress {
     height: 20px;
 }
 
-.progress-bar-fill {
-    height: 100%;
-    background-color: var(--accent-primary);
+.aria2c-table .ui-progress__fill {
     transition: width 0.3s ease-in-out;
 }
 

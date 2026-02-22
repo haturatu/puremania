@@ -93,8 +93,8 @@ export class MediaPlayer {
                 
                 <div class="progress-container">
                     <span class="progress-time">0:00</span>
-                    <div class="progress-bar">
-                        <div class="progress-bar-fill"></div>
+                    <div class="ui-progress">
+                        <div class="ui-progress__fill"></div>
                         <div class="progress-handle"></div>
                     </div>
                     <span class="progress-time">0:00</span>
@@ -180,7 +180,7 @@ export class MediaPlayer {
         this.playerElement.querySelector('.next').addEventListener('click', () => this.playNext());
         this.playerElement.querySelector('.mode-btn').addEventListener('click', () => this.toggleMainMode());
         this.playerElement.querySelector('.repeat-btn').addEventListener('click', () => this.toggleRepeatPlaylistMode());
-        this.playerElement.querySelector('.progress-bar').addEventListener('click', (e) => {
+        this.playerElement.querySelector('.ui-progress').addEventListener('click', (e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             this.seekTo((e.clientX - rect.left) / rect.width);
         });
@@ -505,14 +505,14 @@ export class MediaPlayer {
         if (!media || !this.currentMedia) return;
         const { currentTime = 0, duration = 0 } = media;
         const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
-        this.playerElement.querySelector('.progress-bar-fill').style.width = `${progressPercent}%`;
+        this.playerElement.querySelector('.ui-progress__fill').style.width = `${progressPercent}%`;
         const timeElements = this.playerElement.querySelectorAll('.progress-time');
         timeElements[0].textContent = this.formatTime(currentTime);
         timeElements[1].textContent = this.formatTime(duration);
     }
 
     resetProgressUI() {
-        this.playerElement.querySelector('.progress-bar-fill').style.width = '0%';
+        this.playerElement.querySelector('.ui-progress__fill').style.width = '0%';
         const timeElements = this.playerElement.querySelectorAll('.progress-time');
         timeElements[0].textContent = '0:00';
         timeElements[1].textContent = '0:00';

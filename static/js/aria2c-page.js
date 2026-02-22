@@ -174,7 +174,7 @@ export class Aria2cPageHandler {
         template.querySelector('.file-name').textContent = fileName;
         template.querySelector('.file-name').title = fileName;
         template.querySelector('.file-size').textContent = this.fileManager.ui.formatFileSize(totalLength);
-        template.querySelector('.progress-bar-fill').style.width = `${progress.toFixed(2)}%`;
+        template.querySelector('.ui-progress__fill').style.width = `${progress.toFixed(2)}%`;
         template.querySelector('.progress-text').textContent = `${progress.toFixed(2)}%`;
         template.querySelector('.status').textContent = item.status;
         template.querySelector('.speed').textContent = `${this.fileManager.ui.formatFileSize(downloadSpeed)}/s`;

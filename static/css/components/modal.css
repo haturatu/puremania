@@ -137,17 +137,12 @@
     justify-content: space-between;
 }
 
-.download-item .progress-bar {
+.download-item .ui-progress {
     grid-area: progress;
-    background-color: var(--bg-tertiary);
-    border-radius: 4px;
     height: 10px;
-    overflow: hidden;
 }
 
-.progress-bar-fill {
-    background-color: var(--accent-primary);
-    height: 100%;
+.download-item .ui-progress__fill {
     transition: width 0.3s ease;
 }
 

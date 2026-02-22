@@ -131,7 +131,7 @@ export class ProgressManager {
 
         const elements = {
             current: this.progressOverlay.querySelector('.progress-current'),
-            barFill: this.progressOverlay.querySelector('.progress-bar-fill'),
+            barFill: this.progressOverlay.querySelector('.ui-progress__fill'),
             percentage: this.progressOverlay.querySelector('.progress-percentage'),
             stats: this.progressOverlay.querySelector('.progress-stats'),
             status: this.progressOverlay.querySelector('.progress-status')

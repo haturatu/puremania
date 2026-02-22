@@ -91,24 +91,20 @@
   min-width: 40px;
 }
 
-.media-player .progress-bar {
+.media-player .ui-progress {
   flex: 1;
   height: 4px;
-  background-color: var(--bg-tertiary);
   border-radius: 2px;
   margin: 0 10px;
   cursor: pointer;
   position: relative;
 }
 
-.progress-bar-fill {
-  height: 100%;
-  background-color: var(--accent-primary);
+.media-player .ui-progress__fill {
   border-radius: 2px;
-  width: 0%;
 }
 
-.progress-bar:hover .progress-bar-fill {
+.media-player .ui-progress:hover .ui-progress__fill {
   opacity: 1;
 }
 
