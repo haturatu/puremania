@@ -14,6 +14,18 @@ export class ApiClient {
         return await response.json();
     }
 
+    getApiErrorMessage(result, fallbackMessage = 'Request failed') {
+        return result?.message || fallbackMessage;
+    }
+
+    notifyApiError(message, { error = null, context = '' } = {}) {
+        this.app.ui.showToast('Error', message, 'error');
+        if (error) {
+            const prefix = context ? `Error ${context}:` : 'Error:';
+            console.error(prefix, error);
+        }
+    }
+
     invalidateDirectory(path) {
         if (!path) return;
         this.directoryEtags.delete(path);
@@ -47,7 +59,7 @@ export class ApiClient {
             const result = await this.postJson(endpoint, payload);
 
             if (!result.success) {
-                this.app.ui.showToast('Error', result.message, 'error');
+                this.notifyApiError(this.getApiErrorMessage(result, errorMessage));
                 return { success: false, result };
             }
 
@@ -60,8 +72,7 @@ export class ApiClient {
             }
             return { success: true, result };
         } catch (error) {
-            this.app.ui.showToast('Error', errorMessage, 'error');
-            console.error(`Error ${logContext}:`, error);
+            this.notifyApiError(errorMessage, { error, context: logContext });
             return { success: false, error };
         } finally {
             if (showLoading) this.app.ui.hideLoading();
@@ -119,13 +130,12 @@ export class ApiClient {
                 this.app.router.updatePath(path);
                 this.app.ui.updateToolbar();
             } else {
-                this.app.ui.showToast('Error', `Failed to load directory: ${path}`, 'error');
+                this.notifyApiError(`Failed to load directory: ${path}`);
                 this.app.ui.displayFiles([]);
                 this.app.router.updatePath(path);
             }
         } catch (error) {
-            this.app.ui.showToast('Error', 'An unexpected error occurred while loading files.', 'error');
-            console.error('Error in loadFiles:', error);
+            this.notifyApiError('An unexpected error occurred while loading files.', { error, context: 'in loadFiles' });
             this.app.ui.displayFiles([]);
             this.app.router.updatePath(path);
         } finally {
@@ -250,8 +260,7 @@ export class ApiClient {
                 this.app.ui.showToast('Error', 'All items failed to move', 'error');
             }
         } catch (error) {
-            this.app.ui.showToast('Error', 'Failed to move items', 'error');
-            console.error('Error moving items:', error);
+            this.notifyApiError('Failed to move items', { error, context: 'moving items' });
         } finally {
             this.app.ui.hideLoading();
         }
@@ -443,12 +452,11 @@ export class ApiClient {
 
             } else {
                 const error = await response.json();
-                this.app.ui.showToast('Error', error.message || 'Failed to create zip archive', 'error');
+                this.notifyApiError(this.getApiErrorMessage(error, 'Failed to create zip archive'));
                 this.app.progressManager.hide();
             }
         } catch (error) {
-            this.app.ui.showToast('Error', 'Failed to download files', 'error');
-            console.error('Error downloading files:', error);
+            this.notifyApiError('Failed to download files', { error, context: 'downloading files' });
             this.app.progressManager.hide();
         }
     }
@@ -463,12 +471,11 @@ export class ApiClient {
             if (result.success) {
                 return result.data.content;
             } else {
-                this.app.ui.showToast('Error', result.message, 'error');
+                this.notifyApiError(this.getApiErrorMessage(result, 'Failed to load file for editing'));
                 return null;
             }
         } catch (error) {
-            this.app.ui.showToast('Error', 'Failed to load file for editing', 'error');
-            console.error('Error loading file:', error);
+            this.notifyApiError('Failed to load file for editing', { error, context: 'loading file' });
             return null;
         } finally {
             this.app.ui.hideLoading();
@@ -483,12 +490,11 @@ export class ApiClient {
             if (result.success) {
                 return result.data;
             } else {
-                this.app.ui.showToast('Error', 'Failed to load specific directories', 'error');
+                this.notifyApiError('Failed to load specific directories');
                 return [];
             }
         } catch (error) {
-            this.app.ui.showToast('Error', 'Failed to load specific directories', 'error');
-            console.error('Error fetching specific dirs:', error);
+            this.notifyApiError('Failed to load specific directories', { error, context: 'fetching specific dirs' });
             return [];
         }
     }
@@ -506,8 +512,7 @@ export class ApiClient {
                 throw new Error(result.message || 'Failed to get aria2c status');
             }
         } catch (error) {
-            console.error('Error fetching aria2c status:', error);
-            this.app.ui.showToast('Error', error.message, 'error');
+            this.notifyApiError(error.message, { error, context: 'fetching aria2c status' });
             return null;
         }
     }
@@ -529,8 +534,7 @@ export class ApiClient {
                 throw new Error(result.message || `Failed to ${action} download`);
             }
         } catch (error) {
-            console.error(`Error ${action} download:`, error);
-            this.app.ui.showToast('Error', error.message, 'error');
+            this.notifyApiError(error.message, { error, context: `${action} download` });
             return false;
         }
     }
@@ -548,8 +552,7 @@ export class ApiClient {
                 throw new Error(result.message || 'Failed to parse config data');
             }
         } catch (error) {
-            console.error('Error fetching config:', error);
-            this.app.ui.showToast('Error', 'Could not load server configuration.', 'error');
+            this.notifyApiError('Could not load server configuration.', { error, context: 'fetching config' });
             return null;
         }
     }
