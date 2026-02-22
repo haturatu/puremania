@@ -44,19 +44,44 @@ func startAria2cDaemon(logger *slog.Logger) (rpcURL string, rpcToken string, err
 	pidCmd := exec.Command("lsof", "-t", "-i:"+rpcPort)
 	output, err := pidCmd.Output()
 	if err == nil && len(output) > 0 {
-		pidStr := strings.TrimSpace(string(output))
-		pid, err := strconv.Atoi(pidStr)
-		if err == nil {
-			logger.Info("Found existing process, attempting to kill it", "pid", pid)
-			process, err := os.FindProcess(pid)
-			if err == nil {
-				if err := process.Kill(); err == nil {
-					logger.Info("Process killed successfully", "pid", pid)
-					time.Sleep(1 * time.Second) // Give it a moment to release the port
-				} else {
-					logger.Warn("Failed to kill process", "pid", pid, "error", err)
-				}
+		foundAria2c := false
+		for _, pidStr := range strings.Fields(string(output)) {
+			cmdOut, cmdErr := exec.Command("ps", "-p", pidStr, "-o", "comm=").Output()
+			if cmdErr != nil {
+				logger.Warn("Failed to inspect process on aria2c port", "pid", pidStr, "error", cmdErr)
+				continue
 			}
+
+			procName := strings.TrimSpace(string(cmdOut))
+			if !strings.Contains(procName, "aria2c") {
+				logger.Warn("Port is used by non-aria2c process, skipping kill", "pid", pidStr, "process", procName)
+				continue
+			}
+
+			pid, convErr := strconv.Atoi(pidStr)
+			if convErr != nil {
+				logger.Warn("Invalid process id returned by lsof", "pid", pidStr, "error", convErr)
+				continue
+			}
+
+			logger.Info("Found existing aria2c process, attempting to kill it", "pid", pid)
+			process, findErr := os.FindProcess(pid)
+			if findErr != nil {
+				logger.Warn("Failed to find process", "pid", pid, "error", findErr)
+				continue
+			}
+
+			if killErr := process.Kill(); killErr != nil {
+				logger.Warn("Failed to kill aria2c process", "pid", pid, "error", killErr)
+				continue
+			}
+
+			logger.Info("Aria2c process killed successfully", "pid", pid)
+			foundAria2c = true
+		}
+
+		if foundAria2c {
+			time.Sleep(1 * time.Second) // Give it a moment to release the port
 		}
 	}
 	rpcURL = fmt.Sprintf("http://localhost:%s/jsonrpc", rpcPort)

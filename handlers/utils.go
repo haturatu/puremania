@@ -176,6 +176,10 @@ func (h *Handler) generateSearchCacheKey(term, path, scope string, useRegex, cas
 
 // 仮想パスを安全な物理パスに変換し、設定で許可されたディレクトリ内にあることを確認
 func (h *Handler) buildSafePath(virtualPath string) (string, error) {
+	if strings.Contains(virtualPath, "..") {
+		return "", fmt.Errorf("path contains '..': %s", virtualPath)
+	}
+
 	physicalPath, err := h.convertToPhysicalPath(virtualPath)
 	if err != nil {
 		return "", fmt.Errorf("invalid path: %w", err)
@@ -187,17 +191,21 @@ func (h *Handler) buildSafePath(virtualPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not get absolute path: %w", err)
 	}
+	absPhysicalPath = filepath.Clean(absPhysicalPath)
 
-	allowedDirs := append(h.config.MountDirs, h.config.StorageDir)
+	allowedDirs := make([]string, 0, len(h.config.MountDirs)+1+len(h.config.SpecificDirs))
+	allowedDirs = append(allowedDirs, h.config.MountDirs...)
+	allowedDirs = append(allowedDirs, h.config.StorageDir)
 	allowedDirs = append(allowedDirs, h.config.SpecificDirs...)
 
 	for _, allowedDir := range allowedDirs {
 		absAllowedDir, err := filepath.Abs(allowedDir)
 		if err != nil {
 			h.logger.Warn("Could not get absolute path for allowed dir", "path", allowedDir, "error", err)
-			continue // or log error
+			continue
 		}
-		if strings.HasPrefix(absPhysicalPath, absAllowedDir) {
+		absAllowedDir = filepath.Clean(absAllowedDir)
+		if isPathWithin(absAllowedDir, absPhysicalPath) {
 			isSafe = true
 			break
 		}
@@ -207,10 +215,17 @@ func (h *Handler) buildSafePath(virtualPath string) (string, error) {
 		return "", fmt.Errorf("path is not in an allowed directory: %s", virtualPath)
 	}
 
-	// .. を含むパスを拒否
-	if strings.Contains(virtualPath, "..") {
-		return "", fmt.Errorf("path contains '..': %s", virtualPath)
-	}
-
 	return physicalPath, nil
+}
+
+func isPathWithin(basePath, targetPath string) bool {
+	rel, err := filepath.Rel(basePath, targetPath)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	parentPrefix := ".." + string(filepath.Separator)
+	return rel != ".." && !strings.HasPrefix(rel, parentPrefix)
 }

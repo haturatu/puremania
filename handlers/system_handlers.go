@@ -137,7 +137,10 @@ func (h *Handler) callAria2cRPC(method string, params ...interface{}) (interface
 		return nil, fmt.Errorf("failed to marshal aria2c request: %w", err)
 	}
 
-	resp, err := http.Post(h.config.Aria2cRPCURL, "application/json", bytes.NewBuffer(jsonBody))
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+	}
+	resp, err := client.Post(h.config.Aria2cRPCURL, "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to aria2c RPC: %w", err)
 	}
@@ -150,6 +153,9 @@ func (h *Handler) callAria2cRPC(method string, params ...interface{}) (interface
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read aria2c response body: %w", err)
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("aria2c RPC returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var rpcResp types.Aria2cRPCResponse
