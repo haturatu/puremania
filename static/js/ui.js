@@ -1,4 +1,5 @@
 import { getTemplateContent } from './template.js';
+import { buildApiUrl } from './util.js';
 
 export class UIManager {
     constructor(app) {
@@ -177,7 +178,7 @@ export class UIManager {
         const videoItem = template.querySelector('.video-card');
         this.setFileItemData(videoItem, file);
 
-        const thumbnailUrl = `/api/files/thumbnail?path=${encodeURIComponent(file.path)}`;
+        const thumbnailUrl = buildApiUrl('/api/files/thumbnail', { path: file.path });
         const thumbnailImg = videoItem.querySelector('.video-thumbnail img');
         
         this.loadImageWithRetry(thumbnailImg, thumbnailUrl);
@@ -353,7 +354,7 @@ export class UIManager {
         img.onerror = () => img.style.display = 'none';
         
         // Set src last to ensure onload/onerror handlers are ready
-        img.src = `/api/files/content?path=${encodeURIComponent(file.path)}`;
+        img.src = buildApiUrl('/api/files/content', { path: file.path });
 
         template.querySelector('.masonry-name').textContent = file.name;
         template.querySelector('.masonry-size').textContent = this.formatFileSize(file.size);

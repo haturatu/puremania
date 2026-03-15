@@ -123,7 +123,7 @@ export class ApiClient {
                 headers['If-None-Match'] = etag;
             }
 
-            const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`, { headers });
+            const response = await fetch(buildApiUrl('/api/files', { path }), { headers });
 
             if (response.status === 304) {
                 console.log(`Content for ${path} not modified. Using cache.`);
@@ -423,7 +423,7 @@ export class ApiClient {
     downloadFile(path) {
         // window.open can be blocked by iOS Safari popup blockers.
         // Changing window.location.href is more reliable for downloads.
-        window.location.href = `/api/files/download?path=${encodeURIComponent(path)}`;
+        window.location.href = buildApiUrl('/api/files/download', { path });
     }
 
     async downloadSelected() {
@@ -543,7 +543,7 @@ export class ApiClient {
         try {
             this.app.ui.showLoading();
             
-            const response = await fetch(`/api/files/content?path=${encodeURIComponent(path)}`);
+            const response = await fetch(buildApiUrl('/api/files/content', { path }));
             const result = await response.json();
             
             if (result.success) {

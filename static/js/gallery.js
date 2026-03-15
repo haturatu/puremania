@@ -1,5 +1,6 @@
 import { getTemplateContent } from './template.js';
 import { createModalOverlay, bindModalClose } from './modal.js';
+import { buildApiUrl } from './util.js';
 
 export class ImageViewer {
     constructor() {
@@ -90,7 +91,7 @@ export class ImageViewer {
         this.currentImageIndex = index;
         const image = this.images[index];
         
-        this.imageElement.src = `/api/files/content?path=${encodeURIComponent(image.path)}`;
+        this.imageElement.src = buildApiUrl('/api/files/content', { path: image.path });
         this.titleElement.textContent = `${index + 1} / ${this.images.length}`;
         this.nameElement.textContent = image.name;
         this.sizeElement.textContent = image.size;
