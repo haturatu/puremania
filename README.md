@@ -5,7 +5,7 @@
 - [Pure Mania](#pure-mania)
 - [Why did I make this?](#why-did-i-make-this)
   - [Features](#features)
-  - [Recent Changes (2025-10-18)](#recent-changes-2025-10-18)
+  - [Recent Changes (v0.0.28 - v0.0.30)](#recent-changes-v0028---v0030)
   - [Getting Started](#getting-started)
     - [IP Address Firewall Configuration](#ip-address-firewall-configuration)
     - [Prerequisites](#prerequisites)
@@ -72,20 +72,19 @@ That’s enough of my rambling.
   - Playlist repeat functionality.
   - Caches album art at the directory level to reduce redundant API calls. It looks for `cover.jpg`, `cover.jpeg`, `cover.png`, `folder.jpg`, or `album.jpg` in the same directory as the music file.
 
-## Recent Changes (2026-02-22)
+## Recent Changes (v0.0.28 - v0.0.30)
 
-This update focuses on security hardening for filesystem operations while keeping the current "local/WireGuard-first" design philosophy.
+Recent frontend-focused updates based on `git log`:
 
-- **Security:**
-    - Hardened virtual path to physical path conversion with strict allowed-directory boundary checks.
-    - Added safer path-join validation to prevent traversal attempts in archive extraction and upload flows.
-    - Improved validation for upload `relativePath` handling to reject unsafe paths.
-    - Strengthened archive extraction path checks to reduce Zip Slip risk.
-- **Bug Fixes:**
-    - Fixed multiple path traversal edge cases in file operation endpoints.
-    - Improved error handling for rejected unsafe file paths.
-- **Notes:**
-    - The project still assumes trusted-network deployment (e.g., local/WireGuard), but dangerous filesystem edge cases are now handled more defensively.
+- **v0.0.30**
+    - Improved startup performance by parallelizing initial frontend data loading.
+    - Added lazy loading for image and video thumbnails to reduce initial rendering cost in large directories.
+- **v0.0.29**
+    - Standardized frontend file URL construction around the `URL` / `URLSearchParams` APIs.
+    - Replaced browser `prompt()` / `confirm()` usage in file operations with `HTMLDialogElement` based dialogs.
+    - Replaced upload cancel confirmation with the same dialog-based flow for a more consistent UI.
+- **v0.0.28**
+    - Wired upload cancellation to active XHR batches so the progress UI can stop in-flight uploads correctly.
 
 ## Getting Started  
   
