@@ -12,6 +12,29 @@ export function normalizePath(path) {
     return '/' + normalized.join('/');
 }
 
+export function buildUrl(path, query = {}, base = window.location.origin) {
+    const url = new URL(path, base);
+
+    Object.entries(query).forEach(([key, value]) => {
+        if (value === undefined || value === null) {
+            return;
+        }
+
+        if (Array.isArray(value)) {
+            value.forEach(item => url.searchParams.append(key, item));
+            return;
+        }
+
+        url.searchParams.set(key, value);
+    });
+
+    return url;
+}
+
+export function buildApiUrl(path, query = {}) {
+    return buildUrl(path, query).toString();
+}
+
 export class Util {
     constructor(app) {
         this.app = app;

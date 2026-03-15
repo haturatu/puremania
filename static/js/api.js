@@ -1,3 +1,6 @@
+import { showConfirmDialog, showPromptDialog } from './modal.js';
+import { buildApiUrl } from './util.js';
+
 export class ApiClient {
     constructor(app) {
         this.app = app;
@@ -177,7 +180,12 @@ export class ApiClient {
     }
 
     async renameFile(path) {
-        const newName = prompt('Enter new name:', this.app.util.getBaseName(path));
+        const newName = await showPromptDialog({
+            title: 'Rename File',
+            message: 'Enter a new name.',
+            defaultValue: this.app.util.getBaseName(path),
+            confirmLabel: 'Rename'
+        });
         if (!newName) return;
         
         const newPath = this.app.util.getParentPath(path) + '/' + newName;
@@ -198,7 +206,12 @@ export class ApiClient {
         const currentPath = this.app.router.getCurrentPath();
         const suggestedPath = currentPath !== '/' ? currentPath : this.app.util.getParentPath(sourcePath);
         
-        const targetDir = prompt(`Move "${fileName}" to directory:`, suggestedPath);
+        const targetDir = await showPromptDialog({
+            title: 'Move File',
+            message: `Move "${fileName}" to directory.`,
+            defaultValue: suggestedPath,
+            confirmLabel: 'Move'
+        });
         if (!targetDir) return;
         
         if (!this.app.util.isValidPath(targetDir)) {
@@ -244,7 +257,12 @@ export class ApiClient {
         const currentPath = this.app.router.getCurrentPath();
         const suggestedPath = currentPath !== '/' ? currentPath : this.app.util.getParentPath(firstFile);
         
-        const targetDir = prompt(`Move ${this.app.selectedFiles.size} items to directory:`, suggestedPath);
+        const targetDir = await showPromptDialog({
+            title: 'Move Selected Items',
+            message: `Move ${this.app.selectedFiles.size} items to directory.`,
+            defaultValue: suggestedPath,
+            confirmLabel: 'Move'
+        });
         if (!targetDir) return;
         
         if (!this.app.util.isValidPath(targetDir)) {
@@ -300,7 +318,12 @@ export class ApiClient {
     }
 
     async createNewFolder() {
-        const folderName = prompt('Enter folder name:');
+        const folderName = await showPromptDialog({
+            title: 'Create Folder',
+            message: 'Enter folder name.',
+            placeholder: 'New folder',
+            confirmLabel: 'Create'
+        });
         if (!folderName) return;
 
         await this.runMutation({
@@ -314,7 +337,12 @@ export class ApiClient {
     }
 
     async createNewFile() {
-        const fileName = prompt('Enter file name:');
+        const fileName = await showPromptDialog({
+            title: 'Create File',
+            message: 'Enter file name.',
+            placeholder: 'new-file.txt',
+            confirmLabel: 'Create'
+        });
         if (!fileName) return;
 
         await this.runMutation({
@@ -335,7 +363,12 @@ export class ApiClient {
     }
 
     async extractFile(path) {
-        if (!confirm(`Are you sure you want to extract "${this.app.util.getBaseName(path)}"?`)) return;
+        const confirmed = await showConfirmDialog({
+            title: 'Extract Archive',
+            message: `Are you sure you want to extract "${this.app.util.getBaseName(path)}"?`,
+            confirmLabel: 'Extract'
+        });
+        if (!confirmed) return;
 
         await this.runMutation({
             endpoint: '/api/files/extract',
@@ -349,7 +382,13 @@ export class ApiClient {
     }
 
     async deleteFile(path) {
-        if (!confirm(`Are you sure you want to delete "${this.app.util.getBaseName(path)}?`)) return;
+        const confirmed = await showConfirmDialog({
+            title: 'Delete File',
+            message: `Are you sure you want to delete "${this.app.util.getBaseName(path)}"?`,
+            confirmLabel: 'Delete',
+            danger: true
+        });
+        if (!confirmed) return;
 
         await this.runMutation({
             endpoint: '/api/files/delete',
@@ -363,7 +402,13 @@ export class ApiClient {
 
     async deleteSelectedFiles() {
         if (this.app.selectedFiles.size === 0) return;
-        if (!confirm(`Are you sure you want to delete ${this.app.selectedFiles.size} items?`)) return;
+        const confirmed = await showConfirmDialog({
+            title: 'Delete Selected Items',
+            message: `Are you sure you want to delete ${this.app.selectedFiles.size} items?`,
+            confirmLabel: 'Delete',
+            danger: true
+        });
+        if (!confirmed) return;
 
         await this.runMutation({
             endpoint: '/api/files/delete',

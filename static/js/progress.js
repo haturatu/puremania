@@ -1,3 +1,4 @@
+import { showConfirmDialog } from './modal.js';
 import { getTemplateContent } from './template.js';
 
 export class ProgressManager {
@@ -24,14 +25,20 @@ export class ProgressManager {
         document.body.appendChild(overlay);
         this.progressOverlay = overlay;
 
-        overlay.querySelector('.progress-close').addEventListener('click', () => {
-            if (this.isCompleted || confirm('Cancel upload? This will stop the current upload process.')) {
-                const currentUpload = this.currentUpload;
-                if (currentUpload && !this.isCompleted) {
-                    currentUpload.abort();
-                }
-                this.hide();
+        overlay.querySelector('.progress-close').addEventListener('click', async () => {
+            const shouldClose = this.isCompleted || await showConfirmDialog({
+                title: 'Cancel Upload',
+                message: 'Cancel upload? This will stop the current upload process.',
+                confirmLabel: 'Cancel Upload',
+                danger: true
+            });
+            if (!shouldClose) return;
+
+            const currentUpload = this.currentUpload;
+            if (currentUpload && !this.isCompleted) {
+                currentUpload.abort();
             }
+            this.hide();
         });
     }
 
