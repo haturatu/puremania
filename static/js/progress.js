@@ -26,10 +26,11 @@ export class ProgressManager {
 
         overlay.querySelector('.progress-close').addEventListener('click', () => {
             if (this.isCompleted || confirm('Cancel upload? This will stop the current upload process.')) {
-                this.hide();
-                if (this.currentUpload && !this.isCompleted) {
-                    this.currentUpload.abort();
+                const currentUpload = this.currentUpload;
+                if (currentUpload && !this.isCompleted) {
+                    currentUpload.abort();
                 }
+                this.hide();
             }
         });
     }
@@ -212,6 +213,8 @@ export class ProgressManager {
 
     setCurrentUpload(upload) {
         this.currentUpload = upload;
-        this.isCompleted = false;
+        if (upload) {
+            this.isCompleted = false;
+        }
     }
 }

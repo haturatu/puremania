@@ -2,6 +2,45 @@ export class Uploader {
     constructor(app) {
         this.app = app;
         this._processingDrop = false;
+        this.activeUploadSession = null;
+    }
+
+    createUploadSession() {
+        const controller = new AbortController();
+        const xhrs = new Set();
+        const session = {
+            signal: controller.signal,
+            aborted: false,
+            abort: () => {
+                if (session.aborted) return;
+                session.aborted = true;
+                controller.abort();
+                xhrs.forEach(xhr => xhr.abort());
+                xhrs.clear();
+            },
+            trackXhr: (xhr) => {
+                if (session.signal.aborted) {
+                    xhr.abort();
+                    return false;
+                }
+                xhrs.add(xhr);
+                xhr.addEventListener('loadend', () => {
+                    xhrs.delete(xhr);
+                }, { once: true });
+                return true;
+            }
+        };
+        return session;
+    }
+
+    ensureUploadActive(session) {
+        if (!session || session.signal.aborted) {
+            throw new DOMException('Upload aborted', 'AbortError');
+        }
+    }
+
+    isAbortError(error) {
+        return error?.name === 'AbortError';
     }
 
     showUploadDialog() {
@@ -112,6 +151,10 @@ export class Uploader {
 
     async handleFileUpload(files) {
         if (!files || files.length === 0) return;
+        const uploadSession = this.createUploadSession();
+        const inFlight = [];
+        this.activeUploadSession = uploadSession;
+        this.app.progressManager.setCurrentUpload(uploadSession);
     
         try {
             if (!this.app.progressManager.progressOverlay ||
@@ -143,10 +186,12 @@ export class Uploader {
             let totalFailed = 0;
     
             let batchIndex = 0;
-            const inFlight = [];
     
             while (batchIndex < batches.length || inFlight.length > 0) {
+                this.ensureUploadActive(uploadSession);
+
                 while (batchIndex < batches.length && inFlight.length < MAX_PARALLEL_BATCHES) {
+                    this.ensureUploadActive(uploadSession);
                     const currentBatchIndex = batchIndex;
                     const batch = batches[currentBatchIndex];
     
@@ -158,8 +203,9 @@ export class Uploader {
                         status: `Batch ${currentBatchIndex + 1}/${batches.length}: ${batch.length} files`
                     });
     
-                    const promise = this.uploadBatch(batch, currentBatchIndex + 1, batches.length)
+                    const promise = this.uploadBatch(batch, currentBatchIndex + 1, batches.length, uploadSession)
                         .then(result => {
+                            this.ensureUploadActive(uploadSession);
                             totalSuccessful += result.successful;
                             totalFailed += result.failed;
                             totalProcessed += batch.length;
@@ -173,6 +219,9 @@ export class Uploader {
                             });
                         })
                         .catch(error => {
+                            if (this.isAbortError(error)) {
+                                throw error;
+                            }
                             console.error(`Batch ${currentBatchIndex + 1} failed:`, error);
                             totalFailed += batch.length;
                             totalProcessed += batch.length;
@@ -193,9 +242,11 @@ export class Uploader {
                     inFlight.push(promise);
                     batchIndex++;
                 }
-    
+
                 await Promise.race(inFlight);
             }
+
+            this.ensureUploadActive(uploadSession);
     
             const finalResult = {
                 successful: totalSuccessful,
@@ -228,136 +279,160 @@ export class Uploader {
             });
     
         } catch (error) {
+            if (this.isAbortError(error) || uploadSession.signal.aborted) {
+                await Promise.allSettled(inFlight);
+                this.app.progressManager.hide();
+                this.app.ui.showToast('Info', 'Upload canceled', 'info');
+                return;
+            }
             console.error('Error in parallel batch upload:', error);
             this.handleUploadError('Parallel batch upload failed: ' + error.message);
         } finally {
             const uploadArea = document.querySelector('.upload-area');
             if (uploadArea) uploadArea.classList.remove('uploading');
+            if (this.activeUploadSession === uploadSession) {
+                this.activeUploadSession = null;
+            }
+            if (this.app.progressManager.currentUpload === uploadSession) {
+                this.app.progressManager.setCurrentUpload(null);
+            }
         }
     }
 
-    async uploadBatch(batchFiles, batchNumber, totalBatches) {
+    async uploadBatch(batchFiles, batchNumber, totalBatches, uploadSession) {
         const CONCURRENT_UPLOADS = 50;
-        
-        return new Promise((resolve) => {
-            let completedFiles = 0;
-            let successfulFiles = 0;
-            let failedFiles = 0;
-            
-            const processFileChunk = async (fileChunk, chunkIndex) => {
-                const uploadPromises = fileChunk.map((file, fileIndex) => {
-                    return new Promise((fileResolve) => {
-                        const formData = new FormData();
-                        formData.append('path', this.app.router.getCurrentPath());
-                        formData.append('file', file);
-                        
-                        const relativePath = file.webkitRelativePath || file.name;
-                        formData.append('relativePath[]', relativePath);
-                        
-                        const xhr = new XMLHttpRequest();
-                        
-                        xhr.upload.addEventListener('progress', (e) => {
-                            if (e.lengthComputable) {
-                                const fileProgress = (e.loaded / e.total) * 100;
-                                const overallProgress = ((batchNumber - 1) / totalBatches) * 90 + 
-                                                      ((completedFiles + (fileProgress / 100)) / batchFiles.length) * (90 / totalBatches);
-                                
-                                this.app.progressManager.safeUpdateProgress({
-                                    currentFile: `Batch ${batchNumber}: Uploading ${file.name} (${Math.round(fileProgress)}%)`,
-                                    percentage: overallProgress,
-                                    processed: completedFiles,
-                                    total: batchFiles.length,
-                                    status: `Batch ${batchNumber}/${totalBatches}: ${completedFiles}/${batchFiles.length} completed`
-                                });
-                            }
-                        });
-                        
-                        xhr.addEventListener('load', () => {
-                            completedFiles++;
-                            
-                            if (xhr.status >= 200 && xhr.status < 300) {
-                                try {
-                                    const response = JSON.parse(xhr.responseText);
-                                    if (response.success || (response.data && response.data.successful > 0)) {
-                                        successfulFiles++;
-                                    } else {
-                                        failedFiles++;
-                                    }
-                                } catch (error) {
+        let completedFiles = 0;
+        let successfulFiles = 0;
+        let failedFiles = 0;
+
+        const processFileChunk = async (fileChunk) => {
+            const uploadPromises = fileChunk.map((file) => {
+                return new Promise((fileResolve, fileReject) => {
+                    this.ensureUploadActive(uploadSession);
+
+                    const formData = new FormData();
+                    formData.append('path', this.app.router.getCurrentPath());
+                    formData.append('file', file);
+
+                    const relativePath = file.webkitRelativePath || file.name;
+                    formData.append('relativePath[]', relativePath);
+
+                    const xhr = new XMLHttpRequest();
+                    const handleAbort = () => {
+                        xhr.abort();
+                    };
+                    const cleanupAbortListener = () => {
+                        uploadSession.signal.removeEventListener('abort', handleAbort);
+                    };
+
+                    xhr.upload.addEventListener('progress', (e) => {
+                        if (e.lengthComputable) {
+                            const fileProgress = (e.loaded / e.total) * 100;
+                            const overallProgress = ((batchNumber - 1) / totalBatches) * 90 +
+                                ((completedFiles + (fileProgress / 100)) / batchFiles.length) * (90 / totalBatches);
+
+                            this.app.progressManager.safeUpdateProgress({
+                                currentFile: `Batch ${batchNumber}: Uploading ${file.name} (${Math.round(fileProgress)}%)`,
+                                percentage: overallProgress,
+                                processed: completedFiles,
+                                total: batchFiles.length,
+                                status: `Batch ${batchNumber}/${totalBatches}: ${completedFiles}/${batchFiles.length} completed`
+                            });
+                        }
+                    });
+
+                    xhr.addEventListener('load', () => {
+                        completedFiles++;
+
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            try {
+                                const response = JSON.parse(xhr.responseText);
+                                if (response.success || (response.data && response.data.successful > 0)) {
+                                    successfulFiles++;
+                                } else {
                                     failedFiles++;
                                 }
-                            } else {
+                            } catch (_) {
                                 failedFiles++;
                             }
-                            
-                            fileResolve();
-                        });
-                        
-                        xhr.addEventListener('error', () => {
-                            completedFiles++;
+                        } else {
                             failedFiles++;
-                            fileResolve();
-                        });
-                        
-                        xhr.addEventListener('timeout', () => {
-                            completedFiles++;
-                            failedFiles++;
-                            fileResolve();
-                        });
-                        
-                        xhr.open('POST', '/api/files/upload');
-                        xhr.send(formData);
+                        }
+
+                        cleanupAbortListener();
+                        fileResolve();
                     });
-                });
-                
-                await Promise.all(uploadPromises);
-            };
-            
-            const processAllChunks = async () => {
-                const chunks = [];
-                for (let i = 0; i < batchFiles.length; i += CONCURRENT_UPLOADS) {
-                    chunks.push(batchFiles.slice(i, i + CONCURRENT_UPLOADS));
-                }
-                
-                for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-                    const chunk = chunks[chunkIndex];
-                    
-                    this.app.progressManager.safeUpdateProgress({
-                        currentFile: `Batch ${batchNumber}: Processing chunk ${chunkIndex + 1}/${chunks.length}`,
-                        percentage: ((batchNumber - 1) / totalBatches) * 90 + (chunkIndex / chunks.length) * (90 / totalBatches),
-                        processed: completedFiles,
-                        total: batchFiles.length,
-                        status: `Batch ${batchNumber}/${totalBatches}: Starting parallel uploads`
+
+                    xhr.addEventListener('error', () => {
+                        cleanupAbortListener();
+                        completedFiles++;
+                        failedFiles++;
+                        fileResolve();
                     });
-                    
-                    await processFileChunk(chunk, chunkIndex);
-                    
-                    if (chunkIndex < chunks.length - 1) {
-                        await new Promise(resolve => setTimeout(resolve, 100));
+
+                    xhr.addEventListener('timeout', () => {
+                        cleanupAbortListener();
+                        completedFiles++;
+                        failedFiles++;
+                        fileResolve();
+                    });
+
+                    xhr.addEventListener('abort', () => {
+                        cleanupAbortListener();
+                        fileReject(new DOMException('Upload aborted', 'AbortError'));
+                    });
+
+                    uploadSession.signal.addEventListener('abort', handleAbort, { once: true });
+                    if (!uploadSession.trackXhr(xhr)) {
+                        cleanupAbortListener();
+                        fileReject(new DOMException('Upload aborted', 'AbortError'));
+                        return;
                     }
-                }
-                
-                this.app.progressManager.safeUpdateProgress({
-                    currentFile: `Batch ${batchNumber} completed`,
-                    percentage: (batchNumber / totalBatches) * 90,
-                    processed: completedFiles,
-                    total: batchFiles.length,
-                    status: `Batch ${batchNumber} completed: ${successfulFiles} successful, ${failedFiles} failed`
-                });
-                
-                resolve({
-                    successful: successfulFiles,
-                    failed: failedFiles,
-                });
-            };
-            
-            processAllChunks().catch(() => {
-                resolve({
-                    successful: successfulFiles,
-                    failed: batchFiles.length - successfulFiles,
+
+                    xhr.open('POST', '/api/files/upload');
+                    xhr.send(formData);
                 });
             });
+
+            await Promise.all(uploadPromises);
+        };
+
+        const chunks = [];
+        for (let i = 0; i < batchFiles.length; i += CONCURRENT_UPLOADS) {
+            chunks.push(batchFiles.slice(i, i + CONCURRENT_UPLOADS));
+        }
+
+        for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+            this.ensureUploadActive(uploadSession);
+            const chunk = chunks[chunkIndex];
+
+            this.app.progressManager.safeUpdateProgress({
+                currentFile: `Batch ${batchNumber}: Processing chunk ${chunkIndex + 1}/${chunks.length}`,
+                percentage: ((batchNumber - 1) / totalBatches) * 90 + (chunkIndex / chunks.length) * (90 / totalBatches),
+                processed: completedFiles,
+                total: batchFiles.length,
+                status: `Batch ${batchNumber}/${totalBatches}: Starting parallel uploads`
+            });
+
+            await processFileChunk(chunk);
+
+            if (chunkIndex < chunks.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        this.app.progressManager.safeUpdateProgress({
+            currentFile: `Batch ${batchNumber} completed`,
+            percentage: (batchNumber / totalBatches) * 90,
+            processed: completedFiles,
+            total: batchFiles.length,
+            status: `Batch ${batchNumber} completed: ${successfulFiles} successful, ${failedFiles} failed`
         });
+
+        return {
+            successful: successfulFiles,
+            failed: failedFiles,
+        };
     }
 
     handleUploadError(message) {
