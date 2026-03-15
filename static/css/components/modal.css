@@ -89,6 +89,66 @@
   gap: 10px;
 }
 
+.app-dialog {
+  width: min(480px, calc(100vw - 32px));
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+}
+
+.app-dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+.app-dialog__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+}
+
+.app-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-dialog__title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.app-dialog__description {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.app-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app-dialog__input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.app-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 /* Aria2c Download Modal */
 #aria2c-status-modal .modal-content {
     width: 800px;
