@@ -12,12 +12,14 @@ export class UIManager {
             direction: 'desc'
         };
         this.fileBrowserExtensionsVisible = false;
+        this.lazyImageObserver = null;
     }
 
     displayFiles(files) {
         this.currentFiles = files;
         const container = document.querySelector('.file-browser');
         if (!container) return;
+        this.resetLazyImageObserver();
 
         const currentPath = this.app.router.getCurrentPath();
         const isNewFolder = currentPath !== this.previousPath;
@@ -180,8 +182,8 @@ export class UIManager {
 
         const thumbnailUrl = buildApiUrl('/api/files/thumbnail', { path: file.path });
         const thumbnailImg = videoItem.querySelector('.video-thumbnail img');
-        
-        this.loadImageWithRetry(thumbnailImg, thumbnailUrl);
+
+        this.prepareLazyImage(thumbnailImg, thumbnailUrl);
 
         thumbnailImg.alt = file.name;
         videoItem.querySelector('.video-title').textContent = file.name;
@@ -191,7 +193,12 @@ export class UIManager {
     }
 
     loadImageWithRetry(imgElement, src, retries = 3, delay = 1000) {
+        if (!imgElement || imgElement.dataset.loadingStarted === 'true') {
+            return;
+        }
+
         let attempts = 0;
+        imgElement.dataset.loadingStarted = 'true';
 
         const loadImage = () => {
             imgElement.src = `${src}${src.includes('?') ? '&' : '?'}v=${new Date().getTime() + attempts}`;
@@ -208,6 +215,54 @@ export class UIManager {
         };
 
         loadImage();
+    }
+
+    resetLazyImageObserver() {
+        if (this.lazyImageObserver) {
+            this.lazyImageObserver.disconnect();
+            this.lazyImageObserver = null;
+        }
+    }
+
+    getLazyImageObserver() {
+        if (this.lazyImageObserver) {
+            return this.lazyImageObserver;
+        }
+
+        if (!('IntersectionObserver' in window)) {
+            return null;
+        }
+
+        this.lazyImageObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (!entry.isIntersecting) return;
+
+                const imgElement = entry.target;
+                const src = imgElement.dataset.src;
+                if (src) {
+                    this.loadImageWithRetry(imgElement, src);
+                }
+                this.lazyImageObserver.unobserve(imgElement);
+            });
+        }, {
+            rootMargin: '300px 0px'
+        });
+
+        return this.lazyImageObserver;
+    }
+
+    prepareLazyImage(imgElement, src) {
+        imgElement.dataset.src = src;
+        imgElement.loading = 'lazy';
+        imgElement.decoding = 'async';
+
+        const observer = this.getLazyImageObserver();
+        if (observer) {
+            observer.observe(imgElement);
+            return;
+        }
+
+        this.loadImageWithRetry(imgElement, src);
     }
 
     renderGridView(files, container) {
@@ -352,9 +407,8 @@ export class UIManager {
         img.alt = file.name;
         img.onload = () => item.style.gridRowEnd = `span ${Math.round((img.naturalHeight / img.naturalWidth) * 20)}`;
         img.onerror = () => img.style.display = 'none';
-        
-        // Set src last to ensure onload/onerror handlers are ready
-        img.src = buildApiUrl('/api/files/content', { path: file.path });
+
+        this.prepareLazyImage(img, buildApiUrl('/api/files/content', { path: file.path }));
 
         template.querySelector('.masonry-name').textContent = file.name;
         template.querySelector('.masonry-size').textContent = this.formatFileSize(file.size);

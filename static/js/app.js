@@ -60,11 +60,14 @@ class FileManagerApp {
 
         this.events.bindEvents();
         this.aria2cPageHandler.init();
-        this.updateStorageInfo();
 
-        // Load and display specific dirs
-        const specificDirs = await this.api.getSpecificDirs();
+        const [specificDirs, storageResult] = await Promise.all([
+            this.api.getSpecificDirs(),
+            this.api.getStorageInfo()
+        ]);
+
         this.ui.updateSpecificDirs(specificDirs);
+        this.updateStorageInfo(storageResult);
 
         // Setup router
         this.router.onChange((path) => {
@@ -140,9 +143,8 @@ class FileManagerApp {
         this.ui.updateToolbar();
     }
 
-    async updateStorageInfo() {
+    updateStorageInfo(result) {
         try {
-            const result = await this.api.getStorageInfo();
             if (result.success) {
                 const info = result.data;
                 const usagePercentage = (info.used / info.total) * 100;
