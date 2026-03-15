@@ -1,4 +1,5 @@
 import { createModalOverlay, bindModalClose } from './modal.js';
+import { buildApiUrl } from './util.js';
 
 export class MediaPlayer {
     constructor() {
@@ -249,7 +250,7 @@ export class MediaPlayer {
         this.playerElement.classList.remove('video-mode');
         const media = this.playlist[this.currentIndex];
         this.currentMedia = { type: 'audio', path: media.path };
-        this.audioElement.src = `/api/files/download?path=${encodeURIComponent(media.path)}`;
+        this.audioElement.src = buildApiUrl('/api/files/download', { path: media.path });
         this.audioElement.play().catch(error => console.error('Audio play error:', error));
         this.isPlaying = true;
         this.updateMediaInfo(media.path);
@@ -308,7 +309,7 @@ export class MediaPlayer {
         if (parentDir === currentNorm) return;
 
         try {
-            const response = await fetch(`/api/files?path=${encodeURIComponent(parentDir)}`);
+            const response = await fetch(buildApiUrl('/api/files', { path: parentDir }));
             const result = await response.json();
             if (!result.success || !result.data) return;
 
@@ -320,7 +321,7 @@ export class MediaPlayer {
 
             while (attempts < shuffledSiblings.length) {
                 const randomDir = shuffledSiblings[attempts];
-                const dirResponse = await fetch(`/api/files?path=${encodeURIComponent(randomDir.path)}`);
+                const dirResponse = await fetch(buildApiUrl('/api/files', { path: randomDir.path }));
                 const dirResult = await dirResponse.json();
                 if (dirResult.success && dirResult.data) {
                     const audioFiles = dirResult.data
@@ -570,7 +571,7 @@ export class MediaPlayer {
         `
         });
         const video = modal.querySelector('video');
-        video.src = `/api/files/download?path=${encodeURIComponent(this.currentMedia.path)}`;
+        video.src = buildApiUrl('/api/files/download', { path: this.currentMedia.path });
         video.volume = this.volume;
         this.modalVideoElement = video;
         this.unbindVideoModalClose = bindModalClose(modal, {
@@ -653,7 +654,7 @@ export class MediaPlayer {
             for (const coverName of coverImages) {
                 const coverPath = `${dirPath}/${coverName}`;
                 try {
-                    const response = await fetch(`/api/files/download?path=${encodeURIComponent(coverPath)}`);
+                    const response = await fetch(buildApiUrl('/api/files/download', { path: coverPath }));
                     if (response.ok) {
                         const imageUrl = URL.createObjectURL(await response.blob());
                         this.albumArtCache.set(dirPath, imageUrl);

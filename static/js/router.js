@@ -100,7 +100,7 @@ export class Router {
      * @private
      */
     _updateBrowserHistory(path, method) {
-        const displayPath = this._encodeForDisplay(path);
+        const displayPath = this._createDisplayUrl(path);
         const historyMethod = method === 'push' ? 'pushState' : 'replaceState';
         
         history[historyMethod]({ path }, '', displayPath);
@@ -112,9 +112,12 @@ export class Router {
      * @returns {string} エンコードされたパス
      * @private
      */
-    _encodeForDisplay(path) {
-        // encodeURIでエンコードし、#文字は手動でエンコード
-        return encodeURI(path).replace(/#/g, '%23');
+    _createDisplayUrl(path) {
+        const url = new URL(window.location.href);
+        url.pathname = path;
+        url.search = '';
+        url.hash = '';
+        return `${url.pathname}${url.search}${url.hash}`;
     }
 
     /**
@@ -133,19 +136,8 @@ export class Router {
      * @private
      */
     _extractPathFromURL() {
-        let path = window.location.pathname;
-        
-        // クエリパラメータを追加
-        if (window.location.search) {
-            path += window.location.search;
-        }
-        
-        // ハッシュフラグメントを追加（ファイルパスの一部として）
-        if (window.location.hash && window.location.hash !== '#') {
-            path += window.location.hash;
-        }
-        
-        return path;
+        const url = new URL(window.location.href);
+        return url.pathname;
     }
 
     /**
