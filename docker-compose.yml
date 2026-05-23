@@ -1,0 +1,24 @@
+services:
+  puremania:
+    build:
+      context: .
+    image: puremania:local
+    container_name: puremania
+    user: "${PUREMANIA_UID:-10001}:${PUREMANIA_GID:-10001}"
+    ports:
+      - "${PUREMANIA_PORT:-8844}:8844"
+    environment:
+      STORAGE_DIR: /data
+      PORT: 8844
+      MAX_FILE_SIZE_MB: "${PUREMANIA_MAX_FILE_SIZE_MB:-10000}"
+      ZIP_TIMEOUT: "${PUREMANIA_ZIP_TIMEOUT:-300}"
+      MAX_ZIP_SIZE: "${PUREMANIA_MAX_ZIP_SIZE:-1024}"
+      ARIA2C: "${PUREMANIA_ARIA2C:-disable}"
+      MOUNT_DIRS: "${PUREMANIA_MOUNT_DIRS:-}"
+      SPECIFIC_DIRS: "${PUREMANIA_SPECIFIC_DIRS:-}"
+    volumes:
+      - "${PUREMANIA_STORAGE_DIR:-puremania-data}:/data"
+    restart: unless-stopped
+
+volumes:
+  puremania-data:
