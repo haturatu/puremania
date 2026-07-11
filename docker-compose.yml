@@ -4,7 +4,7 @@ services:
       context: .
     image: puremania:local
     container_name: puremania
-    user: "${PUREMANIA_UID:-10001}:${PUREMANIA_GID:-10001}"
+    user: "${PUREMANIA_UID:-1000}:${PUREMANIA_GID:-1000}"
     ports:
       - "${PUREMANIA_PORT:-8844}:8844"
     environment:
