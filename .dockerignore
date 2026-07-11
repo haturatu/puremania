@@ -1,0 +1,14 @@
+.git
+.github
+.agents
+.codex
+.cache
+.env
+*.log
+*.swp
+
+node_modules
+npm-debug.log
+
+puremania
+data
