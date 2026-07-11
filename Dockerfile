@@ -31,16 +31,6 @@ WORKDIR /app
 COPY --from=builder /out/puremania /app/puremania
 COPY static /app/static
 
-ENV STORAGE_DIR=/data \
-    HOME=/home/puremania \
-    MOUNT_DIRS= \
-    MAX_FILE_SIZE_MB=10000 \
-    PORT=8844 \
-    ZIP_TIMEOUT=300 \
-    MAX_ZIP_SIZE=1024 \
-    SPECIFIC_DIRS= \
-    ARIA2C=disable
-
 USER puremania
 
 EXPOSE 8844
