@@ -8,6 +8,7 @@ services:
     ports:
       - "${PUREMANIA_PORT:-8844}:8844"
     environment:
+      HOME: "${PUREMANIA_HOME:-/home/puremania}"
       STORAGE_DIR: /data
       PORT: 8844
       MAX_FILE_SIZE_MB: "${PUREMANIA_MAX_FILE_SIZE_MB:-10000}"
