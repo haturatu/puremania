@@ -246,7 +246,7 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Handler:      corsMiddleware(r),
+		Handler:      responseCompressionMiddleware(corsMiddleware(r)),
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
 		WriteTimeout: 300 * time.Second,
 		ReadTimeout:  300 * time.Second,
