@@ -3,6 +3,7 @@
 const CHUNK_SIZE = 8 * 1024 * 1024;
 const MAX_CONCURRENT_FILES = 3;
 const MAX_RETRIES = 5;
+const PREPARE_BATCH_SIZE = 500;
 const DB_NAME = 'puremania-upload-sessions';
 const DB_STORE = 'sessions';
 
@@ -45,6 +46,7 @@ export class Uploader {
         this.activeUploadSession = null;
         this.store = new UploadSessionStore();
         this.progress = new Map();
+        this.uploadStats = null;
         this.resumeRequest = null;
         this.createResumeInputs();
     }
@@ -97,14 +99,19 @@ export class Uploader {
 
     async handleSelectedFileList(input) {
         if (!input.files?.length) return;
-        const files = Array.from(input.files, file => ({ file, relativePath: file.webkitRelativePath || file.name }));
+        const files = await this.createUploadItems(input.files);
         input.value = '';
         let destination = null;
         if (this.resumeRequest) {
             const request = this.resumeRequest;
             this.resumeRequest = null;
             destination = request.destination;
-            if (!files.some(item => this.fileKey(item, destination) === request.key)) {
+            let matchesRequestedFile = false;
+            for (let index = 0; index < files.length; index++) {
+                if (this.fileKey(files[index], destination) === request.key) { matchesRequestedFile = true; break; }
+                if (index > 0 && index % PREPARE_BATCH_SIZE === 0) await yieldToBrowser();
+            }
+            if (!matchesRequestedFile) {
                 this.app.ui.showToast('Resume upload', 'Choose the original file or folder to resume this upload.', 'warning');
                 return;
             }
@@ -134,6 +141,28 @@ export class Uploader {
     fileKey(item, destination) {
         const { file, relativePath } = item;
         return `${destination}|${relativePath}|${file.size}|${file.lastModified}`;
+    }
+
+    async createUploadItems(fileList) {
+        const items = new Array(fileList.length);
+        for (let index = 0; index < fileList.length; index++) {
+            const file = fileList[index];
+            items[index] = { file, relativePath: file.webkitRelativePath || file.name };
+            if (index > 0 && index % PREPARE_BATCH_SIZE === 0) await yieldToBrowser();
+        }
+        return items;
+    }
+
+    async initializeUploadStats(items, session) {
+        let totalBytes = 0;
+        for (let index = 0; index < items.length; index++) {
+            totalBytes += items[index].file.size;
+            if (index > 0 && index % PREPARE_BATCH_SIZE === 0) {
+                this.ensureActive(session);
+                await yieldToBrowser();
+            }
+        }
+        this.uploadStats = { total: items.length, totalBytes, uploadedBytes: 0, completed: 0, failed: 0 };
     }
 
     async requestResume(key) {
@@ -277,20 +306,24 @@ export class Uploader {
         await this.apiJSON(`${record.url}/complete`, { method: 'POST', signal: session.signal });
         try { await this.store.remove(record.key); this.notifyJobsChanged(); } catch (_) { /* optional */ }
         this.setFileProgress(record.key, item, item.file.size, 'Completed');
+        this.progress.delete(record.key);
     }
 
     setFileProgress(key, item, uploaded, state) {
-        this.progress.set(key, { name: item.relativePath, total: item.file.size, uploaded: Math.min(uploaded, item.file.size), state });
+        const previous = this.progress.get(key);
+        const current = Math.min(uploaded, item.file.size);
+        this.progress.set(key, { name: item.relativePath, total: item.file.size, uploaded: current, state });
+        if (this.uploadStats) this.uploadStats.uploadedBytes += current - (previous?.uploaded || 0);
         const values = [...this.progress.values()];
-        const total = values.reduce((sum, value) => sum + value.total, 0);
-        const done = values.reduce((sum, value) => sum + value.uploaded, 0);
-        const complete = values.filter(value => value.state === 'Completed').length;
+        const total = this.uploadStats?.totalBytes || values.reduce((sum, value) => sum + value.total, 0);
+        const done = this.uploadStats?.uploadedBytes || values.reduce((sum, value) => sum + value.uploaded, 0);
+        const complete = (this.uploadStats?.completed || 0) + (this.uploadStats?.failed || 0);
         const active = values.find(value => value.state !== 'Completed');
         this.app.progressManager.safeUpdateProgress({
             currentFile: active ? `${active.state}: ${active.name}` : 'Upload complete',
             percentage: total ? (done / total) * 100 : 100,
-            processed: complete, total: values.length,
-            status: `${complete}/${values.length} files · ${(done / (1024 * 1024)).toFixed(1)} / ${(total / (1024 * 1024)).toFixed(1)} MiB`
+            processed: complete, total: this.uploadStats?.total || values.length,
+            status: `${complete}/${this.uploadStats?.total || values.length} files · ${(done / (1024 * 1024)).toFixed(1)} / ${(total / (1024 * 1024)).toFixed(1)} MiB`
         });
     }
 
@@ -299,24 +332,28 @@ export class Uploader {
         const session = this.createUploadSession();
         this.activeUploadSession = session;
         this.app.progressManager.setCurrentUpload(session);
-        this.progress.clear();
         const destination = destinationOverride || this.app.router.getCurrentPath();
-        items.forEach(item => this.setFileProgress(this.fileKey(item, destination), item, 0, 'Queued'));
+        this.progress.clear();
         document.querySelector('.upload-area')?.classList.add('uploading');
         this.app.progressManager.show('Uploading files');
+        await this.initializeUploadStats(items, session);
         let cursor = 0, succeeded = 0, failed = 0;
         const next = async () => {
             while (true) {
                 this.ensureActive(session);
                 const index = cursor++;
                 if (index >= items.length) return;
-                try { await this.uploadFile(items[index], destination, session); succeeded++; }
-                catch (error) { if (this.isAbortError(error)) throw error; failed++; console.error('Upload failed', items[index].relativePath, error); this.setFileProgress(this.fileKey(items[index], destination), items[index], 0, 'Failed'); }
+                try { await this.uploadFile(items[index], destination, session); succeeded++; this.uploadStats.completed++; }
+                catch (error) { if (this.isAbortError(error)) throw error; failed++; this.uploadStats.failed++; console.error('Upload failed', items[index].relativePath, error); this.setFileProgress(this.fileKey(items[index], destination), items[index], 0, 'Failed'); this.progress.delete(this.fileKey(items[index], destination)); }
                 await yieldToBrowser();
             }
         };
         try {
             await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_FILES, items.length) }, next));
+            this.app.progressManager.safeUpdateProgress({
+                currentFile: 'Upload complete', percentage: 100, processed: succeeded + failed, total: items.length,
+                status: `${succeeded}/${items.length} files uploaded${failed ? `, ${failed} failed` : ''}`
+            });
             this.app.ui.showToast(failed ? 'Upload completed with errors' : 'Upload complete', `${succeeded} uploaded${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
             this.app.api.directoryEtags.delete(destination);
             if (this.app.router.getCurrentPath() === destination) await this.app.loadFiles(destination);
