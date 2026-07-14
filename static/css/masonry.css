@@ -28,6 +28,8 @@
   object-fit: cover; /* 画像をきれいに収める */
 }
 
+.masonry-image.image-pending { min-height: 120px; background: var(--bg-tertiary); }
+
 .masonry-info {
   padding: 12px;
   background: rgba(0, 0, 0, 0.65); /* 背景を暗めにして文字を読みやすく */

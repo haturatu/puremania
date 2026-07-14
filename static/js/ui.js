@@ -1,5 +1,6 @@
 import { getTemplateContent } from './template.js';
 import { buildApiUrl } from './util.js';
+import { ImageLoader } from './image-loader.js';
 
 export class UIManager {
     constructor(app) {
@@ -13,6 +14,7 @@ export class UIManager {
         };
         this.fileBrowserExtensionsVisible = false;
         this.lazyImageObserver = null;
+        this.imageLoader = new ImageLoader();
     }
 
     displayFiles(files) {
@@ -192,29 +194,20 @@ export class UIManager {
         return videoItem;
     }
 
-    loadImageWithRetry(imgElement, src, retries = 3, delay = 1000) {
+    loadImageWithRetry(imgElement, src) {
         if (!imgElement || imgElement.dataset.loadingStarted === 'true') {
-            return;
+            return false;
         }
-
-        let attempts = 0;
         imgElement.dataset.loadingStarted = 'true';
-
-        const loadImage = () => {
-            imgElement.src = `${src}${src.includes('?') ? '&' : '?'}v=${new Date().getTime() + attempts}`;
-        };
-
-        imgElement.onerror = () => {
-            attempts++;
-            if (attempts < retries) {
-                setTimeout(loadImage, delay);
-            } else {
-                // Optional: Set a fallback image or handle the final failure
-                console.error(`Failed to load image after ${retries} attempts: ${src}`);
-            }
-        };
-
-        loadImage();
+        const queued = this.imageLoader.enqueue({
+            key: imgElement.dataset.imageKey,
+            src,
+            priority: Number(imgElement.dataset.imagePriority || 0),
+            onLoad: loaded => { imgElement.src = loaded.src; imgElement.classList.remove('image-pending'); },
+            onError: () => { imgElement.dataset.loadingStarted = ''; imgElement.classList.remove('image-pending'); console.error(`Failed to load image: ${src}`); }
+        });
+        if (!queued) imgElement.dataset.loadingStarted = '';
+        return queued;
     }
 
     resetLazyImageObserver() {
@@ -222,6 +215,7 @@ export class UIManager {
             this.lazyImageObserver.disconnect();
             this.lazyImageObserver = null;
         }
+        this.imageLoader.clear();
     }
 
     getLazyImageObserver() {
@@ -240,9 +234,9 @@ export class UIManager {
                 const imgElement = entry.target;
                 const src = imgElement.dataset.src;
                 if (src) {
-                    this.loadImageWithRetry(imgElement, src);
+                    imgElement.dataset.imagePriority = String(Math.abs(entry.boundingClientRect.top));
+                    if (this.loadImageWithRetry(imgElement, src)) this.lazyImageObserver.unobserve(imgElement);
                 }
-                this.lazyImageObserver.unobserve(imgElement);
             });
         }, {
             rootMargin: '300px 0px'
@@ -253,8 +247,10 @@ export class UIManager {
 
     prepareLazyImage(imgElement, src) {
         imgElement.dataset.src = src;
+        imgElement.dataset.imageKey = `image:${src}`;
         imgElement.loading = 'lazy';
         imgElement.decoding = 'async';
+        imgElement.classList.add('image-pending');
 
         const observer = this.getLazyImageObserver();
         if (observer) {
