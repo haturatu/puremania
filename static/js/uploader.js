@@ -1,13 +1,58 @@
 // Resumable uploader: file bytes stay in the browser File object and each
 // request owns only one Blob slice. IndexedDB stores session metadata only.
 const CHUNK_SIZE = 8 * 1024 * 1024;
-const MAX_CONCURRENT_FILES = 3;
+const MIN_CONCURRENT_FILES = 2;
+// 1 Gbps / many 1 MiB objects benefits from overlapping request lifecycle
+// latency. AIMD normally settles below this ceiling when disk or network
+// contention appears.
+const MAX_CONCURRENT_FILES = 32;
 const MAX_RETRIES = 5;
+const PREPARE_BATCH_SIZE = 500;
 const DB_NAME = 'puremania-upload-sessions';
 const DB_STORE = 'sessions';
 
 const pause = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
+
+class AdaptiveUploadController {
+    constructor() {
+        this.target = MIN_CONCURRENT_FILES;
+        this.speedEWMA = 0;
+        this.lastDecisionSpeed = 0;
+        this.lastDecisionAt = performance.now();
+        this.serverCap = MAX_CONCURRENT_FILES;
+        this.congested = false;
+    }
+
+    record({ bytes, elapsed, queueDelay = 0, writeTime = 0, recommendation }) {
+        const speed = elapsed > 0 ? bytes / elapsed * 1000 : 0;
+        this.speedEWMA = this.speedEWMA ? this.speedEWMA * 0.75 + speed * 0.25 : speed;
+        if (recommendation > 0) this.serverCap = Math.max(MIN_CONCURRENT_FILES, Math.min(MAX_CONCURRENT_FILES, recommendation));
+        // Queueing longer than the write itself is a server-side congestion signal.
+        this.congested ||= queueDelay > 100 && queueDelay > writeTime;
+    }
+
+    recordFailure(status = 0) {
+        if (!status || status === 429 || status >= 500) this.congested = true;
+    }
+
+    adjust() {
+        const now = performance.now();
+        if (now - this.lastDecisionAt < 1500) return this.target;
+        const heap = performance.memory;
+        const memoryPressure = heap && heap.jsHeapSizeLimit > 0 && heap.usedJSHeapSize / heap.jsHeapSizeLimit > 0.80;
+        if (this.congested || memoryPressure) {
+            this.target = Math.max(MIN_CONCURRENT_FILES, Math.floor(this.target * 0.7));
+        } else if (this.target < Math.min(MAX_CONCURRENT_FILES, this.serverCap) &&
+                   (this.lastDecisionSpeed === 0 || this.speedEWMA >= this.lastDecisionSpeed * 1.07)) {
+            this.target++;
+        }
+        this.lastDecisionSpeed = this.speedEWMA;
+        this.lastDecisionAt = now;
+        this.congested = false;
+        return this.target;
+    }
+}
 
 class UploadSessionStore {
     async db() {
@@ -45,6 +90,7 @@ export class Uploader {
         this.activeUploadSession = null;
         this.store = new UploadSessionStore();
         this.progress = new Map();
+        this.uploadStats = null;
         this.resumeRequest = null;
         this.createResumeInputs();
     }
@@ -97,14 +143,19 @@ export class Uploader {
 
     async handleSelectedFileList(input) {
         if (!input.files?.length) return;
-        const files = Array.from(input.files, file => ({ file, relativePath: file.webkitRelativePath || file.name }));
+        const files = await this.createUploadItems(input.files);
         input.value = '';
         let destination = null;
         if (this.resumeRequest) {
             const request = this.resumeRequest;
             this.resumeRequest = null;
             destination = request.destination;
-            if (!files.some(item => this.fileKey(item, destination) === request.key)) {
+            let matchesRequestedFile = false;
+            for (let index = 0; index < files.length; index++) {
+                if (request.keys.has(this.fileKey(files[index], destination))) { matchesRequestedFile = true; break; }
+                if (index > 0 && index % PREPARE_BATCH_SIZE === 0) await yieldToBrowser();
+            }
+            if (!matchesRequestedFile) {
                 this.app.ui.showToast('Resume upload', 'Choose the original file or folder to resume this upload.', 'warning');
                 return;
             }
@@ -128,7 +179,13 @@ export class Uploader {
         area.addEventListener('dragenter', event => { event.preventDefault(); dragDepth++; area.classList.add('dragover'); });
         area.addEventListener('dragover', event => event.preventDefault());
         area.addEventListener('dragleave', event => { event.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; area.classList.remove('dragover'); } });
-        area.addEventListener('drop', event => { event.preventDefault(); dragDepth = 0; area.classList.remove('dragover'); void this.handleFileDrop(event); });
+        area.addEventListener('drop', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            dragDepth = 0;
+            area.classList.remove('dragover');
+            void this.handleFileDrop(event);
+        });
     }
 
     fileKey(item, destination) {
@@ -136,12 +193,40 @@ export class Uploader {
         return `${destination}|${relativePath}|${file.size}|${file.lastModified}`;
     }
 
+    async createUploadItems(fileList) {
+        const items = new Array(fileList.length);
+        for (let index = 0; index < fileList.length; index++) {
+            const file = fileList[index];
+            items[index] = { file, relativePath: file.webkitRelativePath || file.name };
+            if (index > 0 && index % PREPARE_BATCH_SIZE === 0) await yieldToBrowser();
+        }
+        return items;
+    }
+
+    async initializeUploadStats(items, session) {
+        let totalBytes = 0;
+        for (let index = 0; index < items.length; index++) {
+            totalBytes += items[index].file.size;
+            if (index > 0 && index % PREPARE_BATCH_SIZE === 0) {
+                this.ensureActive(session);
+                await yieldToBrowser();
+            }
+        }
+        this.uploadStats = { total: items.length, totalBytes, uploadedBytes: 0, completed: 0, failed: 0 };
+    }
+
     async requestResume(key) {
-        const record = await this.store.get(key);
-        if (!record) throw new Error('Saved upload session was not found');
-        this.resumeRequest = { key, destination: record.destination };
-        const isFolderUpload = record?.relativePath?.includes('/');
-        const input = document.querySelector(isFolderUpload ? '.resume-upload-input-folders' : '.resume-upload-input-files');
+        return this.requestResumeMany([key]);
+    }
+
+    async requestResumeMany(keys) {
+        const records = (await Promise.all(keys.map(key => this.store.get(key)))).filter(Boolean);
+        if (!records.length) throw new Error('Saved upload sessions were not found');
+        const destinations = new Set(records.map(record => record.destination));
+        if (destinations.size !== 1) throw new Error('Select uploads with the same destination to resume together');
+        const hasFolderUpload = records.some(record => record.relativePath.includes('/'));
+        this.resumeRequest = { keys: new Set(records.map(record => record.key)), destination: records[0].destination };
+        const input = document.querySelector(hasFolderUpload ? '.resume-upload-input-folders' : '.resume-upload-input-files');
         if (!input) throw new Error('Upload file selector is unavailable');
         input.click();
     }
@@ -223,9 +308,10 @@ export class Uploader {
         return state.uploadedBytes;
     }
 
-    sendChunk(record, blob, start, end, total, session, onProgress) {
+    sendChunk(record, blob, start, end, total, session, onProgress, controller) {
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
+            const startedAt = performance.now();
             const abort = () => xhr.abort();
             session.signal.addEventListener('abort', abort, { once: true });
             const cleanup = () => session.signal.removeEventListener('abort', abort);
@@ -233,10 +319,17 @@ export class Uploader {
             xhr.onload = () => {
                 cleanup();
                 if (xhr.status >= 200 && xhr.status < 400) {
+                    controller?.record({
+                        bytes: end - start + 1,
+                        elapsed: performance.now() - startedAt,
+                        queueDelay: Number(xhr.getResponseHeader('Upload-Queue-Delay')) || 0,
+                        writeTime: Number(xhr.getResponseHeader('Upload-Write-Time')) || 0,
+                        recommendation: Number(xhr.getResponseHeader('Upload-Recommend-Concurrency')) || 0
+                    });
                     try { resolve(JSON.parse(xhr.responseText)); } catch (_) { resolve({ uploadedBytes: end + 1 }); }
-                } else reject(new Error(`Chunk rejected (${xhr.status})`));
+                } else { controller?.recordFailure(xhr.status); reject(new Error(`Chunk rejected (${xhr.status})`)); }
             };
-            xhr.onerror = () => { cleanup(); reject(new Error('Network error while sending chunk')); };
+            xhr.onerror = () => { cleanup(); controller?.recordFailure(); reject(new Error('Network error while sending chunk')); };
             xhr.onabort = () => { cleanup(); reject(new DOMException('Upload interrupted', 'AbortError')); };
             if (!session.trackXhr(xhr)) { cleanup(); reject(new DOMException('Upload interrupted', 'AbortError')); return; }
             xhr.open('PUT', `${record.url}/chunks`);
@@ -246,7 +339,7 @@ export class Uploader {
         });
     }
 
-    async uploadFile(item, destination, session) {
+    async uploadFile(item, destination, session, controller) {
         const record = await this.getOrCreateRemoteSession(item, destination, session);
         let offset = record.uploadedBytes;
         this.setFileProgress(record.key, item, offset, 'Uploading');
@@ -258,7 +351,7 @@ export class Uploader {
                 try {
                     // Blob.slice is lazy; it does not load the complete file into JS memory.
                     const result = await this.sendChunk(record, item.file.slice(offset, end + 1), offset, end, item.file.size, session,
-                        uploaded => this.setFileProgress(record.key, item, uploaded, 'Uploading'));
+                        uploaded => this.setFileProgress(record.key, item, uploaded, 'Uploading'), controller);
                     offset = result.uploadedBytes ?? end + 1;
                     completed = true;
                 } catch (error) {
@@ -277,20 +370,24 @@ export class Uploader {
         await this.apiJSON(`${record.url}/complete`, { method: 'POST', signal: session.signal });
         try { await this.store.remove(record.key); this.notifyJobsChanged(); } catch (_) { /* optional */ }
         this.setFileProgress(record.key, item, item.file.size, 'Completed');
+        this.progress.delete(record.key);
     }
 
     setFileProgress(key, item, uploaded, state) {
-        this.progress.set(key, { name: item.relativePath, total: item.file.size, uploaded: Math.min(uploaded, item.file.size), state });
+        const previous = this.progress.get(key);
+        const current = Math.min(uploaded, item.file.size);
+        this.progress.set(key, { name: item.relativePath, total: item.file.size, uploaded: current, state });
+        if (this.uploadStats) this.uploadStats.uploadedBytes += current - (previous?.uploaded || 0);
         const values = [...this.progress.values()];
-        const total = values.reduce((sum, value) => sum + value.total, 0);
-        const done = values.reduce((sum, value) => sum + value.uploaded, 0);
-        const complete = values.filter(value => value.state === 'Completed').length;
+        const total = this.uploadStats?.totalBytes || values.reduce((sum, value) => sum + value.total, 0);
+        const done = this.uploadStats?.uploadedBytes || values.reduce((sum, value) => sum + value.uploaded, 0);
+        const complete = (this.uploadStats?.completed || 0) + (this.uploadStats?.failed || 0);
         const active = values.find(value => value.state !== 'Completed');
         this.app.progressManager.safeUpdateProgress({
             currentFile: active ? `${active.state}: ${active.name}` : 'Upload complete',
             percentage: total ? (done / total) * 100 : 100,
-            processed: complete, total: values.length,
-            status: `${complete}/${values.length} files · ${(done / (1024 * 1024)).toFixed(1)} / ${(total / (1024 * 1024)).toFixed(1)} MiB`
+            processed: complete, total: this.uploadStats?.total || values.length,
+            status: `${complete}/${this.uploadStats?.total || values.length} files · ${(done / (1024 * 1024)).toFixed(1)} / ${(total / (1024 * 1024)).toFixed(1)} MiB`
         });
     }
 
@@ -299,24 +396,35 @@ export class Uploader {
         const session = this.createUploadSession();
         this.activeUploadSession = session;
         this.app.progressManager.setCurrentUpload(session);
-        this.progress.clear();
         const destination = destinationOverride || this.app.router.getCurrentPath();
-        items.forEach(item => this.setFileProgress(this.fileKey(item, destination), item, 0, 'Queued'));
+        this.progress.clear();
         document.querySelector('.upload-area')?.classList.add('uploading');
         this.app.progressManager.show('Uploading files');
+        await this.initializeUploadStats(items, session);
         let cursor = 0, succeeded = 0, failed = 0;
-        const next = async () => {
-            while (true) {
-                this.ensureActive(session);
-                const index = cursor++;
-                if (index >= items.length) return;
-                try { await this.uploadFile(items[index], destination, session); succeeded++; }
-                catch (error) { if (this.isAbortError(error)) throw error; failed++; console.error('Upload failed', items[index].relativePath, error); this.setFileProgress(this.fileKey(items[index], destination), items[index], 0, 'Failed'); }
-                await yieldToBrowser();
-            }
+        const controller = new AdaptiveUploadController();
+        const inFlight = new Set();
+        const start = (item) => {
+            let task;
+            task = (async () => {
+                try { await this.uploadFile(item, destination, session, controller); succeeded++; this.uploadStats.completed++; }
+                catch (error) { if (this.isAbortError(error)) throw error; controller.recordFailure(error.status); failed++; this.uploadStats.failed++; console.error('Upload failed', item.relativePath, error); this.setFileProgress(this.fileKey(item, destination), item, 0, 'Failed'); this.progress.delete(this.fileKey(item, destination)); }
+                finally { inFlight.delete(task); }
+            })();
+            inFlight.add(task);
         };
         try {
-            await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_FILES, items.length) }, next));
+            while (cursor < items.length || inFlight.size) {
+                this.ensureActive(session);
+                const target = Math.min(items.length, controller.adjust());
+                while (cursor < items.length && inFlight.size < target) start(items[cursor++]);
+                if (inFlight.size) await Promise.race(inFlight);
+                await yieldToBrowser();
+            }
+            this.app.progressManager.safeUpdateProgress({
+                currentFile: 'Upload complete', percentage: 100, processed: succeeded + failed, total: items.length,
+                status: `${succeeded}/${items.length} files uploaded${failed ? `, ${failed} failed` : ''}`
+            });
             this.app.ui.showToast(failed ? 'Upload completed with errors' : 'Upload complete', `${succeeded} uploaded${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
             this.app.api.directoryEtags.delete(destination);
             if (this.app.router.getCurrentPath() === destination) await this.app.loadFiles(destination);
@@ -348,19 +456,29 @@ export class Uploader {
         let scanned = 0;
         const visit = async (entry, parent = '') => {
             if (entry.isFile) {
-                const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
-                files.push({ file, relativePath: parent + file.name });
+                const file = await new Promise(resolve => entry.file(resolve, () => resolve(null)));
+                if (file) files.push({ file, relativePath: parent + file.name });
             } else if (entry.isDirectory) {
                 const reader = entry.createReader();
                 while (true) {
-                    const entries = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+                    const entries = await new Promise(resolve => reader.readEntries(resolve, () => resolve([])));
                     if (!entries.length) break;
-                    for (const child of entries) { await visit(child, `${parent}${entry.name}/`); if (++scanned % 50 === 0) await yieldToBrowser(); }
+                    for (const child of entries) {
+                        await visit(child, `${parent}${entry.name}/`);
+                        if (++scanned % 50 === 0) await yieldToBrowser();
+                    }
                 }
             }
         };
-        if (dataTransfer.items) for (const item of dataTransfer.items) { const entry = item.webkitGetAsEntry?.(); if (entry) await visit(entry); }
-        else for (const file of dataTransfer.files) files.push({ file, relativePath: file.name });
+        const entries = dataTransfer.items ? [...dataTransfer.items]
+            .filter(item => item.kind === 'file').map(item => item.webkitGetAsEntry?.()).filter(Boolean) : [];
+        if (entries.length) {
+            // Each top-level directory is walked independently; readEntries is
+            // called until empty, as required by Chromium's directory API.
+            for (const entry of entries) await visit(entry);
+        } else {
+            for (const file of dataTransfer.files || []) files.push({ file, relativePath: file.webkitRelativePath || file.name });
+        }
         return files;
     }
 

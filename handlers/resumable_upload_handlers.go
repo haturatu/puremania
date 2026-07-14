@@ -227,6 +227,11 @@ func (h *Handler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 		writeUploadPosition(w, session, http.StatusConflict)
 		return
 	}
+	queueStart := time.Now()
+	h.uploadGate <- struct{}{}
+	queueDelay := time.Since(queueStart)
+	defer func() { <-h.uploadGate }()
+	writeStart := time.Now()
 	part, err := os.OpenFile(h.uploadTempPath(id), os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		h.respondError(w, "Cannot open upload data", http.StatusInternalServerError)
@@ -253,6 +258,16 @@ func (h *Handler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 	// Only evict data that has been durably flushed; a retry can always write a
 	// chunk again, but this avoids retaining multi-gigabyte page cache per upload.
 	releaseUploadRange(part, start, written)
+	writeTime := time.Since(writeStart)
+	// Telemetry is advisory: it lets clients distinguish disk contention from
+	// network saturation without coupling correctness to a specific algorithm.
+	w.Header().Set("Upload-Queue-Delay", strconv.FormatInt(queueDelay.Milliseconds(), 10))
+	w.Header().Set("Upload-Write-Time", strconv.FormatInt(writeTime.Milliseconds(), 10))
+	available := cap(h.uploadGate) - len(h.uploadGate) + 1
+	if available < 1 {
+		available = 1
+	}
+	w.Header().Set("Upload-Recommend-Concurrency", strconv.Itoa(available))
 	session.UploadedBytes += written
 	if err := h.writeUploadSession(session); err != nil {
 		h.respondError(w, "Cannot persist upload progress", http.StatusInternalServerError)
