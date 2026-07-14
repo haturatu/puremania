@@ -1,647 +1,372 @@
+// Resumable uploader: file bytes stay in the browser File object and each
+// request owns only one Blob slice. IndexedDB stores session metadata only.
+const CHUNK_SIZE = 8 * 1024 * 1024;
+const MAX_CONCURRENT_FILES = 3;
+const MAX_RETRIES = 5;
+const DB_NAME = 'puremania-upload-sessions';
+const DB_STORE = 'sessions';
+
+const pause = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
+
+class UploadSessionStore {
+    async db() {
+        if (this._db) return this._db;
+        this._db = await new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, 1);
+            request.onupgradeneeded = () => request.result.createObjectStore(DB_STORE, { keyPath: 'key' });
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+        return this._db;
+    }
+
+    async get(key) { return this.transaction('readonly', store => store.get(key)); }
+    async getAll() { return this.transaction('readonly', store => store.getAll()); }
+    async put(value) { return this.transaction('readwrite', store => store.put(value)); }
+    async remove(key) { return this.transaction('readwrite', store => store.delete(key)); }
+
+    async transaction(mode, action) {
+        const db = await this.db();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(DB_STORE, mode);
+            const request = action(tx.objectStore(DB_STORE));
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+}
+
 export class Uploader {
     constructor(app) {
         this.app = app;
         this._processingDrop = false;
         this.activeUploadSession = null;
+        this.store = new UploadSessionStore();
+        this.progress = new Map();
+        this.resumeRequest = null;
+        this.createResumeInputs();
     }
 
     createUploadSession() {
         const controller = new AbortController();
         const xhrs = new Set();
-        const session = {
+        return {
             signal: controller.signal,
             aborted: false,
             abort: () => {
-                if (session.aborted) return;
-                session.aborted = true;
+                if (controller.signal.aborted) return;
                 controller.abort();
                 xhrs.forEach(xhr => xhr.abort());
                 xhrs.clear();
             },
-            trackXhr: (xhr) => {
-                if (session.signal.aborted) {
-                    xhr.abort();
-                    return false;
-                }
+            trackXhr: xhr => {
+                if (controller.signal.aborted) { xhr.abort(); return false; }
                 xhrs.add(xhr);
-                xhr.addEventListener('loadend', () => {
-                    xhrs.delete(xhr);
-                }, { once: true });
+                xhr.addEventListener('loadend', () => xhrs.delete(xhr), { once: true });
                 return true;
             }
         };
-        return session;
     }
 
-    ensureUploadActive(session) {
-        if (!session || session.signal.aborted) {
-            throw new DOMException('Upload aborted', 'AbortError');
+    ensureActive(session) {
+        if (!session || session.signal.aborted) throw new DOMException('Upload interrupted', 'AbortError');
+    }
+
+    isAbortError(error) { return error?.name === 'AbortError'; }
+
+    notifyJobsChanged() { window.dispatchEvent(new CustomEvent('puremania:upload-jobs-changed')); }
+
+    showUploadDialog() { document.querySelector('.upload-input-files')?.click(); }
+
+    createResumeInputs() {
+        const create = (className, directory) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.hidden = true;
+            input.className = className;
+            if (directory) input.setAttribute('webkitdirectory', '');
+            input.addEventListener('change', () => { void this.handleSelectedFileList(input); });
+            document.body.appendChild(input);
+        };
+        create('resume-upload-input-files', false);
+        create('resume-upload-input-folders', true);
+    }
+
+    async handleSelectedFileList(input) {
+        if (!input.files?.length) return;
+        const files = Array.from(input.files, file => ({ file, relativePath: file.webkitRelativePath || file.name }));
+        input.value = '';
+        let destination = null;
+        if (this.resumeRequest) {
+            const request = this.resumeRequest;
+            this.resumeRequest = null;
+            destination = request.destination;
+            if (!files.some(item => this.fileKey(item, destination) === request.key)) {
+                this.app.ui.showToast('Resume upload', 'Choose the original file or folder to resume this upload.', 'warning');
+                return;
+            }
+            await this.discardWrongRouteDuplicates(files, destination);
         }
-    }
-
-    isAbortError(error) {
-        return error?.name === 'AbortError';
-    }
-
-    showUploadDialog() {
-        const uploadFilesInput = document.querySelector('.upload-input-files');
-        if (uploadFilesInput) {
-            uploadFilesInput.click();
-        } else {
-            console.error("Upload file input not found.");
-            this.app.ui.showToast('Error', 'Could not initiate upload. Input not found.', 'error');
-        }
+        await this.handleFileUpload(files, destination);
     }
 
     bindUploadEvents() {
-        const uploadArea = document.querySelector('.upload-area');
-        if (!uploadArea) return;
-
-        const uploadFilesInput = uploadArea.querySelector('.upload-input-files');
-        const uploadFoldersInput = uploadArea.querySelector('.upload-input-folders');
-        const btnSelectFiles = uploadArea.querySelector('.btn-select-files');
-        const btnSelectFolders = uploadArea.querySelector('.btn-select-folders');
-
-        const handleFiles = (files, isFolder = false) => {
-            if (files && files.length > 0) {
-                this.app.progressManager.show('Processing Files');
-                this.app.progressManager.safeUpdateProgress({
-                    currentFile: 'Preparing files...',
-                    percentage: 0,
-                    processed: 0,
-                    total: files.length,
-                    status: `Processing ${files.length} files`
-                });
-
-                const hasFolderStructure = !!files[0].webkitRelativePath;
-                if (hasFolderStructure || isFolder) {
-                    const folderName = files[0].webkitRelativePath ? 
-                        files[0].webkitRelativePath.split('/')[0] : 
-                        'selected folder';
-                    this.app.ui.showToast('Info', `Uploading folder: ${folderName}`, 'info');
-                }
-                
-                return this.handleFileUpload(files);
-            }
-            return Promise.resolve();
-        };
-
-        uploadFilesInput.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files.length > 0) {
-                const files = Array.from(e.target.files);
-                e.target.value = '';
-                handleFiles(files, false);
-            }
-        });
-
-        uploadFoldersInput.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files.length > 0) {
-                const files = Array.from(e.target.files);
-                e.target.value = '';
-                handleFiles(files, true);
-            }
-        });
-
-        btnSelectFiles.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            uploadFilesInput.click();
-        });
-        
-        btnSelectFolders.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            uploadFoldersInput.click();
-        });
-
-        let dragCounter = 0;
-        uploadArea.addEventListener('dragenter', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dragCounter++;
-            uploadArea.classList.add('dragover');
-        });
-        
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-        });
-        
-        uploadArea.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dragCounter--;
-            if (dragCounter <= 0) {
-                dragCounter = 0;
-                uploadArea.classList.remove('dragover');
-            }
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dragCounter = 0;
-            uploadArea.classList.remove('dragover');
-            
-            if (e.target.closest('.upload-area')) {
-                this.handleFileDrop(e);
-            }
-        });
+        const area = document.querySelector('.upload-area');
+        if (!area) return;
+        const filesInput = area.querySelector('.upload-input-files');
+        const foldersInput = area.querySelector('.upload-input-folders');
+        const selectFiles = area.querySelector('.btn-select-files');
+        const selectFolders = area.querySelector('.btn-select-folders');
+        filesInput.addEventListener('change', () => { void this.handleSelectedFileList(filesInput); });
+        foldersInput.addEventListener('change', () => { void this.handleSelectedFileList(foldersInput); });
+        selectFiles.addEventListener('click', event => { event.preventDefault(); filesInput.click(); });
+        selectFolders.addEventListener('click', event => { event.preventDefault(); foldersInput.click(); });
+        let dragDepth = 0;
+        area.addEventListener('dragenter', event => { event.preventDefault(); dragDepth++; area.classList.add('dragover'); });
+        area.addEventListener('dragover', event => event.preventDefault());
+        area.addEventListener('dragleave', event => { event.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; area.classList.remove('dragover'); } });
+        area.addEventListener('drop', event => { event.preventDefault(); dragDepth = 0; area.classList.remove('dragover'); void this.handleFileDrop(event); });
     }
 
-    async handleFileUpload(files) {
-        if (!files || files.length === 0) return;
-        const uploadSession = this.createUploadSession();
-        const inFlight = [];
-        this.activeUploadSession = uploadSession;
-        this.app.progressManager.setCurrentUpload(uploadSession);
-    
-        try {
-            if (!this.app.progressManager.progressOverlay ||
-                this.app.progressManager.progressOverlay.style.display === 'none') {
-                this.app.progressManager.show('Uploading Files');
-            }
-    
-            this.app.progressManager.safeUpdateProgress({
-                currentFile: 'Preparing parallel batch upload...',
-                percentage: 0,
-                processed: 0,
-                total: files.length,
-                status: `Preparing ${files.length} files for parallel processing`
-            });
-    
-            const uploadArea = document.querySelector('.upload-area');
-            if (uploadArea) uploadArea.classList.add('uploading');
-    
-            const BATCH_SIZE = 50;
-            const MAX_PARALLEL_BATCHES = 5;
-            const batches = [];
-    
-            for (let i = 0; i < files.length; i += BATCH_SIZE) {
-                batches.push(Array.from(files).slice(i, i + BATCH_SIZE));
-            }
-    
-            let totalProcessed = 0;
-            let totalSuccessful = 0;
-            let totalFailed = 0;
-    
-            let batchIndex = 0;
-    
-            while (batchIndex < batches.length || inFlight.length > 0) {
-                this.ensureUploadActive(uploadSession);
+    fileKey(item, destination) {
+        const { file, relativePath } = item;
+        return `${destination}|${relativePath}|${file.size}|${file.lastModified}`;
+    }
 
-                while (batchIndex < batches.length && inFlight.length < MAX_PARALLEL_BATCHES) {
-                    this.ensureUploadActive(uploadSession);
-                    const currentBatchIndex = batchIndex;
-                    const batch = batches[currentBatchIndex];
-    
-                    this.app.progressManager.safeUpdateProgress({
-                        currentFile: `Starting batch ${currentBatchIndex + 1}/${batches.length}...`,
-                        percentage: (totalProcessed / files.length) * 90,
-                        processed: totalProcessed,
-                        total: files.length,
-                        status: `Batch ${currentBatchIndex + 1}/${batches.length}: ${batch.length} files`
-                    });
-    
-                    const promise = this.uploadBatch(batch, currentBatchIndex + 1, batches.length, uploadSession)
-                        .then(result => {
-                            this.ensureUploadActive(uploadSession);
-                            totalSuccessful += result.successful;
-                            totalFailed += result.failed;
-                            totalProcessed += batch.length;
-    
-                            this.app.progressManager.safeUpdateProgress({
-                                currentFile: `Batch ${currentBatchIndex + 1} completed`,
-                                percentage: (totalProcessed / files.length) * 90,
-                                processed: totalProcessed,
-                                total: files.length,
-                                status: `Completed: ${totalSuccessful} successful, ${totalFailed} failed`
-                            });
-                        })
-                        .catch(error => {
-                            if (this.isAbortError(error)) {
-                                throw error;
-                            }
-                            console.error(`Batch ${currentBatchIndex + 1} failed:`, error);
-                            totalFailed += batch.length;
-                            totalProcessed += batch.length;
-    
-                            this.app.progressManager.safeUpdateProgress({
-                                currentFile: `Batch ${currentBatchIndex + 1} failed`,
-                                percentage: (totalProcessed / files.length) * 90,
-                                processed: totalProcessed,
-                                total: files.length,
-                                status: `Batch error occurred, continuing...`
-                            });
-                        })
-                        .finally(() => {
-                            const idx = inFlight.indexOf(promise);
-                            if (idx > -1) inFlight.splice(idx, 1);
-                        });
-    
-                    inFlight.push(promise);
-                    batchIndex++;
-                }
+    async requestResume(key) {
+        const record = await this.store.get(key);
+        if (!record) throw new Error('Saved upload session was not found');
+        this.resumeRequest = { key, destination: record.destination };
+        const isFolderUpload = record?.relativePath?.includes('/');
+        const input = document.querySelector(isFolderUpload ? '.resume-upload-input-folders' : '.resume-upload-input-files');
+        if (!input) throw new Error('Upload file selector is unavailable');
+        input.click();
+    }
 
-                await Promise.race(inFlight);
+    async listJobs() {
+        let records = [];
+        try { records = await this.store.getAll(); } catch (_) { return []; }
+        // /system/uploads is a client-side route, not a writable virtual path.
+        // Remove sessions created by the pre-fix resume flow so they cannot
+        // continue as duplicate uploads or remain misleading in this list.
+        const invalidRouteRecords = records.filter(record => record.destination === '/system/uploads');
+        if (invalidRouteRecords.length) {
+            await Promise.all(invalidRouteRecords.map(record => this.discardJob(record.key)));
+            records = records.filter(record => record.destination !== '/system/uploads');
+        }
+        const jobs = await Promise.all(records.map(async record => {
+            try {
+                const status = await this.apiJSON(record.url);
+                const active = this.activeUploadSession && this.progress.has(record.key);
+                return { ...record, uploadedBytes: status.uploadedBytes, totalBytes: status.totalBytes, completed: status.completed, state: status.completed ? 'completed' : active ? 'active' : 'paused' };
+            } catch (error) {
+                if (error.status === 404) { await this.store.remove(record.key); return null; }
+                return { ...record, uploadedBytes: record.uploadedBytes || 0, totalBytes: record.size, state: 'offline' };
             }
+        }));
+        return jobs.filter(Boolean);
+    }
 
-            this.ensureUploadActive(uploadSession);
-    
-            const finalResult = {
-                successful: totalSuccessful,
-                failedCount: totalFailed,
-                total: files.length,
-                message: `Parallel batch upload completed: ${totalSuccessful} files uploaded successfully`
+    async discardJob(key) {
+        const record = await this.store.get(key);
+        if (!record) return;
+        try { await fetch(record.url, { method: 'DELETE' }); } finally { await this.store.remove(key); this.notifyJobsChanged(); }
+    }
+
+    async discardWrongRouteDuplicates(items, destination) {
+        if (destination === '/system/uploads') return;
+        let records;
+        try { records = await this.store.getAll(); } catch (_) { return; }
+        const wrongKeys = new Set(items.map(item => this.fileKey(item, '/system/uploads')));
+        const wrong = records.filter(record => record.destination === '/system/uploads' && wrongKeys.has(record.key));
+        await Promise.all(wrong.map(record => this.discardJob(record.key)));
+    }
+
+    async apiJSON(url, options = {}) {
+        const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
+        if (!response.ok) {
+            const error = new Error((await response.json().catch(() => ({}))).message || `Request failed (${response.status})`);
+            error.status = response.status;
+            throw error;
+        }
+        return response.json();
+    }
+
+    async getOrCreateRemoteSession(item, destination, session) {
+        const key = this.fileKey(item, destination);
+        let saved;
+        try { saved = await this.store.get(key); } catch (error) { console.warn('IndexedDB unavailable; upload cannot survive reload', error); }
+        if (saved) {
+            try {
+                const status = await this.apiJSON(saved.url, { signal: session.signal });
+                if (!status.completed && status.totalBytes === item.file.size) return { key, ...saved, uploadedBytes: status.uploadedBytes };
+                if (status.completed) await this.store.remove(key);
+            } catch (error) {
+                if (this.isAbortError(error)) throw error;
+                if (error.status === 404) try { await this.store.remove(key); } catch (_) { /* storage is optional */ }
+            }
+        }
+        const created = await this.apiJSON('/api/files/upload-sessions', {
+            method: 'POST', signal: session.signal,
+            body: JSON.stringify({ path: destination, relativePath: item.relativePath, size: item.file.size })
+        });
+        const record = { key, id: created.uploadId, url: created.uploadURL, destination, relativePath: item.relativePath, size: item.file.size, updatedAt: Date.now() };
+        try { await this.store.put(record); this.notifyJobsChanged(); } catch (_) { /* upload itself must still work */ }
+        return { ...record, uploadedBytes: created.uploadedBytes || 0 };
+    }
+
+    async queryPosition(record, session) {
+        const state = await this.apiJSON(record.url, { signal: session.signal });
+        return state.uploadedBytes;
+    }
+
+    sendChunk(record, blob, start, end, total, session, onProgress) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            const abort = () => xhr.abort();
+            session.signal.addEventListener('abort', abort, { once: true });
+            const cleanup = () => session.signal.removeEventListener('abort', abort);
+            xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress(start + event.loaded); };
+            xhr.onload = () => {
+                cleanup();
+                if (xhr.status >= 200 && xhr.status < 400) {
+                    try { resolve(JSON.parse(xhr.responseText)); } catch (_) { resolve({ uploadedBytes: end + 1 }); }
+                } else reject(new Error(`Chunk rejected (${xhr.status})`));
             };
-    
-            this.app.progressManager.safeUpdateProgress({
-                currentFile: 'Parallel upload complete!',
-                percentage: 100,
-                processed: totalSuccessful,
-                total: files.length,
-                status: `Completed: ${totalSuccessful} successful${totalFailed > 0 ? `, ${totalFailed} failed` : ''}`
-            });
-    
-            if (totalFailed > 0) {
-                this.app.ui.showToast('Upload Complete',
-                    `${finalResult.message}, ${totalFailed} failed`,
-                    'warning');
-            } else {
-                this.app.ui.showToast('Success', finalResult.message, 'success');
-            }
-    
-            this.showUploadCompleteDialog(finalResult).then(() => {
-                this.app.progressManager.hide();
-                const currentPath = this.app.router.getCurrentPath();
-                this.app.api.directoryEtags.delete(currentPath); // Invalidate ETag
-                this.app.loadFiles(currentPath);
-            });
-    
-        } catch (error) {
-            if (this.isAbortError(error) || uploadSession.signal.aborted) {
-                await Promise.allSettled(inFlight);
-                this.app.progressManager.hide();
-                this.app.ui.showToast('Info', 'Upload canceled', 'info');
-                return;
-            }
-            console.error('Error in parallel batch upload:', error);
-            this.handleUploadError('Parallel batch upload failed: ' + error.message);
-        } finally {
-            const uploadArea = document.querySelector('.upload-area');
-            if (uploadArea) uploadArea.classList.remove('uploading');
-            if (this.activeUploadSession === uploadSession) {
-                this.activeUploadSession = null;
-            }
-            if (this.app.progressManager.currentUpload === uploadSession) {
-                this.app.progressManager.setCurrentUpload(null);
-            }
-        }
-    }
-
-    async uploadBatch(batchFiles, batchNumber, totalBatches, uploadSession) {
-        const CONCURRENT_UPLOADS = 50;
-        let completedFiles = 0;
-        let successfulFiles = 0;
-        let failedFiles = 0;
-
-        const processFileChunk = async (fileChunk) => {
-            const uploadPromises = fileChunk.map((file) => {
-                return new Promise((fileResolve, fileReject) => {
-                    this.ensureUploadActive(uploadSession);
-
-                    const formData = new FormData();
-                    formData.append('path', this.app.router.getCurrentPath());
-                    formData.append('file', file);
-
-                    const relativePath = file.webkitRelativePath || file.name;
-                    formData.append('relativePath[]', relativePath);
-
-                    const xhr = new XMLHttpRequest();
-                    const handleAbort = () => {
-                        xhr.abort();
-                    };
-                    const cleanupAbortListener = () => {
-                        uploadSession.signal.removeEventListener('abort', handleAbort);
-                    };
-
-                    xhr.upload.addEventListener('progress', (e) => {
-                        if (e.lengthComputable) {
-                            const fileProgress = (e.loaded / e.total) * 100;
-                            const overallProgress = ((batchNumber - 1) / totalBatches) * 90 +
-                                ((completedFiles + (fileProgress / 100)) / batchFiles.length) * (90 / totalBatches);
-
-                            this.app.progressManager.safeUpdateProgress({
-                                currentFile: `Batch ${batchNumber}: Uploading ${file.name} (${Math.round(fileProgress)}%)`,
-                                percentage: overallProgress,
-                                processed: completedFiles,
-                                total: batchFiles.length,
-                                status: `Batch ${batchNumber}/${totalBatches}: ${completedFiles}/${batchFiles.length} completed`
-                            });
-                        }
-                    });
-
-                    xhr.addEventListener('load', () => {
-                        completedFiles++;
-
-                        if (xhr.status >= 200 && xhr.status < 300) {
-                            try {
-                                const response = JSON.parse(xhr.responseText);
-                                if (response.success || (response.data && response.data.successful > 0)) {
-                                    successfulFiles++;
-                                } else {
-                                    failedFiles++;
-                                }
-                            } catch (_) {
-                                failedFiles++;
-                            }
-                        } else {
-                            failedFiles++;
-                        }
-
-                        cleanupAbortListener();
-                        fileResolve();
-                    });
-
-                    xhr.addEventListener('error', () => {
-                        cleanupAbortListener();
-                        completedFiles++;
-                        failedFiles++;
-                        fileResolve();
-                    });
-
-                    xhr.addEventListener('timeout', () => {
-                        cleanupAbortListener();
-                        completedFiles++;
-                        failedFiles++;
-                        fileResolve();
-                    });
-
-                    xhr.addEventListener('abort', () => {
-                        cleanupAbortListener();
-                        fileReject(new DOMException('Upload aborted', 'AbortError'));
-                    });
-
-                    uploadSession.signal.addEventListener('abort', handleAbort, { once: true });
-                    if (!uploadSession.trackXhr(xhr)) {
-                        cleanupAbortListener();
-                        fileReject(new DOMException('Upload aborted', 'AbortError'));
-                        return;
-                    }
-
-                    xhr.open('POST', '/api/files/upload');
-                    xhr.send(formData);
-                });
-            });
-
-            await Promise.all(uploadPromises);
-        };
-
-        const chunks = [];
-        for (let i = 0; i < batchFiles.length; i += CONCURRENT_UPLOADS) {
-            chunks.push(batchFiles.slice(i, i + CONCURRENT_UPLOADS));
-        }
-
-        for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-            this.ensureUploadActive(uploadSession);
-            const chunk = chunks[chunkIndex];
-
-            this.app.progressManager.safeUpdateProgress({
-                currentFile: `Batch ${batchNumber}: Processing chunk ${chunkIndex + 1}/${chunks.length}`,
-                percentage: ((batchNumber - 1) / totalBatches) * 90 + (chunkIndex / chunks.length) * (90 / totalBatches),
-                processed: completedFiles,
-                total: batchFiles.length,
-                status: `Batch ${batchNumber}/${totalBatches}: Starting parallel uploads`
-            });
-
-            await processFileChunk(chunk);
-
-            if (chunkIndex < chunks.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-        }
-
-        this.app.progressManager.safeUpdateProgress({
-            currentFile: `Batch ${batchNumber} completed`,
-            percentage: (batchNumber / totalBatches) * 90,
-            processed: completedFiles,
-            total: batchFiles.length,
-            status: `Batch ${batchNumber} completed: ${successfulFiles} successful, ${failedFiles} failed`
+            xhr.onerror = () => { cleanup(); reject(new Error('Network error while sending chunk')); };
+            xhr.onabort = () => { cleanup(); reject(new DOMException('Upload interrupted', 'AbortError')); };
+            if (!session.trackXhr(xhr)) { cleanup(); reject(new DOMException('Upload interrupted', 'AbortError')); return; }
+            xhr.open('PUT', `${record.url}/chunks`);
+            xhr.setRequestHeader('Content-Range', `bytes ${start}-${end}/${total}`);
+            xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+            xhr.send(blob);
         });
-
-        return {
-            successful: successfulFiles,
-            failed: failedFiles,
-        };
     }
 
-    handleUploadError(message) {
-        const uploadArea = document.querySelector('.upload-area');
-        if (uploadArea) {
-            uploadArea.classList.remove('uploading');
-        }
-        
-        this.app.progressManager.showError(message);
-        this.app.ui.showToast('Error', message, 'error');
-        
-        setTimeout(() => {
-            this.app.progressManager.hide();
-        }, 5000);
-    }
-
-    async handleFileDrop(e) {
-        if (this._processingDrop) {
-            return;
-        }
-        this._processingDrop = true;
-        
-        try {
-            e.preventDefault();
-            
-            this.app.progressManager.show('Processing Files');
-            this.app.progressManager.safeUpdateProgress({
-                currentFile: 'Analyzing dropped items...',
-                percentage: 0,
-                processed: 0,
-                total: 0,
-                status: 'Scanning files and folders'
-            });
-    
-            const allFiles = await this.processDroppedItems(e.dataTransfer);
-            
-            if (allFiles.length > 0) {
-                this.app.progressManager.safeUpdateProgress({
-                    currentFile: 'Starting upload...',
-                    percentage: 0,
-                    processed: 0,
-                    total: allFiles.length,
-                    status: `Found ${allFiles.length} files to upload`
-                });
-                
-                await this.handleFileUpload(allFiles);
-            } else {
-                this.app.progressManager.hide();
-                this.app.ui.showToast('Info', 'No files found to upload', 'info');
+    async uploadFile(item, destination, session) {
+        const record = await this.getOrCreateRemoteSession(item, destination, session);
+        let offset = record.uploadedBytes;
+        this.setFileProgress(record.key, item, offset, 'Uploading');
+        while (offset < item.file.size) {
+            this.ensureActive(session);
+            const end = Math.min(offset + CHUNK_SIZE, item.file.size) - 1;
+            let completed = false;
+            for (let attempt = 0; attempt < MAX_RETRIES && !completed; attempt++) {
+                try {
+                    // Blob.slice is lazy; it does not load the complete file into JS memory.
+                    const result = await this.sendChunk(record, item.file.slice(offset, end + 1), offset, end, item.file.size, session,
+                        uploaded => this.setFileProgress(record.key, item, uploaded, 'Uploading'));
+                    offset = result.uploadedBytes ?? end + 1;
+                    completed = true;
+                } catch (error) {
+                    if (this.isAbortError(error)) throw error;
+                    try { offset = await this.queryPosition(record, session); } catch (statusError) {
+                        if (this.isAbortError(statusError)) throw statusError;
+                    }
+                    if (offset > end) { completed = true; break; }
+                    if (attempt === MAX_RETRIES - 1) throw error;
+                    this.setFileProgress(record.key, item, offset, `Retrying in ${2 ** attempt}s`);
+                    await pause((2 ** attempt) * 1000 + Math.floor(Math.random() * 250));
+                }
             }
-        } catch (error) {
-            console.error('Error processing dropped items:', error);
-            this.app.progressManager.showError('Failed to process dropped items');
-        } finally {
-            this._processingDrop = false;
+            try { await this.store.put({ ...record, uploadedBytes: offset, updatedAt: Date.now() }); this.notifyJobsChanged(); } catch (_) { /* optional */ }
         }
+        await this.apiJSON(`${record.url}/complete`, { method: 'POST', signal: session.signal });
+        try { await this.store.remove(record.key); this.notifyJobsChanged(); } catch (_) { /* optional */ }
+        this.setFileProgress(record.key, item, item.file.size, 'Completed');
+    }
+
+    setFileProgress(key, item, uploaded, state) {
+        this.progress.set(key, { name: item.relativePath, total: item.file.size, uploaded: Math.min(uploaded, item.file.size), state });
+        const values = [...this.progress.values()];
+        const total = values.reduce((sum, value) => sum + value.total, 0);
+        const done = values.reduce((sum, value) => sum + value.uploaded, 0);
+        const complete = values.filter(value => value.state === 'Completed').length;
+        const active = values.find(value => value.state !== 'Completed');
+        this.app.progressManager.safeUpdateProgress({
+            currentFile: active ? `${active.state}: ${active.name}` : 'Upload complete',
+            percentage: total ? (done / total) * 100 : 100,
+            processed: complete, total: values.length,
+            status: `${complete}/${values.length} files · ${(done / (1024 * 1024)).toFixed(1)} / ${(total / (1024 * 1024)).toFixed(1)} MiB`
+        });
+    }
+
+    async handleFileUpload(items, destinationOverride = null) {
+        if (!items?.length) return;
+        const session = this.createUploadSession();
+        this.activeUploadSession = session;
+        this.app.progressManager.setCurrentUpload(session);
+        this.progress.clear();
+        const destination = destinationOverride || this.app.router.getCurrentPath();
+        items.forEach(item => this.setFileProgress(this.fileKey(item, destination), item, 0, 'Queued'));
+        document.querySelector('.upload-area')?.classList.add('uploading');
+        this.app.progressManager.show('Uploading files');
+        let cursor = 0, succeeded = 0, failed = 0;
+        const next = async () => {
+            while (true) {
+                this.ensureActive(session);
+                const index = cursor++;
+                if (index >= items.length) return;
+                try { await this.uploadFile(items[index], destination, session); succeeded++; }
+                catch (error) { if (this.isAbortError(error)) throw error; failed++; console.error('Upload failed', items[index].relativePath, error); this.setFileProgress(this.fileKey(items[index], destination), items[index], 0, 'Failed'); }
+                await yieldToBrowser();
+            }
+        };
+        try {
+            await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_FILES, items.length) }, next));
+            this.app.ui.showToast(failed ? 'Upload completed with errors' : 'Upload complete', `${succeeded} uploaded${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
+            this.app.api.directoryEtags.delete(destination);
+            if (this.app.router.getCurrentPath() === destination) await this.app.loadFiles(destination);
+        } catch (error) {
+            if (this.isAbortError(error)) this.app.ui.showToast('Upload paused', 'Progress has been saved. Select the same files again to resume.', 'info');
+            else this.handleUploadError(error.message);
+        } finally {
+            document.querySelector('.upload-area')?.classList.remove('uploading');
+            if (this.activeUploadSession === session) this.activeUploadSession = null;
+            if (this.app.progressManager.currentUpload === session) this.app.progressManager.setCurrentUpload(null);
+            this.notifyJobsChanged();
+        }
+    }
+
+    async handleFileDrop(event) {
+        if (this._processingDrop) return;
+        this._processingDrop = true;
+        try {
+            this.app.progressManager.show('Scanning dropped files');
+            const items = await this.processDroppedItems(event.dataTransfer);
+            if (items.length) await this.handleFileUpload(items);
+            else { this.app.progressManager.hide(); this.app.ui.showToast('Info', 'No files found to upload', 'info'); }
+        } catch (error) { this.handleUploadError('Failed to scan dropped items: ' + error.message); }
+        finally { this._processingDrop = false; }
     }
 
     async processDroppedItems(dataTransfer) {
-        const allFiles = [];
-        const processingPromises = [];
-    
-        if (dataTransfer.items) {
-            for (let i = 0; i < dataTransfer.items.length; i++) {
-                const item = dataTransfer.items[i];
-                if (item.kind === 'file') {
-                    const entry = item.webkitGetAsEntry();
-                    if (entry) {
-                        processingPromises.push(this.processEntry(entry, ''));
-                    }
+        const files = [];
+        let scanned = 0;
+        const visit = async (entry, parent = '') => {
+            if (entry.isFile) {
+                const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+                files.push({ file, relativePath: parent + file.name });
+            } else if (entry.isDirectory) {
+                const reader = entry.createReader();
+                while (true) {
+                    const entries = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+                    if (!entries.length) break;
+                    for (const child of entries) { await visit(child, `${parent}${entry.name}/`); if (++scanned % 50 === 0) await yieldToBrowser(); }
                 }
             }
-        } else {
-            for (let i = 0; i < dataTransfer.files.length; i++) {
-                allFiles.push(dataTransfer.files[i]);
-            }
-        }
-    
-        if (processingPromises.length > 0) {
-            const results = await Promise.all(processingPromises);
-            results.forEach(files => {
-                allFiles.push(...files);
-            });
-        }
-    
-        this.app.progressManager.safeUpdateProgress({
-            currentFile: 'Scan complete',
-            percentage: 10,
-            processed: 0,
-            total: allFiles.length,
-            status: `Ready to upload ${allFiles.length} files`
-        });
-    
-        return allFiles;
+        };
+        if (dataTransfer.items) for (const item of dataTransfer.items) { const entry = item.webkitGetAsEntry?.(); if (entry) await visit(entry); }
+        else for (const file of dataTransfer.files) files.push({ file, relativePath: file.name });
+        return files;
     }
 
-    async processEntry(entry, basePath = '') {
-        const files = [];
-        
-        if (entry.isFile) {
-            return new Promise((resolve) => {
-                entry.file((file) => {
-                    const relativePath = basePath + file.name;
-                    Object.defineProperty(file, 'webkitRelativePath', {
-                        value: relativePath,
-                        configurable: true
-                    });
-                    resolve([file]);
-                }, () => {
-                    resolve([]);
-                });
-            });
-        } else if (entry.isDirectory) {
-            return new Promise((resolve) => {
-                const reader = entry.createReader();
-                
-                const readAllEntries = async () => {
-                    const allEntries = [];
-                    
-                    const readBatch = () => {
-                        return new Promise((resolveBatch) => {
-                            reader.readEntries((entries) => {
-                                if (entries.length === 0) {
-                                    resolveBatch(allEntries);
-                                } else {
-                                    allEntries.push(...entries);
-                                    readBatch().then(resolveBatch);
-                                }
-                            }, () => {
-                                resolveBatch(allEntries);
-                            });
-                        });
-                    };
-                    
-                    return readBatch();
-                };
-                
-                readAllEntries().then(async (entries) => {
-                    const subPromises = entries.map(subEntry => 
-                        this.processEntry(subEntry, basePath + entry.name + '/')
-                    );
-                    
-                    try {
-                        const results = await Promise.all(subPromises);
-                        const flatFiles = results.flat();
-                        resolve(flatFiles);
-                    } catch {
-                        resolve([]);
-                    }
-                });
-            });
-        }
-        
-        return [];
-    }
-    
-    showUploadCompleteDialog(result) {
-        return new Promise((resolve) => {
-            const progressOverlay = this.app.progressManager.progressOverlay;
-            if (!progressOverlay) {
-                resolve();
-                return;
-            }
-            
-            const modal = progressOverlay.querySelector('.progress-modal');
-            const statusElement = progressOverlay.querySelector('.progress-status');
-            const closeBtn = progressOverlay.querySelector('.progress-close');
-            
-            if (statusElement) {
-                if (result.failedCount > 0) {
-                    statusElement.innerHTML = `
-                        Upload completed with ${result.failedCount} errors.<br>
-                        <strong>Click close to continue</strong>
-                    `;
-                    statusElement.style.color = 'var(--warning, #ff9800)';
-                } else {
-                    statusElement.innerHTML = `
-                        All files uploaded successfully!<br>
-                        <strong>Click close to continue</strong>
-                    `;
-                    statusElement.style.color = 'var(--success, #4caf50)';
-                }
-            }
-            
-            if (modal) {
-                modal.style.border = result.failedCount > 0 ? 
-                    '2px solid var(--warning, #ff9800)' : 
-                    '2px solid var(--success, #4caf50)';
-            }
-            
-            if (closeBtn) {
-                closeBtn.style.display = 'block';
-                closeBtn.style.background = result.failedCount > 0 ? 
-                    'var(--warning, #ff9800)' : 
-                    'var(--success, #4caf50)';
-                closeBtn.style.color = 'white';
-                closeBtn.style.fontWeight = 'bold';
-                
-                const newCloseBtn = closeBtn.cloneNode(true);
-                closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
-                
-                newCloseBtn.addEventListener('click', () => {
-                    resolve();
-                });
-            }
-            
-            setTimeout(() => {
-                resolve();
-            }, 10000);
-        });
+    handleUploadError(message) {
+        console.error(message);
+        this.app.progressManager.showError(message);
+        this.app.ui.showToast('Upload error', message, 'error');
     }
 }

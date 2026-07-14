@@ -257,7 +257,8 @@ The following environment variables can be configured in the `.env` file:
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------- |  
 | `STORAGE_DIR`      | The main storage directory for your files.                                                                                                             | `/home/$USER`        |  
 | `MOUNT_DIRS`       | Comma-separated list of additional directories to mount.                                                                                               | (empty)              |  
-| `MAX_FILE_SIZE_MB` | Maximum file size for uploads in megabytes.                                                                                                            | `10000`              |  
+| `MAX_FILE_SIZE_MB` | Maximum file size for uploads in megabytes.                                                                                                            | `102400`             |
+| `UPLOAD_SESSION_TTL_HOURS` | Hours that an interrupted resumable-upload session is retained for resumption.                                                              | `168`                |
 | `PORT`             | The port on which the server will run.                                                                                                                 | `8844`               |  
 | `ZIP_TIMEOUT`      | Timeout in seconds for ZIP file creation.                                                                                                              | `300`                |  
 | `MAX_ZIP_SIZE`     | Maximum size in MB for files to be zipped.                                                                                                             | `1024`               |
@@ -326,7 +327,12 @@ This command will:
 Pure Mania exposes the following RESTful API endpoints under the `/api` prefix:  
   
 - `GET    /files`: List files and directories in a given path.  
-- `POST   /files/upload`: Upload a file to a specific path.  
+- `POST   /files/upload`: Legacy multipart upload endpoint (kept for API compatibility).
+- `POST   /files/upload-sessions`: Create a resumable upload session. Returns the session URL in `Location`.
+- `PUT    /files/upload-sessions/{id}/chunks`: Stream exactly one `Content-Range` chunk to a session.
+- `GET    /files/upload-sessions/{id}`: Retrieve durable received-byte progress for resumption.
+- `POST   /files/upload-sessions/{id}/complete`: Atomically finalize a fully received upload.
+- `DELETE /files/upload-sessions/{id}`: Permanently discard an abandoned upload session.
 - `GET    /files/download`: Download a single file.  
 - `GET    /files/content`: Get the content of a text-based file.  
 - `POST   /files/download-zip`: Create and download a ZIP archive of multiple files.  

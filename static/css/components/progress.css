@@ -5,9 +5,11 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.7);
-    align-items: center;
-    justify-content: center;
+    background: transparent;
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 20px;
+    pointer-events: none;
     z-index: 2000;
     display: none;
 }
@@ -19,7 +21,32 @@
     padding: 20px;
     min-width: 300px;
     max-width: 500px;
+    width: min(500px, calc(100vw - 40px));
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    pointer-events: auto;
 }
+
+.progress-actions { display: flex; gap: 4px; }
+.progress-minimize,
+.progress-close {
+    min-width: 28px;
+    min-height: 28px;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.upload-minimized { display: none; pointer-events: auto; }
+.upload-restore {
+    background: var(--accent-primary);
+    color: white;
+    border: 0;
+    border-radius: 20px;
+    padding: 10px 15px;
+    cursor: pointer;
+    box-shadow: 0 5px 16px rgba(0, 0, 0, .35);
+}
+.progress-overlay.minimized .progress-modal { display: none; }
+.progress-overlay.minimized .upload-minimized { display: block; }
 
 .progress-header {
     display: flex;

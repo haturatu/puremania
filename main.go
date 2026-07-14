@@ -125,13 +125,16 @@ func LoadConfig(logger *slog.Logger) *types.Config {
 
 	// デフォルト値
 	config := &types.Config{
-		StorageDir:   getEnv("STORAGE_DIR", "/home/"+os.Getenv("USER")),
-		MountDirs:    getEnvAsStringSlice("MOUNT_DIRS", []string{}),
-		MaxFileSize:  getEnvAsInt64(logger, "MAX_FILE_SIZE_MB", 10000),
-		Port:         getEnvAsInt(logger, "PORT", 8844),
-		ZipTimeout:   getEnvAsInt(logger, "ZIP_TIMEOUT", 300),
-		MaxZipSize:   getEnvAsInt64(logger, "MAX_ZIP_SIZE", 1024),
-		SpecificDirs: getEnvAsStringSlice("SPECIFIC_DIRS", []string{}),
+		StorageDir: getEnv("STORAGE_DIR", "/home/"+os.Getenv("USER")),
+		MountDirs:  getEnvAsStringSlice("MOUNT_DIRS", []string{}),
+		// 100 GiB default leaves headroom for 50 GiB resumable uploads. Chunks
+		// are streamed, so this is a validation limit rather than RAM usage.
+		MaxFileSize:           getEnvAsInt64(logger, "MAX_FILE_SIZE_MB", 102400),
+		Port:                  getEnvAsInt(logger, "PORT", 8844),
+		ZipTimeout:            getEnvAsInt(logger, "ZIP_TIMEOUT", 300),
+		MaxZipSize:            getEnvAsInt64(logger, "MAX_ZIP_SIZE", 1024),
+		SpecificDirs:          getEnvAsStringSlice("SPECIFIC_DIRS", []string{}),
+		UploadSessionTTLHours: getEnvAsInt(logger, "UPLOAD_SESSION_TTL_HOURS", 168),
 		// Aria2cEnabled は後で設定
 	}
 
@@ -196,6 +199,13 @@ func main() {
 	api := r.PathPrefix("/api").Subrouter()
 	api.HandleFunc("/files", handler.ListFiles).Methods("GET")
 	api.HandleFunc("/files/upload", handler.UploadFile).Methods("POST")
+	// Resumable uploads are a separate resource from the legacy multipart
+	// endpoint above. The explicit /chunks segment makes the PUT semantics clear.
+	api.HandleFunc("/files/upload-sessions", handler.CreateUpload).Methods("POST")
+	api.HandleFunc("/files/upload-sessions/{id}", handler.UploadStatus).Methods("GET")
+	api.HandleFunc("/files/upload-sessions/{id}", handler.AbortUpload).Methods("DELETE")
+	api.HandleFunc("/files/upload-sessions/{id}/chunks", handler.UploadChunk).Methods("PUT")
+	api.HandleFunc("/files/upload-sessions/{id}/complete", handler.CompleteUpload).Methods("POST")
 	api.HandleFunc("/files/download", handler.DownloadFile).Methods("GET")
 	api.HandleFunc("/files/content", handler.GetFileContent).Methods("GET")
 	api.HandleFunc("/files/download-zip", handler.DownloadZip).Methods("POST")
@@ -250,8 +260,8 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Range, Content-Disposition, X-Requested-With")
-		w.Header().Set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges, Content-Disposition")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Range, Content-Range, Content-Disposition, X-Requested-With")
+		w.Header().Set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Range, Accept-Ranges, Content-Disposition")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Max-Age", "86400") // 24時間
 

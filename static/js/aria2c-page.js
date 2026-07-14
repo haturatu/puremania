@@ -31,7 +31,7 @@ export class Aria2cPageHandler {
         if (breadcrumbs) breadcrumbs.style.display = 'none';
     }
 
-    exitAria2cMode() {
+    exitAria2cMode(navigate = true) {
         if (!this.isInAria2cMode) return;
         this.isInAria2cMode = false;
         clearInterval(this.updateInterval);
@@ -41,7 +41,7 @@ export class Aria2cPageHandler {
         const breadcrumbs = document.querySelector('.breadcrumbs');
         if (breadcrumbs) breadcrumbs.style.display = '';
 
-        this.fileManager.router.navigate(this.previousPath);
+        if (navigate) this.fileManager.router.navigate(this.previousPath);
     }
 
     async loadAria2cStatus() {

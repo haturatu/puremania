@@ -353,6 +353,11 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 
 	// 並列処理でエントリーを処理
 	for _, entry := range entries {
+		// Resumable-upload parts and metadata are internal implementation data,
+		// never files the browser should present as user content.
+		if filepath.Clean(basePath) == filepath.Clean(h.config.StorageDir) && entry.Name() == resumableUploadDir {
+			continue
+		}
 		wg.Add(1)
 		worker.Submit(h.workerPool, func() {
 			defer wg.Done()
@@ -422,7 +427,11 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(h.config.MaxFileSize << 20); err != nil {
+	// Compatibility endpoint: spool multipart file parts to disk after a tiny
+	// form-field buffer instead of allocating up to MAX_FILE_SIZE_MB per request.
+	// New clients use resumable uploads and avoid multipart altogether.
+	r.Body = http.MaxBytesReader(w, r.Body, h.config.MaxFileSize<<20)
+	if err := r.ParseMultipartForm(64 << 10); err != nil {
 		if r.MultipartForm != nil {
 			_ = r.MultipartForm.RemoveAll()
 		}
@@ -514,23 +523,11 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 				}
 			}()
 
-			// ファイルサイズに応じた最適な保存方法を選択
-			const MiB = 1 << 20
-			const Threshold = 500 * MiB
-			var saveErr error
-
-			if fileHeader.Size > Threshold {
-				// 大きいファイルはストリームコピー
-				_, saveErr = io.Copy(dst, file)
-			} else {
-				// 小さいファイルは一括読み込み
-				data, err := io.ReadAll(file)
-				if err != nil {
-					saveErr = err
-				} else {
-					_, saveErr = dst.Write(data)
-				}
-			}
+			// The legacy multipart endpoint is retained for compatibility, but it
+			// must never materialize even a "small" file with io.ReadAll. The
+			// resumable endpoint is used by the UI; this preserves the same bounded
+			// memory property for older API consumers.
+			_, saveErr := io.CopyBuffer(dst, file, make([]byte, getOptimalBufferSize(fileHeader.Size)))
 
 			// エラーチェック
 			if saveErr != nil {

@@ -1,4 +1,3 @@
-import { showConfirmDialog } from './modal.js';
 import { getTemplateContent } from './template.js';
 
 export class ProgressManager {
@@ -10,6 +9,7 @@ export class ProgressManager {
         this.timerInterval = null;
         this.lastUpdateTime = 0;
         this.updateThrottle = 250; // ms
+        this.isMinimized = false;
     }
 
     init() {
@@ -25,21 +25,11 @@ export class ProgressManager {
         document.body.appendChild(overlay);
         this.progressOverlay = overlay;
 
-        overlay.querySelector('.progress-close').addEventListener('click', async () => {
-            const shouldClose = this.isCompleted || await showConfirmDialog({
-                title: 'Cancel Upload',
-                message: 'Cancel upload? This will stop the current upload process.',
-                confirmLabel: 'Cancel Upload',
-                danger: true
-            });
-            if (!shouldClose) return;
-
-            const currentUpload = this.currentUpload;
-            if (currentUpload && !this.isCompleted) {
-                currentUpload.abort();
-            }
-            this.hide();
-        });
+        // Closing or minimizing the panel never cancels an upload. Cancellation
+        // is an explicit action on the Uploads page so progress is not lost.
+        overlay.querySelector('.progress-close').addEventListener('click', () => this.hide());
+        overlay.querySelector('.progress-minimize').addEventListener('click', () => this.minimize());
+        overlay.querySelector('.upload-restore').addEventListener('click', () => this.restore());
     }
 
     startTimer() {
@@ -109,7 +99,7 @@ export class ProgressManager {
         }
 
         if (closeBtn) {
-            closeBtn.style.display = 'none';
+            closeBtn.style.display = 'block';
             closeBtn.style.background = '';
             closeBtn.style.color = '';
         }
@@ -187,6 +177,7 @@ export class ProgressManager {
             if (titleElement) titleElement.textContent = title;
 
             this.progressOverlay.style.display = 'flex';
+            this.progressOverlay.classList.toggle('minimized', this.isMinimized);
             this.resetError();
             this.resetProgress();
             this.startTimer();
@@ -199,8 +190,23 @@ export class ProgressManager {
         }
         this.currentUpload = null;
         this.isCompleted = false;
+        this.isMinimized = false;
         this.stopTimer();
         this.startTime = null;
+    }
+
+    minimize() {
+        if (!this.progressOverlay) return;
+        this.isMinimized = true;
+        this.progressOverlay.style.display = 'flex';
+        this.progressOverlay.classList.add('minimized');
+    }
+
+    restore() {
+        if (!this.progressOverlay) return;
+        this.isMinimized = false;
+        this.progressOverlay.style.display = 'flex';
+        this.progressOverlay.classList.remove('minimized');
     }
 
     resetProgress() {
