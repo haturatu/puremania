@@ -261,7 +261,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Range, Content-Range, Content-Disposition, X-Requested-With")
-		w.Header().Set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Range, Accept-Ranges, Content-Disposition")
+		w.Header().Set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Range, Accept-Ranges, Content-Disposition, Upload-Queue-Delay, Upload-Write-Time, Upload-Recommend-Concurrency")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Max-Age", "86400") // 24時間
 

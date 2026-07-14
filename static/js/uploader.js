@@ -1,7 +1,11 @@
 // Resumable uploader: file bytes stay in the browser File object and each
 // request owns only one Blob slice. IndexedDB stores session metadata only.
 const CHUNK_SIZE = 8 * 1024 * 1024;
-const MAX_CONCURRENT_FILES = 3;
+const MIN_CONCURRENT_FILES = 2;
+// 1 Gbps / many 1 MiB objects benefits from overlapping request lifecycle
+// latency. AIMD normally settles below this ceiling when disk or network
+// contention appears.
+const MAX_CONCURRENT_FILES = 32;
 const MAX_RETRIES = 5;
 const PREPARE_BATCH_SIZE = 500;
 const DB_NAME = 'puremania-upload-sessions';
@@ -9,6 +13,46 @@ const DB_STORE = 'sessions';
 
 const pause = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
+
+class AdaptiveUploadController {
+    constructor() {
+        this.target = MIN_CONCURRENT_FILES;
+        this.speedEWMA = 0;
+        this.lastDecisionSpeed = 0;
+        this.lastDecisionAt = performance.now();
+        this.serverCap = MAX_CONCURRENT_FILES;
+        this.congested = false;
+    }
+
+    record({ bytes, elapsed, queueDelay = 0, writeTime = 0, recommendation }) {
+        const speed = elapsed > 0 ? bytes / elapsed * 1000 : 0;
+        this.speedEWMA = this.speedEWMA ? this.speedEWMA * 0.75 + speed * 0.25 : speed;
+        if (recommendation > 0) this.serverCap = Math.max(MIN_CONCURRENT_FILES, Math.min(MAX_CONCURRENT_FILES, recommendation));
+        // Queueing longer than the write itself is a server-side congestion signal.
+        this.congested ||= queueDelay > 100 && queueDelay > writeTime;
+    }
+
+    recordFailure(status = 0) {
+        if (!status || status === 429 || status >= 500) this.congested = true;
+    }
+
+    adjust() {
+        const now = performance.now();
+        if (now - this.lastDecisionAt < 1500) return this.target;
+        const heap = performance.memory;
+        const memoryPressure = heap && heap.jsHeapSizeLimit > 0 && heap.usedJSHeapSize / heap.jsHeapSizeLimit > 0.80;
+        if (this.congested || memoryPressure) {
+            this.target = Math.max(MIN_CONCURRENT_FILES, Math.floor(this.target * 0.7));
+        } else if (this.target < Math.min(MAX_CONCURRENT_FILES, this.serverCap) &&
+                   (this.lastDecisionSpeed === 0 || this.speedEWMA >= this.lastDecisionSpeed * 1.07)) {
+            this.target++;
+        }
+        this.lastDecisionSpeed = this.speedEWMA;
+        this.lastDecisionAt = now;
+        this.congested = false;
+        return this.target;
+    }
+}
 
 class UploadSessionStore {
     async db() {
@@ -252,9 +296,10 @@ export class Uploader {
         return state.uploadedBytes;
     }
 
-    sendChunk(record, blob, start, end, total, session, onProgress) {
+    sendChunk(record, blob, start, end, total, session, onProgress, controller) {
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
+            const startedAt = performance.now();
             const abort = () => xhr.abort();
             session.signal.addEventListener('abort', abort, { once: true });
             const cleanup = () => session.signal.removeEventListener('abort', abort);
@@ -262,10 +307,17 @@ export class Uploader {
             xhr.onload = () => {
                 cleanup();
                 if (xhr.status >= 200 && xhr.status < 400) {
+                    controller?.record({
+                        bytes: end - start + 1,
+                        elapsed: performance.now() - startedAt,
+                        queueDelay: Number(xhr.getResponseHeader('Upload-Queue-Delay')) || 0,
+                        writeTime: Number(xhr.getResponseHeader('Upload-Write-Time')) || 0,
+                        recommendation: Number(xhr.getResponseHeader('Upload-Recommend-Concurrency')) || 0
+                    });
                     try { resolve(JSON.parse(xhr.responseText)); } catch (_) { resolve({ uploadedBytes: end + 1 }); }
-                } else reject(new Error(`Chunk rejected (${xhr.status})`));
+                } else { controller?.recordFailure(xhr.status); reject(new Error(`Chunk rejected (${xhr.status})`)); }
             };
-            xhr.onerror = () => { cleanup(); reject(new Error('Network error while sending chunk')); };
+            xhr.onerror = () => { cleanup(); controller?.recordFailure(); reject(new Error('Network error while sending chunk')); };
             xhr.onabort = () => { cleanup(); reject(new DOMException('Upload interrupted', 'AbortError')); };
             if (!session.trackXhr(xhr)) { cleanup(); reject(new DOMException('Upload interrupted', 'AbortError')); return; }
             xhr.open('PUT', `${record.url}/chunks`);
@@ -275,7 +327,7 @@ export class Uploader {
         });
     }
 
-    async uploadFile(item, destination, session) {
+    async uploadFile(item, destination, session, controller) {
         const record = await this.getOrCreateRemoteSession(item, destination, session);
         let offset = record.uploadedBytes;
         this.setFileProgress(record.key, item, offset, 'Uploading');
@@ -287,7 +339,7 @@ export class Uploader {
                 try {
                     // Blob.slice is lazy; it does not load the complete file into JS memory.
                     const result = await this.sendChunk(record, item.file.slice(offset, end + 1), offset, end, item.file.size, session,
-                        uploaded => this.setFileProgress(record.key, item, uploaded, 'Uploading'));
+                        uploaded => this.setFileProgress(record.key, item, uploaded, 'Uploading'), controller);
                     offset = result.uploadedBytes ?? end + 1;
                     completed = true;
                 } catch (error) {
@@ -338,18 +390,25 @@ export class Uploader {
         this.app.progressManager.show('Uploading files');
         await this.initializeUploadStats(items, session);
         let cursor = 0, succeeded = 0, failed = 0;
-        const next = async () => {
-            while (true) {
-                this.ensureActive(session);
-                const index = cursor++;
-                if (index >= items.length) return;
-                try { await this.uploadFile(items[index], destination, session); succeeded++; this.uploadStats.completed++; }
-                catch (error) { if (this.isAbortError(error)) throw error; failed++; this.uploadStats.failed++; console.error('Upload failed', items[index].relativePath, error); this.setFileProgress(this.fileKey(items[index], destination), items[index], 0, 'Failed'); this.progress.delete(this.fileKey(items[index], destination)); }
-                await yieldToBrowser();
-            }
+        const controller = new AdaptiveUploadController();
+        const inFlight = new Set();
+        const start = (item) => {
+            let task;
+            task = (async () => {
+                try { await this.uploadFile(item, destination, session, controller); succeeded++; this.uploadStats.completed++; }
+                catch (error) { if (this.isAbortError(error)) throw error; controller.recordFailure(error.status); failed++; this.uploadStats.failed++; console.error('Upload failed', item.relativePath, error); this.setFileProgress(this.fileKey(item, destination), item, 0, 'Failed'); this.progress.delete(this.fileKey(item, destination)); }
+                finally { inFlight.delete(task); }
+            })();
+            inFlight.add(task);
         };
         try {
-            await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_FILES, items.length) }, next));
+            while (cursor < items.length || inFlight.size) {
+                this.ensureActive(session);
+                const target = Math.min(items.length, controller.adjust());
+                while (cursor < items.length && inFlight.size < target) start(items[cursor++]);
+                if (inFlight.size) await Promise.race(inFlight);
+                await yieldToBrowser();
+            }
             this.app.progressManager.safeUpdateProgress({
                 currentFile: 'Upload complete', percentage: 100, processed: succeeded + failed, total: items.length,
                 status: `${succeeded}/${items.length} files uploaded${failed ? `, ${failed} failed` : ''}`
