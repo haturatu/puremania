@@ -1,0 +1,35 @@
+<div class="app-container">
+    <div class="sidebar">
+        <div class="logo"><h1>Pure Mania</h1></div>
+        <div class="nav-item active" data-path="/"><i>📁</i><span>Home</span></div>
+        <div id="specific-dirs-container"></div>
+        <div class="nav-item" id="upload-status-btn" data-path="/system/uploads"><i>⇧</i><span>Uploads</span></div>
+        <div class="nav-item" id="aria2c-status-btn" data-path="/system/aria2c"><span>aria2c</span></div>
+        <div class="storage-info">
+            <div class="storage-text"><span id="storage-used">0 B</span> / <span id="storage-total">0 B</span></div>
+            <div class="storage-progress"><div id="storage-progress-inner" style="width: 0%"></div></div>
+        </div>
+    </div>
+    <div class="main-content">
+        <div class="header">
+            <div class="breadcrumb"><span class="breadcrumb-item" data-path="/">Root</span></div>
+            <div class="search-container">
+                <input type="text" class="search-input" placeholder="Search...">
+                <div class="search-options" title="Search options">⚙️</div>
+            </div>
+        </div>
+        <div class="file-browser"></div>
+    </div>
+</div>
+<div id="toast-container"></div>
+<div id="loading-overlay" style="display: none;"><div class="loading-spinner"></div></div>
+<div id="aria2c-status-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header"><h2>Aria2c Downloads</h2><span class="close-button">&times;</span></div>
+        <div class="modal-body">
+            <div id="aria2c-active-downloads"><h3>Active</h3><div class="download-list"></div></div>
+            <div id="aria2c-waiting-downloads"><h3>Waiting</h3><div class="download-list"></div></div>
+            <div id="aria2c-stopped-downloads"><h3>Stopped/Finished</h3><div class="download-list"></div></div>
+        </div>
+    </div>
+</div>

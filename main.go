@@ -230,11 +230,12 @@ func main() {
 	}
 
 	// 静的ファイルのサービス
-	staticFileHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("./static/")))
+	staticFileHandler := http.StripPrefix("/static/", staticCacheMiddleware(http.FileServer(http.Dir("./static/"))))
 	r.PathPrefix("/static/").Handler(staticFileHandler)
 
 	// その他のリクエストはindex.htmlを返す
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
 		// APIパス以外はindex.htmlを返す
 		if !strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/static/") {
 			http.ServeFile(w, r, "./static/index.html")
@@ -254,6 +255,19 @@ func main() {
 	}
 
 	logger.Error("Server stopped", "error", srv.ListenAndServe())
+}
+
+func staticCacheMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/dist/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			// Raw modules, templates, and remote-mode CSS retain stable URLs.
+			// Revalidate them so a switch never serves a previous version.
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

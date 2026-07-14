@@ -216,4 +216,8 @@ async function main() {
     await app.init();
 }
 
-document.addEventListener('DOMContentLoaded', main);
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', main, { once: true });
+} else {
+    void main();
+}

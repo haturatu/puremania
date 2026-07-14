@@ -19,8 +19,7 @@ COPY static ./static
 COPY index.html.local ./index.html.local
 
 RUN npm install \
-    && npm run build \
-    && cp index.html.local static/index.html
+    && npm run build
 
 FROM debian:bookworm-slim AS runtime
 

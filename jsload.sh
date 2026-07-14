@@ -36,9 +36,7 @@ switch_to_local() {
     echo "Running 'npm run build' to create local bundle..."
     npm run build
 
-    echo "Switching to local bundle..."
-    cp "${LOCAL_TEMPLATE}" "${INDEX_FILE}"
-    echo "Success. Now using local bundle: /static/dist/app.bundle.js"
+    echo "Success. static/index.html now references the content-hashed local bundle."
 }
 
 switch_to_remote() {
@@ -47,12 +45,12 @@ switch_to_remote() {
         exit 1
     fi
     echo "Switching to remote CDN (esm.sh)..."
-    cp "${REMOTE_TEMPLATE}" "${INDEX_FILE}"
+    asset_version="$(git rev-parse --short=12 HEAD 2>/dev/null || date +%s)"
+    sed "s/__ASSET_VERSION__/${asset_version}/g" "${REMOTE_TEMPLATE}" > "${INDEX_FILE}"
 
     echo "Cleaning up local build artifacts..."
     rm -rf node_modules
     rm -rf static/dist
-    rm -f package-lock.json
     echo "Cleanup complete."
     echo "Success. Now using remote CDN."
 }
