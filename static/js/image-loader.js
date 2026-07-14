@@ -2,7 +2,7 @@
 // metadata in the queue; decoded image pixels remain under the browser cache's
 // normal memory management rather than being retained by application code.
 export class ImageLoader {
-    constructor({ concurrency = navigator.connection?.saveData ? 1 : (matchMedia('(max-width: 768px)').matches ? 2 : 8), maxQueue = 80 } = {}) {
+    constructor({ concurrency = navigator.connection?.saveData ? 1 : (matchMedia('(max-width: 768px)').matches ? 2 : 12), maxQueue = matchMedia('(max-width: 768px)').matches ? 60 : 240 } = {}) {
         this.concurrency = concurrency;
         this.maxQueue = maxQueue;
         this.pending = new Map();
@@ -11,7 +11,12 @@ export class ImageLoader {
     }
 
     enqueue({ key, src, priority = 0, onLoad, onError }) {
-        if (!key || !src || this.pending.has(key)) return false;
+        if (!key || !src) return false;
+        const existing = this.pending.get(key);
+        if (existing) {
+            if (!existing.started) existing.priority = priority;
+            return true;
+        }
         if (this.pending.size >= this.maxQueue) {
             const farthest = [...this.pending.values()].filter(job => !job.started).sort((a, b) => b.priority - a.priority)[0];
             if (!farthest || farthest.priority <= priority) return false;
@@ -24,7 +29,10 @@ export class ImageLoader {
 
     cancel(key) {
         const job = this.pending.get(key);
-        if (job && !job.started) this.pending.delete(key);
+        if (!job) return false;
+        job.cancelled = true;
+        this.pending.delete(key);
+        return true;
     }
 
     clear() {
@@ -55,7 +63,7 @@ export class ImageLoader {
     finish(job, callback) {
         this.active--;
         if (this.pending.get(job.key) === job) this.pending.delete(job.key);
-        if (job.generation === this.generation) callback();
+        if (!job.cancelled && job.generation === this.generation) callback();
         this.pump();
     }
 }

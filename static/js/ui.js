@@ -195,7 +195,7 @@ export class UIManager {
     }
 
     loadImageWithRetry(imgElement, src) {
-        if (!imgElement || imgElement.dataset.loadingStarted === 'true') {
+        if (!imgElement || imgElement.dataset.imageLoaded === 'true') {
             return false;
         }
         imgElement.dataset.loadingStarted = 'true';
@@ -203,7 +203,12 @@ export class UIManager {
             key: imgElement.dataset.imageKey,
             src,
             priority: Number(imgElement.dataset.imagePriority || 0),
-            onLoad: loaded => { imgElement.src = loaded.src; imgElement.classList.remove('image-pending'); },
+            onLoad: loaded => {
+                imgElement.src = loaded.src;
+                imgElement.dataset.imageLoaded = 'true';
+                imgElement.classList.remove('image-pending');
+                this.lazyImageObserver?.unobserve(imgElement);
+            },
             onError: () => { imgElement.dataset.loadingStarted = ''; imgElement.classList.remove('image-pending'); console.error(`Failed to load image: ${src}`); }
         });
         if (!queued) imgElement.dataset.loadingStarted = '';
@@ -229,17 +234,19 @@ export class UIManager {
 
         this.lazyImageObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
-                if (!entry.isIntersecting) return;
-
                 const imgElement = entry.target;
                 const src = imgElement.dataset.src;
-                if (src) {
-                    imgElement.dataset.imagePriority = String(Math.abs(entry.boundingClientRect.top));
-                    if (this.loadImageWithRetry(imgElement, src)) this.lazyImageObserver.unobserve(imgElement);
+                if (!src || imgElement.dataset.imageLoaded === 'true') return;
+                if (!entry.isIntersecting) {
+                    if (this.imageLoader.cancel(imgElement.dataset.imageKey)) imgElement.dataset.loadingStarted = '';
+                    return;
                 }
+                const imageCenter = entry.boundingClientRect.top + entry.boundingClientRect.height / 2;
+                imgElement.dataset.imagePriority = String(Math.abs(imageCenter - window.innerHeight / 2));
+                this.loadImageWithRetry(imgElement, src);
             });
         }, {
-            rootMargin: '300px 0px'
+            rootMargin: matchMedia('(max-width: 768px)').matches ? '400px 0px' : '1600px 0px'
         });
 
         return this.lazyImageObserver;

@@ -9,7 +9,7 @@ export class ImageViewer {
         this.images = [];
         this.isOpen = false;
         this.navTimeout = null;
-        this.imageLoader = new ImageLoader({ concurrency: 1, maxQueue: 4 });
+        this.imageLoader = new ImageLoader({ concurrency: matchMedia('(max-width: 768px)').matches ? 1 : 3, maxQueue: matchMedia('(max-width: 768px)').matches ? 4 : 16 });
     }
     
     init() {
@@ -103,7 +103,11 @@ export class ImageViewer {
 
     preloadNeighbors(index) {
         if (this.images.length < 2) return;
-        [index + 1, index - 1].forEach((candidate, priority) => {
+        this.imageLoader.clear();
+        const range = matchMedia('(max-width: 768px)').matches ? 2 : 6;
+        const candidates = [];
+        for (let offset = 1; offset <= range; offset++) candidates.push(index + offset, index - offset);
+        candidates.forEach((candidate, priority) => {
             const image = this.images[(candidate + this.images.length) % this.images.length];
             this.imageLoader.enqueue({
                 key: `viewer:${image.path}`,
