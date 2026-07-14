@@ -46,6 +46,7 @@ export class Uploader {
         this.store = new UploadSessionStore();
         this.progress = new Map();
         this.resumeRequestedKey = null;
+        this.createResumeInputs();
     }
 
     createUploadSession() {
@@ -79,6 +80,36 @@ export class Uploader {
 
     showUploadDialog() { document.querySelector('.upload-input-files')?.click(); }
 
+    createResumeInputs() {
+        const create = (className, directory) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.hidden = true;
+            input.className = className;
+            if (directory) input.setAttribute('webkitdirectory', '');
+            input.addEventListener('change', () => this.handleSelectedFileList(input));
+            document.body.appendChild(input);
+        };
+        create('resume-upload-input-files', false);
+        create('resume-upload-input-folders', true);
+    }
+
+    handleSelectedFileList(input) {
+        if (!input.files?.length) return;
+        const files = Array.from(input.files, file => ({ file, relativePath: file.webkitRelativePath || file.name }));
+        input.value = '';
+        if (this.resumeRequestedKey) {
+            const requested = this.resumeRequestedKey;
+            this.resumeRequestedKey = null;
+            if (!files.some(item => this.fileKey(item, this.savedDestinationFromKey(requested)) === requested)) {
+                this.app.ui.showToast('Resume upload', 'Choose the original file or folder to resume this upload.', 'warning');
+                return;
+            }
+        }
+        void this.handleFileUpload(files);
+    }
+
     bindUploadEvents() {
         const area = document.querySelector('.upload-area');
         if (!area) return;
@@ -86,22 +117,8 @@ export class Uploader {
         const foldersInput = area.querySelector('.upload-input-folders');
         const selectFiles = area.querySelector('.btn-select-files');
         const selectFolders = area.querySelector('.btn-select-folders');
-        const selected = input => {
-            if (!input.files?.length) return;
-            const files = Array.from(input.files, file => ({ file, relativePath: file.webkitRelativePath || file.name }));
-            input.value = '';
-            if (this.resumeRequestedKey) {
-                const requested = this.resumeRequestedKey;
-                this.resumeRequestedKey = null;
-                if (!files.some(item => this.fileKey(item, this.savedDestinationFromKey(requested)) === requested)) {
-                    this.app.ui.showToast('Resume upload', 'Choose the original file to resume this upload.', 'warning');
-                    return;
-                }
-            }
-            void this.handleFileUpload(files);
-        };
-        filesInput.addEventListener('change', () => selected(filesInput));
-        foldersInput.addEventListener('change', () => selected(foldersInput));
+        filesInput.addEventListener('change', () => this.handleSelectedFileList(filesInput));
+        foldersInput.addEventListener('change', () => this.handleSelectedFileList(foldersInput));
         selectFiles.addEventListener('click', event => { event.preventDefault(); filesInput.click(); });
         selectFolders.addEventListener('click', event => { event.preventDefault(); foldersInput.click(); });
         let dragDepth = 0;
@@ -122,7 +139,7 @@ export class Uploader {
         this.resumeRequestedKey = key;
         const record = await this.store.get(key);
         const isFolderUpload = record?.relativePath?.includes('/');
-        const input = document.querySelector(isFolderUpload ? '.upload-input-folders' : '.upload-input-files');
+        const input = document.querySelector(isFolderUpload ? '.resume-upload-input-folders' : '.resume-upload-input-files');
         if (!input) throw new Error('Upload file selector is unavailable');
         input.click();
     }
