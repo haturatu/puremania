@@ -2,7 +2,7 @@
 // metadata in the queue; decoded image pixels remain under the browser cache's
 // normal memory management rather than being retained by application code.
 export class ImageLoader {
-    constructor({ concurrency = navigator.connection?.saveData ? 1 : (matchMedia('(max-width: 768px)').matches ? 2 : 12), maxQueue = matchMedia('(max-width: 768px)').matches ? 60 : 240 } = {}) {
+    constructor({ concurrency = navigator.connection?.saveData ? 1 : (matchMedia('(max-width: 768px)').matches ? 4 : 12), maxQueue = matchMedia('(max-width: 768px)').matches ? 120 : 240 } = {}) {
         this.concurrency = concurrency;
         this.maxQueue = maxQueue;
         this.pending = new Map();

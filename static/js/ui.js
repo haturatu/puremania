@@ -247,7 +247,7 @@ export class UIManager {
                 this.loadImageWithRetry(imgElement, src);
             });
         }, {
-            rootMargin: matchMedia('(max-width: 768px)').matches ? '400px 0px' : '1600px 0px'
+            rootMargin: matchMedia('(max-width: 768px)').matches ? '800px 0px' : '1600px 0px'
         });
 
         return this.lazyImageObserver;

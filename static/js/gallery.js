@@ -9,7 +9,7 @@ export class ImageViewer {
         this.images = [];
         this.isOpen = false;
         this.navTimeout = null;
-        this.imageLoader = new ImageLoader({ concurrency: matchMedia('(max-width: 768px)').matches ? 1 : 3, maxQueue: matchMedia('(max-width: 768px)').matches ? 4 : 16 });
+        this.imageLoader = new ImageLoader({ concurrency: matchMedia('(max-width: 768px)').matches ? 2 : 3, maxQueue: matchMedia('(max-width: 768px)').matches ? 8 : 16 });
     }
     
     init() {
@@ -104,7 +104,7 @@ export class ImageViewer {
     preloadNeighbors(index) {
         if (this.images.length < 2) return;
         this.imageLoader.clear();
-        const range = matchMedia('(max-width: 768px)').matches ? 2 : 6;
+        const range = matchMedia('(max-width: 768px)').matches ? 3 : 6;
         const candidates = [];
         for (let offset = 1; offset <= range; offset++) candidates.push(index + offset, index - offset);
         candidates.forEach((candidate, priority) => {
