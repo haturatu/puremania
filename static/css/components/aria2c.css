@@ -60,7 +60,7 @@
     transition: width 0.3s ease-in-out;
 }
 
-.progress-text {
+.aria2c-table .progress-text {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -79,5 +79,27 @@
     margin-right: 5px;
 }
 
-.upload-jobs-table .upload-destination { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.upload-jobs-table .actions { min-width: 210px; }
+.aria2c-section { overflow-x: auto; }
+
+/* Upload rows use the same transfer-table visual language as aria2, but their
+ * longer paths and action labels need stable, non-overlapping table geometry. */
+.upload-jobs-table {
+    min-width: 860px;
+    table-layout: fixed;
+}
+.upload-jobs-table .file-name {
+    display: table-cell;
+    width: 20%;
+}
+.upload-jobs-table .file-size { width: 10%; white-space: nowrap; }
+.upload-jobs-table .upload-progress-cell { width: 18%; min-width: 150px; }
+.upload-jobs-table .upload-progress-cell .ui-progress { position: relative; min-width: 140px; }
+.upload-jobs-table .upload-destination { max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-jobs-table .actions {
+    min-width: 210px;
+    white-space: normal;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+.upload-jobs-table .actions .btn { margin-right: 0; }

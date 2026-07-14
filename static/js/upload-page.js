@@ -65,7 +65,7 @@ export class UploadPageHandler {
         const uploaded = Math.min(job.uploadedBytes || 0, total);
         const progress = total ? uploaded / total * 100 : 100;
         const name = job.relativePath.split('/').pop();
-        row.innerHTML = `<td class="file-name"></td><td class="file-size"></td><td><div class="ui-progress"><div class="ui-progress__fill"></div></div><span class="progress-text"></span></td><td class="status"></td><td class="upload-destination"></td><td class="actions"></td>`;
+        row.innerHTML = `<td class="file-name"></td><td class="file-size"></td><td class="upload-progress-cell"><div class="ui-progress"><div class="ui-progress__fill"></div><span class="progress-text"></span></div></td><td class="status"></td><td class="upload-destination"></td><td class="actions"></td>`;
         row.querySelector('.file-name').textContent = name;
         row.querySelector('.file-name').title = job.relativePath;
         row.querySelector('.file-size').textContent = this.app.ui.formatFileSize(total);
