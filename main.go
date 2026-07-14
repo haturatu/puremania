@@ -193,7 +193,10 @@ func main() {
 
 	// その他のリクエストはindex.htmlを返す
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store")
+		// The application document must always be fetched again.  In
+		// particular, mobile browsers can otherwise retain an old module graph
+		// after a deployment even when the user revisits the top page.
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		// APIパス以外はindex.htmlを返す
 		if !strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/static/") {
 			http.ServeFile(w, r, "./static/index.html")
@@ -217,7 +220,11 @@ func main() {
 
 func staticCacheMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/dist/") {
+		if r.URL.Path == "/index.html" {
+			// Keep direct requests to the generated application document
+			// consistent with the top-level SPA fallback.
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		} else if strings.HasPrefix(r.URL.Path, "/dist/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
 			// Raw modules, templates, and remote-mode CSS retain stable URLs.
