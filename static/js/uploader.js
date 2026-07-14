@@ -152,7 +152,7 @@ export class Uploader {
             destination = request.destination;
             let matchesRequestedFile = false;
             for (let index = 0; index < files.length; index++) {
-                if (this.fileKey(files[index], destination) === request.key) { matchesRequestedFile = true; break; }
+                if (request.keys.has(this.fileKey(files[index], destination))) { matchesRequestedFile = true; break; }
                 if (index > 0 && index % PREPARE_BATCH_SIZE === 0) await yieldToBrowser();
             }
             if (!matchesRequestedFile) {
@@ -216,11 +216,17 @@ export class Uploader {
     }
 
     async requestResume(key) {
-        const record = await this.store.get(key);
-        if (!record) throw new Error('Saved upload session was not found');
-        this.resumeRequest = { key, destination: record.destination };
-        const isFolderUpload = record?.relativePath?.includes('/');
-        const input = document.querySelector(isFolderUpload ? '.resume-upload-input-folders' : '.resume-upload-input-files');
+        return this.requestResumeMany([key]);
+    }
+
+    async requestResumeMany(keys) {
+        const records = (await Promise.all(keys.map(key => this.store.get(key)))).filter(Boolean);
+        if (!records.length) throw new Error('Saved upload sessions were not found');
+        const destinations = new Set(records.map(record => record.destination));
+        if (destinations.size !== 1) throw new Error('Select uploads with the same destination to resume together');
+        const hasFolderUpload = records.some(record => record.relativePath.includes('/'));
+        this.resumeRequest = { keys: new Set(records.map(record => record.key)), destination: records[0].destination };
+        const input = document.querySelector(hasFolderUpload ? '.resume-upload-input-folders' : '.resume-upload-input-files');
         if (!input) throw new Error('Upload file selector is unavailable');
         input.click();
     }

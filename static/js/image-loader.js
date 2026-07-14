@@ -10,7 +10,7 @@ export class ImageLoader {
         this.generation = 0;
     }
 
-    enqueue({ key, src, priority = 0, onLoad, onError }) {
+    enqueue({ key, src, priority = 0, onLoad, onError, onCancel }) {
         if (!key || !src) return false;
         const existing = this.pending.get(key);
         if (existing) {
@@ -21,8 +21,9 @@ export class ImageLoader {
             const farthest = [...this.pending.values()].filter(job => !job.started).sort((a, b) => b.priority - a.priority)[0];
             if (!farthest || farthest.priority <= priority) return false;
             this.pending.delete(farthest.key);
+            farthest.onCancel?.();
         }
-        this.pending.set(key, { key, src, priority, onLoad, onError, started: false, generation: this.generation });
+        this.pending.set(key, { key, src, priority, onLoad, onError, onCancel, started: false, generation: this.generation });
         this.pump();
         return true;
     }
@@ -32,6 +33,7 @@ export class ImageLoader {
         if (!job) return false;
         job.cancelled = true;
         this.pending.delete(key);
+        job.onCancel?.();
         return true;
     }
 

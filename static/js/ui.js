@@ -209,7 +209,8 @@ export class UIManager {
                 imgElement.classList.remove('image-pending');
                 this.lazyImageObserver?.unobserve(imgElement);
             },
-            onError: () => { imgElement.dataset.loadingStarted = ''; imgElement.classList.remove('image-pending'); console.error(`Failed to load image: ${src}`); }
+            onError: () => { imgElement.dataset.loadingStarted = ''; imgElement.classList.remove('image-pending'); console.error(`Failed to load image: ${src}`); },
+            onCancel: () => { imgElement.dataset.loadingStarted = ''; }
         });
         if (!queued) imgElement.dataset.loadingStarted = '';
         return queued;

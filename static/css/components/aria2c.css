@@ -121,3 +121,6 @@
     gap: 5px;
 }
 .upload-jobs-table .actions .btn { margin-right: 0; }
+.upload-bulk-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.upload-jobs-table th:first-child,
+.upload-jobs-table td:first-child { width: 36px; text-align: center; }
