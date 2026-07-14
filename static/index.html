@@ -4,46 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pure Mania</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=01b3b53cd8e9">
-    <link rel="stylesheet" href="/static/css/masonry.css?v=01b3b53cd8e9">
-    <link rel="stylesheet" href="/static/css/components/video-view.css?v=01b3b53cd8e9">
+    <link rel="stylesheet" href="/static/css/style.css?v=NN6F5NWP">
+    <link rel="stylesheet" href="/static/css/masonry.css?v=NN6F5NWP">
+    <link rel="stylesheet" href="/static/css/components/video-view.css?v=NN6F5NWP">
     <style>
     .cm-editor { border: 1px solid #ddd; }
     </style>
 </head>
 <body>
     <div id="app-root"></div>
-    <script type="importmap">
-    {
-      "imports": {
-        "codemirror": "https://esm.sh/codemirror",
-        "@codemirror/view": "https://esm.sh/@codemirror/view",
-        "@codemirror/state": "https://esm.sh/@codemirror/state",
-        "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete",
-        "@codemirror/commands": "https://esm.sh/@codemirror/commands",
-        "@codemirror/theme-one-dark": "https://esm.sh/@codemirror/theme-one-dark",
-        "@codemirror/lang-javascript": "https://esm.sh/@codemirror/lang-javascript",
-        "@codemirror/lang-cpp": "https://esm.sh/@codemirror/lang-cpp",
-        "@codemirror/lang-go": "https://esm.sh/@codemirror/lang-go",
-        "@codemirror/lang-java": "https://esm.sh/@codemirror/lang-java",
-        "@codemirror/lang-php": "https://esm.sh/@codemirror/lang-php",
-        "@codemirror/lang-python": "https://esm.sh/@codemirror/lang-python",
-        "@codemirror/lang-rust": "https://esm.sh/@codemirror/lang-rust",
-        "@codemirror/lang-html": "https://esm.sh/@codemirror/lang-html",
-        "@codemirror/lang-css": "https://esm.sh/@codemirror/lang-css",
-        "@codemirror/lang-xml": "https://esm.sh/@codemirror/lang-xml",
-        "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown",
-        "@replit/codemirror-vim": "https://esm.sh/@replit/codemirror-vim"
-      }
-    }
-    </script>
+    <script src="/static/js/fast-refresh.js?v=NN6F5NWP" data-enabled="false" data-build-id="NN6F5NWP" defer></script>
     <script type="module">
         const root = document.getElementById('app-root');
         try {
-            const response = await fetch('/static/templates/app_shell.html?v=01b3b53cd8e9');
+            const response = await fetch('/static/templates/app_shell.html?v=NN6F5NWP');
             if (!response.ok) throw new Error(`App shell request failed (${response.status})`);
             root.innerHTML = await response.text();
-            await import('/static/js/app.js?v=01b3b53cd8e9');
+            await import('/static/dist/app-NN6F5NWP.js');
         } catch (error) {
             console.error('Failed to load the application shell', error);
             root.textContent = 'Failed to load the application. Please reload.';

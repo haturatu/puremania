@@ -1,16 +1,42 @@
 const esbuild = require('esbuild');
 const { createHash } = require('crypto');
-const { readFileSync, rmSync, writeFileSync } = require('fs');
+const { readFileSync, readdirSync, rmSync, statSync, watch, writeFileSync } = require('fs');
+const { join } = require('path');
 
 const entryPoints = {
     app: 'static/js/app.js',
 };
 
+const refreshEnabled = process.env.FAST_REFRESH === '1';
+const watchEnabled = refreshEnabled && process.env.WATCH === '1';
+
+function sourceFiles(directory) {
+    return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+        const path = join(directory, entry.name);
+        return entry.isDirectory() ? sourceFiles(path) : [path];
+    });
+}
+
+function frontendDigest() {
+    const hash = createHash('sha256');
+    const files = [
+        'index.html.local',
+        ...sourceFiles('static/js'),
+        ...sourceFiles('static/css'),
+        ...sourceFiles('static/templates'),
+    ].sort();
+    for (const path of files) {
+        hash.update(path);
+        hash.update(readFileSync(path));
+    }
+    return hash.digest('hex');
+}
+
 async function build() {
     rmSync('static/dist', { recursive: true, force: true });
-    // The shell is fetched separately. Include its digest in the app bundle so
-    // a shell-only change produces a new URL for both assets.
-    const shellDigest = createHash('sha256').update(readFileSync('static/templates/app_shell.html')).digest('hex');
+    // CSS and templates are requested outside the bundle. Include all frontend
+    // inputs in its identity, so a deployment always has one coherent version.
+    const sourceDigest = frontendDigest();
     const result = await esbuild.build({
         entryPoints,
         bundle: true,
@@ -20,7 +46,7 @@ async function build() {
         minify: true,
         sourcemap: true,
         target: ['es2020'],
-        banner: { js: `/* app-shell:${shellDigest} */` },
+        banner: { js: `/* frontend:${sourceDigest} */` },
         metafile: true,
         logLevel: 'info',
     });
@@ -40,11 +66,37 @@ async function build() {
 
     const html = readFileSync('index.html.local', 'utf8')
         .replaceAll('__APP_ASSET__', assetURLs.app)
-        .replaceAll('__ASSET_VERSION__', assetVersion);
+        .replaceAll('__ASSET_VERSION__', assetVersion)
+        .replaceAll('__FAST_REFRESH_ENABLED__', String(refreshEnabled));
     writeFileSync('static/index.html', html);
+    writeFileSync('static/build-info.json', JSON.stringify({ version: assetVersion }) + '\n');
 }
 
-build().catch(error => {
-    console.error(error);
-    process.exit(1);
-});
+async function runBuild() {
+    try {
+        await build();
+    } catch (error) {
+        console.error(error);
+        if (!watchEnabled) process.exitCode = 1;
+    }
+}
+
+void runBuild();
+
+if (watchEnabled) {
+    let timer;
+    const scheduleBuild = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => void runBuild(), 75);
+    };
+    for (const path of ['index.html.local', 'static/js', 'static/css', 'static/templates']) {
+        if (statSync(path).isDirectory()) {
+            for (const directory of [path, ...sourceFiles(path).map(file => file.slice(0, file.lastIndexOf('/')))]) {
+                watch(directory, scheduleBuild);
+            }
+        } else {
+            watch(path, scheduleBuild);
+        }
+    }
+    console.log('Fast Refresh build watcher is running.');
+}

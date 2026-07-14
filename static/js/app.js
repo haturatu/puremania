@@ -214,6 +214,9 @@ async function main() {
 
     const app = new FileManagerApp();
     await app.init();
+    // Development Fast Refresh consults this only to avoid reloading while a
+    // resumable upload has a live transport session.
+    window.__puremaniaApp = app;
 }
 
 if (document.readyState === 'loading') {

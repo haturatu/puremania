@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "Frontend dependencies for Pure Mania",
   "scripts": {
-    "build": "node build.js"
+    "build": "node build.js",
+    "dev": "FAST_REFRESH=1 WATCH=1 node build.js"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.17.0",

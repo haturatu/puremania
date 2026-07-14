@@ -220,9 +220,10 @@ func main() {
 
 func staticCacheMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/index.html" {
+		if r.URL.Path == "/index.html" || r.URL.Path == "/build-info.json" {
 			// Keep direct requests to the generated application document
-			// consistent with the top-level SPA fallback.
+			// and the development refresh manifest consistent with the top-level
+			// SPA fallback.
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		} else if strings.HasPrefix(r.URL.Path, "/dist/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")

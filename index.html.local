@@ -13,6 +13,7 @@
 </head>
 <body>
     <div id="app-root"></div>
+    <script src="/static/js/fast-refresh.js?v=__ASSET_VERSION__" data-enabled="__FAST_REFRESH_ENABLED__" data-build-id="__ASSET_VERSION__" defer></script>
     <script type="module">
         const root = document.getElementById('app-root');
         try {
