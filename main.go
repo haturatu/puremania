@@ -220,18 +220,11 @@ func main() {
 
 func staticCacheMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/index.html" || r.URL.Path == "/build-info.json" {
-			// Keep direct requests to the generated application document
-			// and the development refresh manifest consistent with the top-level
-			// SPA fallback.
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-		} else if strings.HasPrefix(r.URL.Path, "/dist/") {
-			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		} else {
-			// Raw modules, templates, and remote-mode CSS retain stable URLs.
-			// Revalidate them so a switch never serves a previous version.
-			w.Header().Set("Cache-Control", "no-cache")
-		}
+		// Everything under /static is part of the browser UI: the application
+		// document, bundled/raw JavaScript, stylesheets, templates, and the
+		// development refresh manifest. Never allow an old UI graph to survive a
+		// deployment, including on mobile browsers and intermediary caches.
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		next.ServeHTTP(w, r)
 	})
 }
