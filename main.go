@@ -39,51 +39,9 @@ func startAria2cDaemon(logger *slog.Logger) (rpcURL string, rpcToken string, err
 
 	rpcPort := "6800"
 
-	// Check for existing process and kill it
-	logger.Info("Checking for existing aria2c process on port " + rpcPort)
-	pidCmd := exec.Command("lsof", "-t", "-i:"+rpcPort)
-	output, err := pidCmd.Output()
-	if err == nil && len(output) > 0 {
-		foundAria2c := false
-		for _, pidStr := range strings.Fields(string(output)) {
-			cmdOut, cmdErr := exec.Command("ps", "-p", pidStr, "-o", "comm=").Output()
-			if cmdErr != nil {
-				logger.Warn("Failed to inspect process on aria2c port", "pid", pidStr, "error", cmdErr)
-				continue
-			}
-
-			procName := strings.TrimSpace(string(cmdOut))
-			if !strings.Contains(procName, "aria2c") {
-				logger.Warn("Port is used by non-aria2c process, skipping kill", "pid", pidStr, "process", procName)
-				continue
-			}
-
-			pid, convErr := strconv.Atoi(pidStr)
-			if convErr != nil {
-				logger.Warn("Invalid process id returned by lsof", "pid", pidStr, "error", convErr)
-				continue
-			}
-
-			logger.Info("Found existing aria2c process, attempting to kill it", "pid", pid)
-			process, findErr := os.FindProcess(pid)
-			if findErr != nil {
-				logger.Warn("Failed to find process", "pid", pid, "error", findErr)
-				continue
-			}
-
-			if killErr := process.Kill(); killErr != nil {
-				logger.Warn("Failed to kill aria2c process", "pid", pid, "error", killErr)
-				continue
-			}
-
-			logger.Info("Aria2c process killed successfully", "pid", pid)
-			foundAria2c = true
-		}
-
-		if foundAria2c {
-			time.Sleep(1 * time.Second) // Give it a moment to release the port
-		}
-	}
+	// aria2c is a child process of this container. Container restarts terminate
+	// it with the application, so scanning and killing unrelated processes is
+	// unnecessary (and avoids requiring lsof/procps in the runtime image).
 	rpcURL = fmt.Sprintf("http://localhost:%s/jsonrpc", rpcPort)
 
 	cmd := exec.Command(

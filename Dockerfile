@@ -21,19 +21,20 @@ COPY index.html.local ./index.html.local
 RUN npm install \
     && npm run build
 
+FROM mwader/static-ffmpeg:8.1.2 AS static-ffmpeg
+
+# P3TERX supplies a statically linked aria2c for supported Linux platforms.
+FROM p3terx/aria2-pro:test AS static-aria2
+
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        aria2 \
         ca-certificates \
         curl \
-        ffmpeg \
-        lsof \
-        procps \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd --system --uid 1000 --home-dir /home/puremania --create-home --shell /usr/sbin/nologin puremania \
+RUN useradd --system --uid 1000 --home-dir /home/puremania --create-home --shell /usr/bin/nologin puremania \
     && mkdir -p /app /data \
     && chown -R puremania:puremania /app /data
 
@@ -41,6 +42,8 @@ WORKDIR /app
 
 COPY --from=builder /out/puremania /app/puremania
 COPY --from=frontend /src/static /app/static
+COPY --from=static-ffmpeg /ffmpeg /usr/local/bin/ffmpeg
+COPY --from=static-aria2 /usr/local/bin/aria2c /usr/local/bin/aria2c
 
 USER puremania
 
