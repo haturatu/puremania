@@ -5,11 +5,10 @@ services:
     image: puremania:local
     container_name: puremania
     user: "${PUREMANIA_UID:-1000}:${PUREMANIA_GID:-1000}"
-    ports:
-      - "${PUREMANIA_PORT:-8844}:8844"
+    network_mode: host
     environment:
-      HOME: "${PUREMANIA_HOME:-/home/puremania}"
-      STORAGE_DIR: /data
+      HOME: /home/puremania
+      STORAGE_DIR: /home/puremania
       PORT: 8844
       MAX_FILE_SIZE_MB: "${PUREMANIA_MAX_FILE_SIZE_MB:-10000}"
       ZIP_TIMEOUT: "${PUREMANIA_ZIP_TIMEOUT:-300}"
@@ -18,6 +17,8 @@ services:
       MOUNT_DIRS: "${PUREMANIA_MOUNT_DIRS:-}"
       SPECIFIC_DIRS: "${PUREMANIA_SPECIFIC_DIRS:-}"
     volumes:
+      # To display your home directory, replace "tux" with your username ($USER)
+      - "${PUREMANIA_HOST_HOME:-/home/tux}:/home/puremania"
       - "${PUREMANIA_STORAGE_DIR:-puremania-data}:/data"
     restart: unless-stopped
 

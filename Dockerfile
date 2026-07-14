@@ -10,6 +10,18 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/puremania .
 
+FROM node:26-bookworm-slim AS frontend
+
+WORKDIR /src
+
+COPY package.json build.js ./
+COPY static ./static
+COPY index.html.local ./index.html.local
+
+RUN npm install \
+    && npm run build \
+    && cp index.html.local static/index.html
+
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update \
@@ -29,7 +41,7 @@ RUN useradd --system --uid 1000 --home-dir /home/puremania --create-home --shell
 WORKDIR /app
 
 COPY --from=builder /out/puremania /app/puremania
-COPY static /app/static
+COPY --from=frontend /src/static /app/static
 
 USER puremania
 
