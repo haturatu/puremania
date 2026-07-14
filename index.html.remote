@@ -4,9 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pure Mania</title>
+    <link rel="modulepreload" href="__APP_ASSET__" fetchpriority="high">
+    <script>
+        window.__puremaniaAppShell = fetch('/static/templates/app_shell.html?v=__ASSET_VERSION__');
+    </script>
     <link rel="stylesheet" href="/static/css/style.css?v=__ASSET_VERSION__">
-    <link rel="stylesheet" href="/static/css/masonry.css?v=__ASSET_VERSION__">
-    <link rel="stylesheet" href="/static/css/components/video-view.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/masonry.css?v=__ASSET_VERSION__" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="/static/css/components/video-view.css?v=__ASSET_VERSION__" media="print" onload="this.media='all'">
     <style>
     .cm-editor { border: 1px solid #ddd; }
     </style>
@@ -40,7 +44,7 @@
     <script type="module">
         const root = document.getElementById('app-root');
         try {
-            const response = await fetch('/static/templates/app_shell.html?v=__ASSET_VERSION__');
+            const response = await window.__puremaniaAppShell;
             if (!response.ok) throw new Error(`App shell request failed (${response.status})`);
             root.innerHTML = await response.text();
             await import('/static/js/app.js?v=__ASSET_VERSION__');
