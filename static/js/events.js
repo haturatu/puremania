@@ -203,6 +203,7 @@ export class EventHandler {
         fileBrowser.addEventListener('drop', (e) => {
             if (!e.target.closest('.upload-area')) {
                 e.preventDefault();
+                e.stopPropagation();
                 dragCounter = 0;
                 fileBrowser.classList.remove('dragover');
                 this.app.uploader.handleFileDrop(e);

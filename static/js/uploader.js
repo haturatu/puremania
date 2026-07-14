@@ -179,7 +179,13 @@ export class Uploader {
         area.addEventListener('dragenter', event => { event.preventDefault(); dragDepth++; area.classList.add('dragover'); });
         area.addEventListener('dragover', event => event.preventDefault());
         area.addEventListener('dragleave', event => { event.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; area.classList.remove('dragover'); } });
-        area.addEventListener('drop', event => { event.preventDefault(); dragDepth = 0; area.classList.remove('dragover'); void this.handleFileDrop(event); });
+        area.addEventListener('drop', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            dragDepth = 0;
+            area.classList.remove('dragover');
+            void this.handleFileDrop(event);
+        });
     }
 
     fileKey(item, destination) {
@@ -444,19 +450,29 @@ export class Uploader {
         let scanned = 0;
         const visit = async (entry, parent = '') => {
             if (entry.isFile) {
-                const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
-                files.push({ file, relativePath: parent + file.name });
+                const file = await new Promise(resolve => entry.file(resolve, () => resolve(null)));
+                if (file) files.push({ file, relativePath: parent + file.name });
             } else if (entry.isDirectory) {
                 const reader = entry.createReader();
                 while (true) {
-                    const entries = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+                    const entries = await new Promise(resolve => reader.readEntries(resolve, () => resolve([])));
                     if (!entries.length) break;
-                    for (const child of entries) { await visit(child, `${parent}${entry.name}/`); if (++scanned % 50 === 0) await yieldToBrowser(); }
+                    for (const child of entries) {
+                        await visit(child, `${parent}${entry.name}/`);
+                        if (++scanned % 50 === 0) await yieldToBrowser();
+                    }
                 }
             }
         };
-        if (dataTransfer.items) for (const item of dataTransfer.items) { const entry = item.webkitGetAsEntry?.(); if (entry) await visit(entry); }
-        else for (const file of dataTransfer.files) files.push({ file, relativePath: file.name });
+        const entries = dataTransfer.items ? [...dataTransfer.items]
+            .filter(item => item.kind === 'file').map(item => item.webkitGetAsEntry?.()).filter(Boolean) : [];
+        if (entries.length) {
+            // Each top-level directory is walked independently; readEntries is
+            // called until empty, as required by Chromium's directory API.
+            for (const entry of entries) await visit(entry);
+        } else {
+            for (const file of dataTransfer.files || []) files.push({ file, relativePath: file.webkitRelativePath || file.name });
+        }
         return files;
     }
 
