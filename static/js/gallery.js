@@ -1,6 +1,7 @@
 import { getTemplateContent } from './template.js';
 import { createModalOverlay, bindModalClose } from './modal.js';
 import { buildApiUrl } from './util.js';
+import { ImageLoader } from './image-loader.js';
 
 export class ImageViewer {
     constructor() {
@@ -8,6 +9,7 @@ export class ImageViewer {
         this.images = [];
         this.isOpen = false;
         this.navTimeout = null;
+        this.imageLoader = new ImageLoader({ concurrency: 1, maxQueue: 4 });
     }
     
     init() {
@@ -83,6 +85,7 @@ export class ImageViewer {
         this.isOpen = false;
         document.body.style.overflow = '';
         clearTimeout(this.navTimeout);
+        this.imageLoader.clear();
     }
     
     showImage(index) {
@@ -95,6 +98,21 @@ export class ImageViewer {
         this.titleElement.textContent = `${index + 1} / ${this.images.length}`;
         this.nameElement.textContent = image.name;
         this.sizeElement.textContent = image.size;
+        this.preloadNeighbors(index);
+    }
+
+    preloadNeighbors(index) {
+        if (this.images.length < 2) return;
+        [index + 1, index - 1].forEach((candidate, priority) => {
+            const image = this.images[(candidate + this.images.length) % this.images.length];
+            this.imageLoader.enqueue({
+                key: `viewer:${image.path}`,
+                src: buildApiUrl('/api/files/content', { path: image.path }),
+                priority,
+                // Loading into a detached Image warms the browser cache only.
+                onLoad: () => {}
+            });
+        });
     }
     
     showPrevious() {
