@@ -45,7 +45,7 @@ export class Uploader {
         this.activeUploadSession = null;
         this.store = new UploadSessionStore();
         this.progress = new Map();
-        this.resumeRequestedKey = null;
+        this.resumeRequest = null;
         this.createResumeInputs();
     }
 
@@ -88,26 +88,29 @@ export class Uploader {
             input.hidden = true;
             input.className = className;
             if (directory) input.setAttribute('webkitdirectory', '');
-            input.addEventListener('change', () => this.handleSelectedFileList(input));
+            input.addEventListener('change', () => { void this.handleSelectedFileList(input); });
             document.body.appendChild(input);
         };
         create('resume-upload-input-files', false);
         create('resume-upload-input-folders', true);
     }
 
-    handleSelectedFileList(input) {
+    async handleSelectedFileList(input) {
         if (!input.files?.length) return;
         const files = Array.from(input.files, file => ({ file, relativePath: file.webkitRelativePath || file.name }));
         input.value = '';
-        if (this.resumeRequestedKey) {
-            const requested = this.resumeRequestedKey;
-            this.resumeRequestedKey = null;
-            if (!files.some(item => this.fileKey(item, this.savedDestinationFromKey(requested)) === requested)) {
+        let destination = null;
+        if (this.resumeRequest) {
+            const request = this.resumeRequest;
+            this.resumeRequest = null;
+            destination = request.destination;
+            if (!files.some(item => this.fileKey(item, destination) === request.key)) {
                 this.app.ui.showToast('Resume upload', 'Choose the original file or folder to resume this upload.', 'warning');
                 return;
             }
+            await this.discardWrongRouteDuplicates(files, destination);
         }
-        void this.handleFileUpload(files);
+        await this.handleFileUpload(files, destination);
     }
 
     bindUploadEvents() {
@@ -117,8 +120,8 @@ export class Uploader {
         const foldersInput = area.querySelector('.upload-input-folders');
         const selectFiles = area.querySelector('.btn-select-files');
         const selectFolders = area.querySelector('.btn-select-folders');
-        filesInput.addEventListener('change', () => this.handleSelectedFileList(filesInput));
-        foldersInput.addEventListener('change', () => this.handleSelectedFileList(foldersInput));
+        filesInput.addEventListener('change', () => { void this.handleSelectedFileList(filesInput); });
+        foldersInput.addEventListener('change', () => { void this.handleSelectedFileList(foldersInput); });
         selectFiles.addEventListener('click', event => { event.preventDefault(); filesInput.click(); });
         selectFolders.addEventListener('click', event => { event.preventDefault(); foldersInput.click(); });
         let dragDepth = 0;
@@ -133,11 +136,10 @@ export class Uploader {
         return `${destination}|${relativePath}|${file.size}|${file.lastModified}`;
     }
 
-    savedDestinationFromKey(key) { return key.split('|', 1)[0]; }
-
     async requestResume(key) {
-        this.resumeRequestedKey = key;
         const record = await this.store.get(key);
+        if (!record) throw new Error('Saved upload session was not found');
+        this.resumeRequest = { key, destination: record.destination };
         const isFolderUpload = record?.relativePath?.includes('/');
         const input = document.querySelector(isFolderUpload ? '.resume-upload-input-folders' : '.resume-upload-input-files');
         if (!input) throw new Error('Upload file selector is unavailable');
@@ -147,6 +149,14 @@ export class Uploader {
     async listJobs() {
         let records = [];
         try { records = await this.store.getAll(); } catch (_) { return []; }
+        // /system/uploads is a client-side route, not a writable virtual path.
+        // Remove sessions created by the pre-fix resume flow so they cannot
+        // continue as duplicate uploads or remain misleading in this list.
+        const invalidRouteRecords = records.filter(record => record.destination === '/system/uploads');
+        if (invalidRouteRecords.length) {
+            await Promise.all(invalidRouteRecords.map(record => this.discardJob(record.key)));
+            records = records.filter(record => record.destination !== '/system/uploads');
+        }
         const jobs = await Promise.all(records.map(async record => {
             try {
                 const status = await this.apiJSON(record.url);
@@ -164,6 +174,15 @@ export class Uploader {
         const record = await this.store.get(key);
         if (!record) return;
         try { await fetch(record.url, { method: 'DELETE' }); } finally { await this.store.remove(key); this.notifyJobsChanged(); }
+    }
+
+    async discardWrongRouteDuplicates(items, destination) {
+        if (destination === '/system/uploads') return;
+        let records;
+        try { records = await this.store.getAll(); } catch (_) { return; }
+        const wrongKeys = new Set(items.map(item => this.fileKey(item, '/system/uploads')));
+        const wrong = records.filter(record => record.destination === '/system/uploads' && wrongKeys.has(record.key));
+        await Promise.all(wrong.map(record => this.discardJob(record.key)));
     }
 
     async apiJSON(url, options = {}) {
@@ -275,13 +294,13 @@ export class Uploader {
         });
     }
 
-    async handleFileUpload(items) {
+    async handleFileUpload(items, destinationOverride = null) {
         if (!items?.length) return;
         const session = this.createUploadSession();
         this.activeUploadSession = session;
         this.app.progressManager.setCurrentUpload(session);
         this.progress.clear();
-        const destination = this.app.router.getCurrentPath();
+        const destination = destinationOverride || this.app.router.getCurrentPath();
         items.forEach(item => this.setFileProgress(this.fileKey(item, destination), item, 0, 'Queued'));
         document.querySelector('.upload-area')?.classList.add('uploading');
         this.app.progressManager.show('Uploading files');
@@ -300,7 +319,7 @@ export class Uploader {
             await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_FILES, items.length) }, next));
             this.app.ui.showToast(failed ? 'Upload completed with errors' : 'Upload complete', `${succeeded} uploaded${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
             this.app.api.directoryEtags.delete(destination);
-            await this.app.loadFiles(destination);
+            if (this.app.router.getCurrentPath() === destination) await this.app.loadFiles(destination);
         } catch (error) {
             if (this.isAbortError(error)) this.app.ui.showToast('Upload paused', 'Progress has been saved. Select the same files again to resume.', 'info');
             else this.handleUploadError(error.message);
