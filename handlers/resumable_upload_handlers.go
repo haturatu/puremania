@@ -238,6 +238,9 @@ func (h *Handler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expected := end - start + 1
+	// Keep large sequential uploads from becoming valuable page-cache residents.
+	// This is advisory and does not alter the stream or the on-disk bytes.
+	prepareUploadRange(part, start, expected)
 	written, copyErr := io.CopyBuffer(part, io.LimitReader(r.Body, expected+1), make([]byte, 128*1024))
 	if copyErr != nil || written != expected {
 		h.respondError(w, "Incomplete upload chunk", http.StatusBadRequest)
@@ -247,6 +250,9 @@ func (h *Handler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Cannot save upload chunk", http.StatusInternalServerError)
 		return
 	}
+	// Only evict data that has been durably flushed; a retry can always write a
+	// chunk again, but this avoids retaining multi-gigabyte page cache per upload.
+	releaseUploadRange(part, start, written)
 	session.UploadedBytes += written
 	if err := h.writeUploadSession(session); err != nil {
 		h.respondError(w, "Cannot persist upload progress", http.StatusInternalServerError)
