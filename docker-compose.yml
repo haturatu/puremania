@@ -10,7 +10,7 @@ services:
       HOME: /home/puremania
       STORAGE_DIR: /home/puremania
       PORT: 8844
-      MAX_FILE_SIZE_MB: "${PUREMANIA_MAX_FILE_SIZE_MB:-10000}"
+      MAX_FILE_SIZE_MB: "${PUREMANIA_MAX_FILE_SIZE_MB:-102400}"
       ZIP_TIMEOUT: "${PUREMANIA_ZIP_TIMEOUT:-300}"
       MAX_ZIP_SIZE: "${PUREMANIA_MAX_ZIP_SIZE:-1024}"
       ARIA2C: "${PUREMANIA_ARIA2C:-disable}"
