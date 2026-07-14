@@ -18,6 +18,8 @@ class FileManagerApp {
         this.selectedFiles = new Set();
         this.lastSelectedIndex = -1;
         this.config = {};
+        this.directoryScrollPositions = new Map();
+        this.renderedDirectoryPath = null;
         this.isPC = !/Mobi|Android/i.test(navigator.userAgent);
 
         // Initialize modules that don't depend on templates in their constructor
@@ -103,7 +105,21 @@ class FileManagerApp {
     }
 
     async navigateToPath(path) {
+        const browser = document.querySelector('.file-browser');
+        if (browser && this.renderedDirectoryPath && this.renderedDirectoryPath !== path) {
+            this.directoryScrollPositions.set(this.renderedDirectoryPath, browser.scrollTop);
+        }
         await this.loadFiles(path);
+        const restorePosition = this.directoryScrollPositions.get(path) || 0;
+        // File rendering replaces the browser contents. Restore after layout so
+        // new directories start at the top while revisited ones retain context.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                const currentBrowser = document.querySelector('.file-browser');
+                if (currentBrowser && this.router.getCurrentPath() === path) currentBrowser.scrollTop = restorePosition;
+            });
+        });
+        this.renderedDirectoryPath = path;
         this.clearSelection();
     }
 
