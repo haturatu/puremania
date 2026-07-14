@@ -78,3 +78,6 @@
 .aria2c-table .actions .btn {
     margin-right: 5px;
 }
+
+.upload-jobs-table .upload-destination { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-jobs-table .actions { min-width: 210px; }

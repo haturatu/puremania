@@ -2,7 +2,10 @@
     <div class="progress-modal">
         <div class="progress-header">
             <div class="progress-title">Uploading Files</div>
-            <button class="progress-close" style="display: none;">&times;</button>
+            <div class="progress-actions">
+                <button class="progress-minimize" type="button" title="Minimize upload status">−</button>
+                <button class="progress-close" type="button" title="Close upload status">&times;</button>
+            </div>
         </div>
         <div class="progress-info">
             <span class="progress-current">Preparing files...</span>
@@ -16,5 +19,8 @@
             <span class="progress-time">Elapsed: 0s</span>
         </div>
         <div class="progress-status">Initializing...</div>
+    </div>
+    <div class="upload-minimized">
+        <button type="button" class="upload-restore">⇧ Uploads</button>
     </div>
 </template>

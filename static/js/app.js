@@ -10,6 +10,7 @@ import { EventHandler } from './events.js';
 import { Uploader } from './uploader.js';
 import { Util } from './util.js';
 import { Aria2cPageHandler } from './aria2c-page.js';
+import { UploadPageHandler } from './upload-page.js';
 import { loadTemplates } from './template.js';
 
 class FileManagerApp {
@@ -34,6 +35,7 @@ class FileManagerApp {
         this.imageViewer = new ImageViewer(this);
         this.searchHandler = new SearchHandler(this);
         this.aria2cPageHandler = new Aria2cPageHandler(this);
+        this.uploadPageHandler = new UploadPageHandler(this);
     }
 
     async init() {
@@ -71,7 +73,11 @@ class FileManagerApp {
 
         // Setup router
         this.router.onChange((path) => {
-            if (path === '/system/aria2c') {
+            if (path === '/system/uploads') {
+                if (this.aria2cPageHandler.isInAria2cMode) this.aria2cPageHandler.exitAria2cMode(false);
+                this.uploadPageHandler.enter();
+            } else if (path === '/system/aria2c') {
+                this.uploadPageHandler.exit();
                 if (!this.config.Aria2cEnabled) {
                     this.ui.showToast('Info', 'Aria2c feature is not enabled.', 'info');
                     this.router.navigate('/');
@@ -82,8 +88,9 @@ class FileManagerApp {
                 }
                 this.aria2cPageHandler.enterAria2cMode();
             } else {
+                this.uploadPageHandler.exit();
                 if (this.aria2cPageHandler.isInAria2cMode) {
-                    this.aria2cPageHandler.exitAria2cMode();
+                    this.aria2cPageHandler.exitAria2cMode(false);
                 }
                 this.navigateToPath(path);
             }

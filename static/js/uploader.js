@@ -22,6 +22,7 @@ class UploadSessionStore {
     }
 
     async get(key) { return this.transaction('readonly', store => store.get(key)); }
+    async getAll() { return this.transaction('readonly', store => store.getAll()); }
     async put(value) { return this.transaction('readwrite', store => store.put(value)); }
     async remove(key) { return this.transaction('readwrite', store => store.delete(key)); }
 
@@ -44,6 +45,7 @@ export class Uploader {
         this.activeUploadSession = null;
         this.store = new UploadSessionStore();
         this.progress = new Map();
+        this.resumeRequestedKey = null;
     }
 
     createUploadSession() {
@@ -73,6 +75,8 @@ export class Uploader {
 
     isAbortError(error) { return error?.name === 'AbortError'; }
 
+    notifyJobsChanged() { window.dispatchEvent(new CustomEvent('puremania:upload-jobs-changed')); }
+
     showUploadDialog() { document.querySelector('.upload-input-files')?.click(); }
 
     bindUploadEvents() {
@@ -86,6 +90,14 @@ export class Uploader {
             if (!input.files?.length) return;
             const files = Array.from(input.files, file => ({ file, relativePath: file.webkitRelativePath || file.name }));
             input.value = '';
+            if (this.resumeRequestedKey) {
+                const requested = this.resumeRequestedKey;
+                this.resumeRequestedKey = null;
+                if (!files.some(item => this.fileKey(item, this.savedDestinationFromKey(requested)) === requested)) {
+                    this.app.ui.showToast('Resume upload', 'Choose the original file to resume this upload.', 'warning');
+                    return;
+                }
+            }
             void this.handleFileUpload(files);
         };
         filesInput.addEventListener('change', () => selected(filesInput));
@@ -104,9 +116,46 @@ export class Uploader {
         return `${destination}|${relativePath}|${file.size}|${file.lastModified}`;
     }
 
+    savedDestinationFromKey(key) { return key.split('|', 1)[0]; }
+
+    async requestResume(key) {
+        this.resumeRequestedKey = key;
+        const record = await this.store.get(key);
+        const isFolderUpload = record?.relativePath?.includes('/');
+        const input = document.querySelector(isFolderUpload ? '.upload-input-folders' : '.upload-input-files');
+        if (!input) throw new Error('Upload file selector is unavailable');
+        input.click();
+    }
+
+    async listJobs() {
+        let records = [];
+        try { records = await this.store.getAll(); } catch (_) { return []; }
+        const jobs = await Promise.all(records.map(async record => {
+            try {
+                const status = await this.apiJSON(record.url);
+                const active = this.activeUploadSession && this.progress.has(record.key);
+                return { ...record, uploadedBytes: status.uploadedBytes, totalBytes: status.totalBytes, completed: status.completed, state: status.completed ? 'completed' : active ? 'active' : 'paused' };
+            } catch (error) {
+                if (error.status === 404) { await this.store.remove(record.key); return null; }
+                return { ...record, uploadedBytes: record.uploadedBytes || 0, totalBytes: record.size, state: 'offline' };
+            }
+        }));
+        return jobs.filter(Boolean);
+    }
+
+    async discardJob(key) {
+        const record = await this.store.get(key);
+        if (!record) return;
+        try { await fetch(record.url, { method: 'DELETE' }); } finally { await this.store.remove(key); this.notifyJobsChanged(); }
+    }
+
     async apiJSON(url, options = {}) {
         const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
-        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || `Request failed (${response.status})`);
+        if (!response.ok) {
+            const error = new Error((await response.json().catch(() => ({}))).message || `Request failed (${response.status})`);
+            error.status = response.status;
+            throw error;
+        }
         return response.json();
     }
 
@@ -121,7 +170,7 @@ export class Uploader {
                 if (status.completed) await this.store.remove(key);
             } catch (error) {
                 if (this.isAbortError(error)) throw error;
-                try { await this.store.remove(key); } catch (_) { /* storage is optional */ }
+                if (error.status === 404) try { await this.store.remove(key); } catch (_) { /* storage is optional */ }
             }
         }
         const created = await this.apiJSON('/api/files/upload-sessions', {
@@ -129,7 +178,7 @@ export class Uploader {
             body: JSON.stringify({ path: destination, relativePath: item.relativePath, size: item.file.size })
         });
         const record = { key, id: created.uploadId, url: created.uploadURL, destination, relativePath: item.relativePath, size: item.file.size, updatedAt: Date.now() };
-        try { await this.store.put(record); } catch (_) { /* upload itself must still work */ }
+        try { await this.store.put(record); this.notifyJobsChanged(); } catch (_) { /* upload itself must still work */ }
         return { ...record, uploadedBytes: created.uploadedBytes || 0 };
     }
 
@@ -187,10 +236,10 @@ export class Uploader {
                     await pause((2 ** attempt) * 1000 + Math.floor(Math.random() * 250));
                 }
             }
-            try { await this.store.put({ ...record, uploadedBytes: offset, updatedAt: Date.now() }); } catch (_) { /* optional */ }
+            try { await this.store.put({ ...record, uploadedBytes: offset, updatedAt: Date.now() }); this.notifyJobsChanged(); } catch (_) { /* optional */ }
         }
         await this.apiJSON(`${record.url}/complete`, { method: 'POST', signal: session.signal });
-        try { await this.store.remove(record.key); } catch (_) { /* optional */ }
+        try { await this.store.remove(record.key); this.notifyJobsChanged(); } catch (_) { /* optional */ }
         this.setFileProgress(record.key, item, item.file.size, 'Completed');
     }
 
@@ -242,6 +291,7 @@ export class Uploader {
             document.querySelector('.upload-area')?.classList.remove('uploading');
             if (this.activeUploadSession === session) this.activeUploadSession = null;
             if (this.app.progressManager.currentUpload === session) this.app.progressManager.setCurrentUpload(null);
+            this.notifyJobsChanged();
         }
     }
 

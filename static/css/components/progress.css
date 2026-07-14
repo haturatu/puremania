@@ -26,6 +26,28 @@
     pointer-events: auto;
 }
 
+.progress-actions { display: flex; gap: 4px; }
+.progress-minimize,
+.progress-close {
+    min-width: 28px;
+    min-height: 28px;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.upload-minimized { display: none; pointer-events: auto; }
+.upload-restore {
+    background: var(--accent-primary);
+    color: white;
+    border: 0;
+    border-radius: 20px;
+    padding: 10px 15px;
+    cursor: pointer;
+    box-shadow: 0 5px 16px rgba(0, 0, 0, .35);
+}
+.progress-overlay.minimized .progress-modal { display: none; }
+.progress-overlay.minimized .upload-minimized { display: block; }
+
 .progress-header {
     display: flex;
     align-items: center;

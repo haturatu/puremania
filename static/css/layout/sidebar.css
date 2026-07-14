@@ -72,3 +72,5 @@
     margin-top: auto;
     display: none;
 }
+
+#upload-status-btn { border-top: 1px solid var(--border-color); }
