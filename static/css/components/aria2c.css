@@ -81,6 +81,24 @@
 
 .aria2c-section { overflow-x: auto; }
 
+/* Keep wide transfer tables usable on phones while matching the application
+ * theme instead of showing the browser's default horizontal scrollbar. */
+.aria2c-section {
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-primary) var(--bg-tertiary);
+}
+.aria2c-section::-webkit-scrollbar { height: 8px; }
+.aria2c-section::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: 999px;
+}
+.aria2c-section::-webkit-scrollbar-thumb {
+    background: var(--accent-primary);
+    border: 2px solid var(--bg-tertiary);
+    border-radius: 999px;
+}
+.aria2c-section::-webkit-scrollbar-thumb:hover { background: var(--accent-hover, var(--accent-primary)); }
+
 /* Upload rows use the same transfer-table visual language as aria2, but their
  * longer paths and action labels need stable, non-overlapping table geometry. */
 .upload-jobs-table {
