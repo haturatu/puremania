@@ -5,7 +5,8 @@ services:
     image: puremania:local
     container_name: puremania
     user: "${PUREMANIA_UID:-1000}:${PUREMANIA_GID:-1000}"
-    network_mode: host
+    ports:
+      - "${PUREMANIA_PORT:-8844}:8844"
     environment:
       HOME: /home/puremania
       STORAGE_DIR: /home/puremania
