@@ -20,6 +20,7 @@ class FileManagerApp {
         this.config = {};
         this.directoryScrollPositions = new Map();
         this.renderedDirectoryPath = null;
+        this.editRequestId = 0;
         this.isPC = !/Mobi|Android/i.test(navigator.userAgent);
 
         // Initialize modules that don't depend on templates in their constructor
@@ -131,8 +132,9 @@ class FileManagerApp {
     }
 
     async editFile(path) {
+        const requestId = ++this.editRequestId;
         const content = await this.api.fetchFileContent(path);
-        if (content !== null) {
+        if (requestId === this.editRequestId && content !== null) {
             this.editor.open(path, content);
         }
     }

@@ -147,8 +147,12 @@ export class EventHandler {
     }
 
     handleKeydown(e) {
+        if (e.defaultPrevented) return;
+        const target = e.target;
+        if (target instanceof Element && target.closest('input, textarea, select, dialog, [contenteditable="true"], .cm-editor, .editor-modal')) return;
+        const browserFocused = document.activeElement?.closest?.('.file-browser') || target?.closest?.('.file-browser');
         const keyActions = {
-            'Delete': () => this.app.selectedFiles.size > 0 && this.app.api.deleteSelectedFiles(),
+            'Delete': () => browserFocused && this.app.selectedFiles.size > 0 && this.app.api.deleteSelectedFiles(),
             'ArrowLeft': () => e.altKey && this.app.navigateToParent(),
             'f': () => e.ctrlKey && (e.preventDefault(), document.querySelector('.search-input')?.focus()),
             'n': () => {
@@ -159,6 +163,7 @@ export class EventHandler {
             },
             'u': () => e.ctrlKey && (e.preventDefault(), this.app.uploader.showUploadDialog()),
             'F2': () => {
+                if (!browserFocused) return;
                 if (this.app.selectedFiles.size === 1) {
                     const path = Array.from(this.app.selectedFiles)[0];
                     this.app.api.renameFile(path);

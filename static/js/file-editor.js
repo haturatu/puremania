@@ -77,6 +77,7 @@ export class FileEditor {
         this.app = app;
         this.currentFile = null;
         this.editorView = null;
+        this.saving = false;
         this.isPC = !/Mobi|Android/i.test(navigator.userAgent);
         this.vimCompartment = new Compartment();
 
@@ -208,6 +209,7 @@ export class FileEditor {
 
     open(filePath, content) {
         this.currentFile = filePath;
+        this.savedContent = content;
         this.filenameElement.textContent = filePath.split('/').pop();
 
         if (this.editorView) {
@@ -273,28 +275,34 @@ export class FileEditor {
     }
 
     async save() {
-        if (!this.currentFile || !this.editorView) return;
+        if (!this.currentFile || !this.editorView || this.saving) return;
 
         const content = this.editorView.state.doc.toString();
+        const filePath = this.currentFile;
+        this.saving = true;
 
         try {
             const response = await fetch('/api/files/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: this.currentFile, content: content })
+                body: JSON.stringify({ path: filePath, content: content })
             });
 
             const result = await response.json();
 
             if (result.success) {
                 this.showToast('File saved successfully', 'success');
-                this.close();
+                this.savedContent = content;
+                // Do not discard edits made while the request was in flight.
+                if (this.currentFile === filePath && this.editorView?.state.doc.toString() === content) this.close();
             } else {
                 this.showToast(result.message, 'error');
             }
         } catch (error) {
             this.showToast('Failed to save file', 'error');
             console.error('Error saving file:', error);
+        } finally {
+            this.saving = false;
         }
     }
 
