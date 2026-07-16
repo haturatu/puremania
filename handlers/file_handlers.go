@@ -68,9 +68,18 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	if h.isProtectedRoot(fullPath) {
+		h.respondError(w, "Cannot upload directly to a protected root", http.StatusBadRequest)
+		return
+	}
+	info, err := os.Stat(fullPath)
+	if err != nil || info.IsDir() {
+		h.respondError(w, "Cannot inspect video", http.StatusBadRequest)
+		return
+	}
 
-	// generate thumbnail filename based on SHA256 hash of the path
-	hash := sha256.Sum256([]byte(path))
+	// Include versioned file metadata so replacing a video cannot reuse stale art.
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%d:%d", path, info.Size(), info.ModTime().UnixNano())))
 	thumbnailFilename := hex.EncodeToString(hash[:]) + ".jpg"
 	thumbnailPath := filepath.Join(thumbnailDir, thumbnailFilename)
 
@@ -82,7 +91,19 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 
 	// generate thumbnail
 	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
-		return h.generateThumbnail(fullPath, thumbnailPath)
+		tmp, err := os.CreateTemp(thumbnailDir, ".thumbnail-*.jpg")
+		if err != nil {
+			return err
+		}
+		tmpPath := tmp.Name()
+		if err := tmp.Close(); err != nil {
+			return err
+		}
+		defer os.Remove(tmpPath)
+		if err := h.generateThumbnail(fullPath, tmpPath); err != nil {
+			return err
+		}
+		return os.Rename(tmpPath, thumbnailPath)
 	})
 
 	result := <-resultChan
@@ -123,11 +144,30 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 
 	// 出力先ディレクトリを決定 (例: archive.zip -> archive/)
 	destPath := strings.TrimSuffix(sourcePath, filepath.Ext(sourcePath))
+	if h.isProtectedRoot(destPath) {
+		h.respondError(w, "Cannot extract over a protected root", http.StatusBadRequest)
+		return
+	}
+	if _, err := os.Lstat(destPath); err == nil {
+		h.respondError(w, "Extraction destination already exists", http.StatusConflict)
+		return
+	} else if !os.IsNotExist(err) {
+		h.respondError(w, "Cannot inspect extraction destination", http.StatusInternalServerError)
+		return
+	}
 
 	// 並列処理で解凍
 	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute) // 30分タイムアウト
 		defer cancel()
+		tempPath, err := os.MkdirTemp(filepath.Dir(destPath), ".puremania-extract-*")
+		if err != nil {
+			return fmt.Errorf("cannot create extraction staging directory: %w", err)
+		}
+		defer os.RemoveAll(tempPath)
+		var extractedBytes int64
+		var extractedFiles int
+		maxBytes := h.config.MaxZipSize << 20
 
 		source, err := os.Open(sourcePath)
 		if err != nil {
@@ -145,7 +185,14 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		handler := func(ctx context.Context, f archives.FileInfo) error {
-			dest, err := secureJoin(destPath, f.NameInArchive)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			extractedFiles++
+			if extractedFiles > 10000 {
+				return fmt.Errorf("archive has too many files")
+			}
+			dest, err := secureJoin(tempPath, f.NameInArchive)
 			if err != nil {
 				return fmt.Errorf("unsafe file path in archive: %s", f.NameInArchive)
 			}
@@ -168,7 +215,7 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 				}
 			}()
 
-			createdFile, err := os.Create(dest)
+			createdFile, err := os.OpenFile(dest, os.O_CREATE|os.O_EXCL|os.O_WRONLY, f.Mode())
 			if err != nil {
 				return fmt.Errorf("could not create destination file: %w", err)
 			}
@@ -178,7 +225,11 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 				}
 			}()
 
-			_, err = io.Copy(createdFile, file)
+			written, err := io.Copy(createdFile, io.LimitReader(file, maxBytes-extractedBytes+1))
+			extractedBytes += written
+			if extractedBytes > maxBytes {
+				return fmt.Errorf("archive exceeds extraction size limit")
+			}
 			return err
 		}
 
@@ -198,12 +249,11 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err != nil {
-			if err := os.RemoveAll(destPath); err != nil {
-				h.logger.Error("Failed to remove destination path after extraction error", "path", destPath, "error", err)
-			}
 			return fmt.Errorf("extraction failed: %w", err)
 		}
-
+		if err := os.Rename(tempPath, destPath); err != nil {
+			return fmt.Errorf("cannot publish extraction: %w", err)
+		}
 		return nil
 	})
 
@@ -510,32 +560,46 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// ファイル作成
-			dst, err := os.Create(targetPath)
+			if h.isProtectedRoot(targetPath) {
+				resultChan <- types.UploadResult{Path: relativePath, Success: false}
+				return
+			}
+			// Write to a sibling first so an interrupted legacy upload cannot
+			// truncate or remove an existing destination.
+			dst, err := os.CreateTemp(targetDir, ".puremania-uploading-*")
 			if err != nil {
 				h.logger.Error("Failed to create destination file", "path", targetPath, "error", err)
 				resultChan <- types.UploadResult{Path: relativePath, Success: false}
 				return
 			}
-			defer func() {
-				if err := dst.Close(); err != nil {
-					h.logger.Error("Failed to close destination file for upload", "path", targetPath, "error", err)
-				}
-			}()
+			tmpPath := dst.Name()
 
 			// The legacy multipart endpoint is retained for compatibility, but it
 			// must never materialize even a "small" file with io.ReadAll. The
 			// resumable endpoint is used by the UI; this preserves the same bounded
 			// memory property for older API consumers.
 			_, saveErr := io.CopyBuffer(dst, file, make([]byte, getOptimalBufferSize(fileHeader.Size)))
+			if saveErr == nil {
+				saveErr = dst.Sync()
+			}
 
 			// エラーチェック
 			if saveErr != nil {
+				_ = dst.Close()
 				h.logger.Error("Failed to save uploaded file", "path", targetPath, "error", saveErr)
-				// エラー時は作成したファイルを削除
-				if err := os.Remove(targetPath); err != nil {
+				if err := os.Remove(tmpPath); err != nil {
 					h.logger.Error("Failed to remove partially uploaded file", "path", targetPath, "error", err)
 				}
+				resultChan <- types.UploadResult{Path: relativePath, Success: false}
+				return
+			}
+			if err := dst.Close(); err != nil {
+				_ = os.Remove(tmpPath)
+				resultChan <- types.UploadResult{Path: relativePath, Success: false}
+				return
+			}
+			if err := os.Rename(tmpPath, targetPath); err != nil {
+				_ = os.Remove(tmpPath)
 				resultChan <- types.UploadResult{Path: relativePath, Success: false}
 				return
 			}
@@ -730,36 +794,51 @@ func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 	// io.Pipeでストリーミング
 	pr, pw := io.Pipe()
 
-	// 並列処理でzip作成
+	// zip.Writer is inherently serial. Keeping this work out of the shared
+	// worker pool avoids parent tasks waiting on child tasks in that same pool.
 	go func() {
-		defer func() {
-			if err := pw.Close(); err != nil {
-				h.logger.Error("Failed to close pipe writer", "error", err)
-			}
-		}()
-		h.createZipArchive(pw, req.Paths)
+		ctx, cancel := context.WithTimeout(r.Context(), time.Duration(h.config.ZipTimeout)*time.Second)
+		defer cancel()
+		if err := h.createZipArchive(ctx, pw, req.Paths); err != nil {
+			_ = pw.CloseWithError(err)
+			return
+		}
+		_ = pw.Close()
 	}()
 
 	// ストリーミング出力
 	_, _ = io.Copy(w, pr)
 }
 
-func (h *Handler) createZipArchive(w io.Writer, paths []string) {
-	zipWriter := zip.NewWriter(w)
-	defer func() {
-		if err := zipWriter.Close(); err != nil {
-			h.logger.Error("Failed to close zip writer", "error", err)
-		}
-	}()
+type maxBytesWriter struct {
+	w         io.Writer
+	remaining int64
+}
+
+func (w *maxBytesWriter) Write(p []byte) (int, error) {
+	if int64(len(p)) > w.remaining {
+		return 0, fmt.Errorf("zip output exceeds configured size limit")
+	}
+	n, err := w.w.Write(p)
+	w.remaining -= int64(n)
+	return n, err
+}
+
+func (h *Handler) createZipArchive(ctx context.Context, w io.Writer, paths []string) error {
+	zipWriter := zip.NewWriter(&maxBytesWriter{w: w, remaining: h.config.MaxZipSize << 20})
 
 	var successfulFiles, failedFiles int64
+	var inputBytes int64
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
 	// 並列処理でファイルをZIPに追加
 	for _, userPath := range paths {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		wg.Add(1)
-		worker.Submit(h.workerPool, func() {
+		func() {
 			defer wg.Done()
 
 			fullPath, err := h.convertToPhysicalPath(userPath)
@@ -780,6 +859,11 @@ func (h *Handler) createZipArchive(w io.Writer, paths []string) {
 				// ディレクトリの場合は並列WalkDir
 				h.addDirectoryToZip(zipWriter, fullPath, &successfulFiles, &failedFiles, &mu)
 			} else {
+				inputBytes += fileInfo.Size()
+				if inputBytes > h.config.MaxZipSize<<20 {
+					atomic.AddInt64(&failedFiles, 1)
+					return
+				}
 				// 単一ファイルの処理
 				if h.addFileToZip(zipWriter, fullPath, filepath.Base(userPath), &mu) {
 					atomic.AddInt64(&successfulFiles, 1)
@@ -787,10 +871,17 @@ func (h *Handler) createZipArchive(w io.Writer, paths []string) {
 					atomic.AddInt64(&failedFiles, 1)
 				}
 			}
-		})
+		}()
 	}
 
 	wg.Wait()
+	if failedFiles > 0 {
+		return fmt.Errorf("failed to add %d file(s) to zip", failedFiles)
+	}
+	if err := zipWriter.Close(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (h *Handler) addDirectoryToZip(zipWriter *zip.Writer, dirPath string, successfulFiles, failedFiles *int64, mu *sync.Mutex) {
@@ -836,16 +927,12 @@ func (h *Handler) addDirectoryToZip(zipWriter *zip.Writer, dirPath string, succe
 			return nil
 		}
 
-		// 並列処理でファイルを追加
-		wg.Add(1)
-		worker.Submit(h.workerPool, func() {
-			defer wg.Done()
-			if h.addFileToZip(zipWriter, filePath, relPath, mu) {
-				atomic.AddInt64(successfulFiles, 1)
-			} else {
-				atomic.AddInt64(failedFiles, 1)
-			}
-		})
+		// zip.Writer must be written serially; addFileToZip already holds mu.
+		if h.addFileToZip(zipWriter, filePath, relPath, mu) {
+			atomic.AddInt64(successfulFiles, 1)
+		} else {
+			atomic.AddInt64(failedFiles, 1)
+		}
 
 		return nil
 	})
@@ -907,12 +994,14 @@ func (h *Handler) addFileToZip(zipWriter *zip.Writer, filePath, zipPath string, 
 
 func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
 	var req types.SaveFileRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, 11<<20)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
 		h.logger.Error("Failed to decode request body for saving file", "error", err)
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-
 	if req.Path == "" {
 		h.respondError(w, "Path required", http.StatusBadRequest)
 		return
@@ -924,10 +1013,14 @@ func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Invalid path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	if h.isProtectedRoot(fullPath) {
+		h.respondError(w, "Cannot overwrite a protected root", http.StatusBadRequest)
+		return
+	}
 
 	// 並列処理でファイル保存
 	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
-		err := os.WriteFile(fullPath, []byte(req.Content), 0644)
+		err := atomicWriteFile(fullPath, []byte(req.Content), 0644)
 		return err
 	})
 
@@ -968,6 +1061,12 @@ func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
 				h.logger.Error("Invalid path for deletion", "path", path, "error", err)
 				mu.Lock()
 				errors = append(errors, fmt.Sprintf("Invalid path %s: %v", path, err))
+				mu.Unlock()
+				return
+			}
+			if h.isProtectedRoot(fullPath) {
+				mu.Lock()
+				errors = append(errors, fmt.Sprintf("Cannot delete protected root %s", path))
 				mu.Unlock()
 				return
 			}
@@ -1012,8 +1111,12 @@ func (h *Handler) CreateDirectory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newDirPath := filepath.Join(parentPath, req.Name)
 	if strings.Contains(req.Name, "..") {
+		h.respondError(w, "Invalid directory name", http.StatusBadRequest)
+		return
+	}
+	newDirPath, err := secureJoin(parentPath, req.Name)
+	if err != nil {
 		h.respondError(w, "Invalid directory name", http.StatusBadRequest)
 		return
 	}
@@ -1061,11 +1164,19 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Invalid source path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	if h.isProtectedRoot(sourceFullPath) {
+		h.respondError(w, "Cannot move a protected root", http.StatusBadRequest)
+		return
+	}
 
 	targetFullPath, err := h.convertToPhysicalPath(req.TargetPath)
 	if err != nil {
 		h.logger.Error("Invalid target path for moving", "path", req.TargetPath, "error", err)
 		h.respondError(w, "Invalid target path: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if h.isProtectedRoot(targetFullPath) {
+		h.respondError(w, "Cannot overwrite a protected root", http.StatusBadRequest)
 		return
 	}
 
@@ -1128,9 +1239,17 @@ func (h *Handler) CreateFile(w http.ResponseWriter, r *http.Request) {
 		req.Name += ".md"
 	}
 
-	newFilePath := filepath.Join(parentPath, req.Name)
 	if strings.Contains(req.Name, "..") {
 		h.respondError(w, "Invalid file name", http.StatusBadRequest)
+		return
+	}
+	newFilePath, err := secureJoin(parentPath, req.Name)
+	if err != nil {
+		h.respondError(w, "Invalid file name", http.StatusBadRequest)
+		return
+	}
+	if h.isProtectedRoot(newFilePath) {
+		h.respondError(w, "Cannot overwrite a protected root", http.StatusBadRequest)
 		return
 	}
 

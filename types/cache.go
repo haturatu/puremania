@@ -1,6 +1,7 @@
 package types
 
 import (
+	"container/list"
 	"sync"
 	"time"
 )
@@ -22,7 +23,8 @@ func (c *CacheEntry) IsExpired() bool {
 type TTLCache struct {
 	Mu       sync.RWMutex
 	Entries  map[string]*CacheEntry
-	Order    []string
+	Order    *list.List
+	Nodes    map[string]*list.Element
 	MaxSize  int64
 	MaxItems int
 	CurSize  int64
