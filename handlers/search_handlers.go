@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 
 	"mime"
@@ -10,7 +11,6 @@ import (
 	"puremania/cache"
 	"puremania/types"
 	"puremania/utils"
-	"puremania/worker"
 	"regexp"
 	"sort"
 	"strings"
@@ -41,8 +41,18 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.MaxResults == 0 {
+	if req.MaxResults <= 0 || req.MaxResults > 10000 {
 		req.MaxResults = 1000
+	}
+	if req.UseRegex {
+		pattern := req.Term
+		if !req.CaseSensitive {
+			pattern = "(?i)" + pattern
+		}
+		if _, err := regexp.Compile(pattern); err != nil {
+			h.respondError(w, "Invalid regular expression", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// 細かいキャッシュキーを生成
@@ -61,30 +71,28 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 並列処理で検索実行
-	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
-		return h.performSearch(req, basePath)
-	})
-
-	result := <-resultChan
-	if results, ok := result.([]types.FileInfo); ok {
+	results, searchErr := h.performSearch(r.Context(), req, basePath)
+	if searchErr == nil {
 		// 結果をキャッシュ（検索結果は短めのTTL）
 		cache.Set(h.cache, cacheKey, results, int64(len(results)*200), time.Minute*2)
 		h.respondSuccess(w, results)
 	} else {
-		h.logger.Error("Search failed to return results")
+		if searchErr == context.Canceled || searchErr == context.DeadlineExceeded {
+			return
+		}
+		h.logger.Error("Search failed", "error", searchErr)
 		h.respondError(w, "Search failed", http.StatusInternalServerError)
 	}
 }
 
-func (h *Handler) performSearch(req struct {
+func (h *Handler) performSearch(ctx context.Context, req struct {
 	Term          string `json:"term"`
 	Path          string `json:"path"`
 	Scope         string `json:"scope"`
 	UseRegex      bool   `json:"useRegex"`
 	CaseSensitive bool   `json:"caseSensitive"`
 	MaxResults    int    `json:"maxResults"`
-}, basePath string) []types.FileInfo {
+}, basePath string) ([]types.FileInfo, error) {
 	var searchFunc func(string) bool
 
 	if req.UseRegex {
@@ -97,7 +105,7 @@ func (h *Handler) performSearch(req struct {
 		}
 		if err != nil {
 			h.logger.Error("Invalid regex in search", "term", req.Term, "error", err)
-			return []types.FileInfo{}
+			return nil, err
 		}
 		searchFunc = func(name string) bool {
 			return regex.MatchString(name)
@@ -116,14 +124,14 @@ func (h *Handler) performSearch(req struct {
 	}
 
 	if req.Scope == "recursive" {
-		return h.searchRecursiveParallel(basePath, searchFunc, req.MaxResults)
+		return h.searchRecursiveParallel(ctx, basePath, searchFunc, req.MaxResults), nil
 	} else {
-		return h.searchCurrentParallel(basePath, searchFunc, req.MaxResults)
+		return h.searchCurrentParallel(ctx, basePath, searchFunc, req.MaxResults), nil
 	}
 }
 
 // searchCurrentParallel - 並列処理で現在ディレクトリ検索
-func (h *Handler) searchCurrentParallel(path string, matchFunc func(string) bool, maxResults int) []types.FileInfo {
+func (h *Handler) searchCurrentParallel(ctx context.Context, path string, matchFunc func(string) bool, maxResults int) []types.FileInfo {
 	var results []types.FileInfo
 	var mu sync.Mutex
 
@@ -137,12 +145,20 @@ func (h *Handler) searchCurrentParallel(path string, matchFunc func(string) bool
 	resultCount := int64(0)
 
 	for _, entry := range entries {
+		if ctx.Err() != nil {
+			break
+		}
 		if atomic.LoadInt64(&resultCount) >= int64(maxResults) {
 			break
 		}
 
+		select {
+		case <-ctx.Done():
+			break
+		default:
+		}
 		wg.Add(1)
-		worker.Submit(h.workerPool, func() {
+		func() {
 			defer wg.Done()
 
 			if atomic.LoadInt64(&resultCount) >= int64(maxResults) {
@@ -187,7 +203,7 @@ func (h *Handler) searchCurrentParallel(path string, matchFunc func(string) bool
 				}
 				mu.Unlock()
 			}
-		})
+		}()
 	}
 
 	wg.Wait()
@@ -195,12 +211,17 @@ func (h *Handler) searchCurrentParallel(path string, matchFunc func(string) bool
 }
 
 // searchRecursiveParallel - 並列処理で再帰検索
-func (h *Handler) searchRecursiveParallel(path string, matchFunc func(string) bool, maxResults int) []types.FileInfo {
+func (h *Handler) searchRecursiveParallel(ctx context.Context, path string, matchFunc func(string) bool, maxResults int) []types.FileInfo {
 	var results []types.FileInfo
 	var mu sync.Mutex
 	resultCount := int64(0)
 
 	_ = filepath.WalkDir(path, func(filePath string, d os.DirEntry, err error) error {
+		select {
+		case <-ctx.Done():
+			return filepath.SkipAll
+		default:
+		}
 		if err != nil {
 			h.logger.Warn("Skipping path in recursive search due to error", "path", filePath, "error", err)
 			return nil // エラーをスキップして継続

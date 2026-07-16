@@ -1,18 +1,22 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"puremania/handlers"
 	"puremania/types"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -205,14 +209,24 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Handler:      responseCompressionMiddleware(corsMiddleware(r)),
-		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		WriteTimeout: 300 * time.Second,
-		ReadTimeout:  300 * time.Second,
-		IdleTimeout:  300 * time.Second,
+		Handler:           responseCompressionMiddleware(r),
+		Addr:              fmt.Sprintf(":%d", cfg.Port),
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
-
-	logger.Error("Server stopped", "error", srv.ListenAndServe())
+	shutdownContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	go func() {
+		<-shutdownContext.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			logger.Error("Graceful shutdown failed", "error", err)
+		}
+	}()
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logger.Error("Server stopped", "error", err)
+	}
 }
 
 func staticCacheMiddleware(next http.Handler) http.Handler {
@@ -224,24 +238,6 @@ func staticCacheMiddleware(next http.Handler) http.Handler {
 			// Revalidate them so a switch never serves a previous version.
 			w.Header().Set("Cache-Control", "no-cache")
 		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Range, Content-Range, Content-Disposition, X-Requested-With")
-		w.Header().Set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Range, Accept-Ranges, Content-Disposition, Upload-Queue-Delay, Upload-Write-Time, Upload-Recommend-Concurrency")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Max-Age", "86400") // 24時間
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
 		next.ServeHTTP(w, r)
 	})
 }

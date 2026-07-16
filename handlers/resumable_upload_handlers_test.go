@@ -100,3 +100,24 @@ func TestCompleteUploadRecoversAfterRenameBeforeMetadata(t *testing.T) {
 		t.Fatal("session was not repaired as completed")
 	}
 }
+
+func TestProtectedRootCannotBeDeletedAndSymlinkEscapesAreRejected(t *testing.T) {
+	h := newUploadTestHandler(t)
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(h.config.StorageDir, "outside")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.convertToPhysicalPath("/outside/secret"); err == nil {
+		t.Fatal("symlink path outside storage was accepted")
+	}
+
+	body := strings.NewReader(`{"paths":["/"]}`)
+	res := httptest.NewRecorder()
+	h.DeleteMultipleFiles(res, httptest.NewRequest(http.MethodPost, "/api/files/delete", body))
+	if res.Code < 400 {
+		t.Fatalf("delete root status = %d", res.Code)
+	}
+	if _, err := os.Stat(h.config.StorageDir); err != nil {
+		t.Fatalf("storage root was removed: %v", err)
+	}
+}

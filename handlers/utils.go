@@ -136,14 +136,14 @@ func (h *Handler) generateDirectoryStateKey(path string) (string, error) {
 		return entries[i].Name() < entries[j].Name()
 	})
 
-	var stateBuilder strings.Builder
+	hash := md5.New()
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
 			h.logger.Warn("Failed to get entry info for state key generation", "entry", entry.Name(), "error", err)
 			continue
 		}
-		fmt.Fprintf(&stateBuilder, "%s:%d:%d;", info.Name(), info.Size(), info.ModTime().UnixNano())
+		_, _ = fmt.Fprintf(hash, "%s:%d:%d;", info.Name(), info.Size(), info.ModTime().UnixNano())
 	}
 
 	// ルートディレクトリの場合、マウントポイントの情報もキーに含める
@@ -155,15 +155,14 @@ func (h *Handler) generateDirectoryStateKey(path string) (string, error) {
 
 		for _, mountDir := range sortedMounts {
 			if info, err := os.Stat(mountDir); err == nil {
-				fmt.Fprintf(&stateBuilder, "mount_%s:%d:%d;", info.Name(), info.Size(), info.ModTime().UnixNano())
+				_, _ = fmt.Fprintf(hash, "mount_%s:%d:%d;", info.Name(), info.Size(), info.ModTime().UnixNano())
 			} else if !os.IsNotExist(err) {
 				h.logger.Warn("Failed to stat mount dir for state key generation", "path", mountDir, "error", err)
 			}
 		}
 	}
 
-	hash := md5.Sum([]byte(stateBuilder.String()))
-	return hex.EncodeToString(hash[:]), nil
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // キャッシュ無効化メソッド
@@ -202,6 +201,10 @@ func (h *Handler) ensurePathInAllowedDirs(path string) (string, error) {
 		return "", fmt.Errorf("could not get absolute path: %w", err)
 	}
 	absPhysicalPath = filepath.Clean(absPhysicalPath)
+	resolvedPath, err := resolveExistingPath(absPhysicalPath)
+	if err != nil {
+		return "", err
+	}
 
 	allowedDirs := make([]string, 0, len(h.config.MountDirs)+1+len(h.config.SpecificDirs))
 	allowedDirs = append(allowedDirs, h.config.MountDirs...)
@@ -215,12 +218,60 @@ func (h *Handler) ensurePathInAllowedDirs(path string) (string, error) {
 			continue
 		}
 		absAllowedDir = filepath.Clean(absAllowedDir)
-		if isPathWithin(absAllowedDir, absPhysicalPath) {
-			return absPhysicalPath, nil
+		resolvedAllowedDir, err := resolveExistingPath(absAllowedDir)
+		if err != nil {
+			continue
+		}
+		if isPathWithin(resolvedAllowedDir, resolvedPath) {
+			return resolvedPath, nil
 		}
 	}
 
 	return "", fmt.Errorf("path is not in an allowed directory: %s", path)
+}
+
+// resolveExistingPath resolves every existing path component. This rejects a
+// path such as storage/link/file when link points outside an allowed root.
+func resolveExistingPath(path string) (string, error) {
+	path = filepath.Clean(path)
+	var missing []string
+	probe := path
+	for {
+		if _, err := os.Lstat(probe); err == nil {
+			resolved, err := filepath.EvalSymlinks(probe)
+			if err != nil {
+				return "", err
+			}
+			for i := len(missing) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, missing[i])
+			}
+			return resolved, nil
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			return "", fmt.Errorf("no existing parent for %s", path)
+		}
+		missing = append(missing, filepath.Base(probe))
+		probe = parent
+	}
+}
+
+func (h *Handler) isProtectedRoot(path string) bool {
+	clean, err := resolveExistingPath(path)
+	if err != nil {
+		return false
+	}
+	roots := append([]string{h.config.StorageDir}, h.config.MountDirs...)
+	roots = append(roots, h.config.SpecificDirs...)
+	for _, root := range roots {
+		resolved, err := resolveExistingPath(root)
+		if err == nil && clean == filepath.Clean(resolved) {
+			return true
+		}
+	}
+	return false
 }
 
 func secureJoin(basePath, relPath string) (string, error) {
@@ -240,8 +291,49 @@ func secureJoin(basePath, relPath string) (string, error) {
 	if !isPathWithin(absBasePath, absJoinedPath) {
 		return "", fmt.Errorf("unsafe path: %s", relPath)
 	}
+	resolvedBase, err := resolveExistingPath(absBasePath)
+	if err != nil {
+		return "", err
+	}
+	resolvedPath, err := resolveExistingPath(absJoinedPath)
+	if err != nil {
+		return "", err
+	}
+	if !isPathWithin(resolvedBase, resolvedPath) {
+		return "", fmt.Errorf("unsafe symlink path: %s", relPath)
+	}
+	return resolvedPath, nil
+}
 
-	return absJoinedPath, nil
+func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".puremania-writing-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(perm); err == nil {
+		_, err = tmp.Write(data)
+	}
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
 }
 
 func isPathWithin(basePath, targetPath string) bool {

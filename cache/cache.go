@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"container/list"
 	"puremania/types"
 	"strings"
 	"time"
@@ -10,7 +11,8 @@ import (
 func NewTTLCache(maxSize int64, maxItems int) *types.TTLCache {
 	cache := &types.TTLCache{
 		Entries:  make(map[string]*types.CacheEntry),
-		Order:    make([]string, 0, maxItems),
+		Order:    list.New(),
+		Nodes:    make(map[string]*list.Element),
 		MaxSize:  maxSize,
 		MaxItems: maxItems,
 	}
@@ -50,7 +52,9 @@ func Get(c *types.TTLCache, key string) (interface{}, bool) {
 	if !exists || entry.IsExpired() {
 		if exists {
 			c.Mu.Lock()
-			evict(c, key)
+			if c.Entries[key] == entry && entry.IsExpired() {
+				evict(c, key)
+			}
 			c.Mu.Unlock()
 		}
 		return nil, false
@@ -70,14 +74,14 @@ func Set(c *types.TTLCache, key string, data interface{}, size int64, ttl time.D
 
 	if existing, exists := c.Entries[key]; exists {
 		c.CurSize -= existing.Size
-		removeFromOrder(c, key)
+		evict(c, key)
 	}
 
 	for c.CurSize+size > c.MaxSize || len(c.Entries) >= c.MaxItems {
-		if len(c.Order) == 0 {
+		if c.Order.Len() == 0 {
 			break
 		}
-		oldest := c.Order[len(c.Order)-1]
+		oldest := c.Order.Back().Value.(string)
 		evict(c, oldest)
 	}
 
@@ -87,25 +91,20 @@ func Set(c *types.TTLCache, key string, data interface{}, size int64, ttl time.D
 		Size:      size,
 		TTL:       ttl,
 	}
-	c.Order = append([]string{key}, c.Order...)
+	c.Nodes[key] = c.Order.PushFront(key)
 	c.CurSize += size
 }
 
 func moveToFront(c *types.TTLCache, key string) {
-	for i, k := range c.Order {
-		if k == key {
-			c.Order = append([]string{key}, append(c.Order[:i], c.Order[i+1:]...)...)
-			break
-		}
+	if node := c.Nodes[key]; node != nil {
+		c.Order.MoveToFront(node)
 	}
 }
 
 func removeFromOrder(c *types.TTLCache, key string) {
-	for i, k := range c.Order {
-		if k == key {
-			c.Order = append(c.Order[:i], c.Order[i+1:]...)
-			break
-		}
+	if node := c.Nodes[key]; node != nil {
+		c.Order.Remove(node)
+		delete(c.Nodes, key)
 	}
 }
 

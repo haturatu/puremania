@@ -34,8 +34,11 @@ func worker(p *types.WorkerPool) {
 	defer p.Wg.Done()
 	for task := range p.TaskQueue {
 		atomic.AddInt64(&p.Active, 1)
-		task()
-		atomic.AddInt64(&p.Active, -1)
+		func() {
+			defer atomic.AddInt64(&p.Active, -1)
+			defer func() { _ = recover() }()
+			task()
+		}()
 	}
 }
 
