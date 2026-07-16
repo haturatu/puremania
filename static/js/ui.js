@@ -15,6 +15,7 @@ export class UIManager {
         this.fileBrowserExtensionsVisible = false;
         this.lazyImageObserver = null;
         this.imageLoader = new ImageLoader();
+        this.pendingOperations = 0;
     }
 
     displayFiles(files) {
@@ -43,6 +44,7 @@ export class UIManager {
 
         if (!files || files.length === 0) {
             this.renderEmptyState(container);
+            this.syncSelectionClasses(container);
             return;
         }
 
@@ -61,6 +63,13 @@ export class UIManager {
         } else {
             this.renderStandardView(sortedFiles, container, hasMasonrySupport, hasVideoSupport);
         }
+        this.syncSelectionClasses(container);
+    }
+
+    syncSelectionClasses(container = document) {
+        container.querySelectorAll('.file-item, .masonry-item, .video-card').forEach(item => {
+            item.classList.toggle('selected', this.app.selectedFiles.has(item.dataset.path));
+        });
     }
 
     renderHeaderToggle() {
@@ -579,11 +588,17 @@ export class UIManager {
     }
 
     showLoading() {
-        document.getElementById('loading-overlay').style.display = 'flex';
+        this.pendingOperations++;
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay) overlay.style.display = 'flex';
     }
 
     hideLoading() {
-        document.getElementById('loading-overlay').style.display = 'none';
+        this.pendingOperations = Math.max(0, this.pendingOperations - 1);
+        if (this.pendingOperations === 0) {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) overlay.style.display = 'none';
+        }
     }
 
     updateSpecificDirs(dirs) {
