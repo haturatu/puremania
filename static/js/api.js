@@ -171,19 +171,16 @@ export class ApiClient {
                 this.app.ui.displayFiles(files);
                 this.app.ui.updateBreadcrumb(path);
                 this.app.ui.updateSidebarActiveState(path);
-                this.app.router.updatePath(path);
                 this.app.ui.updateToolbar();
             } else {
                 this.notifyApiError(`Failed to load directory: ${path}`);
                 this.app.ui.displayFiles([]);
-                this.app.router.updatePath(path);
             }
         } catch (error) {
             if (error.name === 'AbortError') return;
             if (requestId !== this.directoryRequestId || this.app.router.getCurrentPath() !== path) return;
             this.notifyApiError('An unexpected error occurred while loading files.', { error, context: 'in loadFiles' });
             this.app.ui.displayFiles([]);
-            this.app.router.updatePath(path);
         } finally {
             if (requestId === this.directoryRequestId) this.app.ui.hideLoading();
         }

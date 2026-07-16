@@ -4,6 +4,7 @@ export class Router {
     constructor() {
         this.routes = {};
         this.currentPath = '';
+        this.route = { page: 'files', path: '/' };
         this.isInitialized = false;
         this.onRouteChange = null;
         
@@ -54,6 +55,10 @@ export class Router {
         console.log('Initial route:', currentPath);
         
         this.currentPath = currentPath;
+        this.route = {
+            page: currentPath === '/system/uploads' ? 'uploads' : currentPath === '/system/aria2c' ? 'aria2c' : 'files',
+            path: currentPath
+        };
         
         if (this.onRouteChange) {
             // FileManagerAppの初期化を待つための遅延
@@ -168,6 +173,10 @@ export class Router {
         }
         
         this.currentPath = path;
+        this.route = {
+            page: path === '/system/uploads' ? 'uploads' : path === '/system/aria2c' ? 'aria2c' : 'files',
+            path
+        };
         
         // 登録されたルートのマッチングを試行
         const matchedRoute = this._findMatchingRoute(path);

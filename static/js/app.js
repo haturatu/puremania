@@ -165,6 +165,7 @@ class FileManagerApp {
             item.classList.remove('selected');
         });
         this.selectedFiles.clear();
+        this.lastSelectedIndex = -1;
         this.ui.updateToolbar();
     }
 

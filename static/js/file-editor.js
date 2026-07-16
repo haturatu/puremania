@@ -265,6 +265,7 @@ export class FileEditor {
         if (this.editorElement.style.display === 'none') {
             return;
         }
+        if (this.editorView && this.editorView.state.doc.toString() !== this.savedContent && !window.confirm('Discard unsaved changes?')) return;
         this.editorElement.style.display = 'none';
         this.currentFile = null;
         if (this.editorView) {
