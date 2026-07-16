@@ -150,16 +150,18 @@ export class Uploader {
             const request = this.resumeRequest;
             this.resumeRequest = null;
             destination = request.destination;
-            let matchesRequestedFile = false;
+            const requestedFiles = [];
             for (let index = 0; index < files.length; index++) {
-                if (request.keys.has(this.fileKey(files[index], destination))) { matchesRequestedFile = true; break; }
+                if (request.keys.has(this.fileKey(files[index], destination))) requestedFiles.push(files[index]);
                 if (index > 0 && index % PREPARE_BATCH_SIZE === 0) await yieldToBrowser();
             }
-            if (!matchesRequestedFile) {
+            if (requestedFiles.length !== request.keys.size) {
                 this.app.ui.showToast('Resume upload', 'Choose the original file or folder to resume this upload.', 'warning');
                 return;
             }
-            await this.discardWrongRouteDuplicates(files, destination);
+            await this.discardWrongRouteDuplicates(requestedFiles, destination);
+            await this.handleFileUpload(requestedFiles, destination);
+            return;
         }
         await this.handleFileUpload(files, destination);
     }
@@ -191,6 +193,24 @@ export class Uploader {
     fileKey(item, destination) {
         const { file, relativePath } = item;
         return `${destination}|${relativePath}|${file.size}|${file.lastModified}`;
+    }
+
+    async fileFingerprint(file) {
+        const sample = 1024 * 1024;
+        const first = await file.slice(0, sample).arrayBuffer();
+        const last = await file.slice(Math.max(0, file.size - sample)).arrayBuffer();
+        const bytes = new Uint8Array(first.byteLength + last.byteLength + 8);
+        bytes.set(new Uint8Array(first));
+        bytes.set(new Uint8Array(last), first.byteLength);
+        new DataView(bytes.buffer).setFloat64(bytes.length - 8, file.size);
+        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    async fileRangeFingerprint(file, offset, length) {
+        const bytes = await file.slice(offset, offset + length).arrayBuffer();
+        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
     }
 
     async createUploadItems(fileList) {
@@ -282,12 +302,15 @@ export class Uploader {
 
     async getOrCreateRemoteSession(item, destination, session) {
         const key = this.fileKey(item, destination);
+        const fingerprint = await this.fileFingerprint(item.file);
         let saved;
         try { saved = await this.store.get(key); } catch (error) { console.warn('IndexedDB unavailable; upload cannot survive reload', error); }
         if (saved) {
             try {
                 const status = await this.apiJSON(saved.url, { signal: session.signal });
-                if (!status.completed && status.totalBytes === item.file.size) return { key, ...saved, uploadedBytes: status.uploadedBytes };
+                const resumeMatches = !status.resumeFingerprint ||
+                    status.resumeFingerprint === await this.fileRangeFingerprint(item.file, status.resumeOffset, status.uploadedBytes - status.resumeOffset);
+                if (!status.completed && status.totalBytes === item.file.size && status.fingerprint === fingerprint && resumeMatches) return { key, ...saved, uploadedBytes: status.uploadedBytes };
                 if (status.completed) await this.store.remove(key);
             } catch (error) {
                 if (this.isAbortError(error)) throw error;
@@ -296,9 +319,9 @@ export class Uploader {
         }
         const created = await this.apiJSON('/api/files/upload-sessions', {
             method: 'POST', signal: session.signal,
-            body: JSON.stringify({ path: destination, relativePath: item.relativePath, size: item.file.size })
+            body: JSON.stringify({ path: destination, relativePath: item.relativePath, size: item.file.size, fingerprint })
         });
-        const record = { key, id: created.uploadId, url: created.uploadURL, destination, relativePath: item.relativePath, size: item.file.size, updatedAt: Date.now() };
+        const record = { key, id: created.uploadId, url: created.uploadURL, destination, relativePath: item.relativePath, size: item.file.size, fingerprint, updatedAt: Date.now() };
         try { await this.store.put(record); this.notifyJobsChanged(); } catch (_) { /* upload itself must still work */ }
         return { ...record, uploadedBytes: created.uploadedBytes || 0 };
     }

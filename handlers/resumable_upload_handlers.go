@@ -6,6 +6,7 @@ package handlers
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -17,7 +18,6 @@ import (
 	"puremania/cache"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -32,12 +32,14 @@ type uploadSession struct {
 	Completed     bool      `json:"completed"`
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`
+	Fingerprint   string    `json:"fingerprint,omitempty"`
 }
 
 type createUploadRequest struct {
 	Path         string `json:"path"`
 	RelativePath string `json:"relativePath"`
 	Size         int64  `json:"size"`
+	Fingerprint  string `json:"fingerprint"`
 }
 
 func (h *Handler) uploadSessionDir() string {
@@ -86,11 +88,6 @@ func validUploadID(id string) bool {
 	}
 	_, err := hex.DecodeString(id)
 	return err == nil
-}
-
-func (h *Handler) sessionMutex(id string) *sync.Mutex {
-	lock, _ := h.uploadLocks.LoadOrStore(id, &sync.Mutex{})
-	return lock.(*sync.Mutex)
 }
 
 func (h *Handler) readUploadSession(id string) (*uploadSession, error) {
@@ -158,7 +155,15 @@ func (h *Handler) CreateUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	session := &uploadSession{ID: id, Destination: destination, RelativePath: relativePath, TotalBytes: req.Size, CreatedAt: now, UpdatedAt: now}
+	if req.Fingerprint == "" || len(req.Fingerprint) != sha256.Size*2 {
+		h.respondError(w, "Invalid upload fingerprint", http.StatusBadRequest)
+		return
+	}
+	if _, err := hex.DecodeString(req.Fingerprint); err != nil {
+		h.respondError(w, "Invalid upload fingerprint", http.StatusBadRequest)
+		return
+	}
+	session := &uploadSession{ID: id, Destination: destination, RelativePath: relativePath, TotalBytes: req.Size, CreatedAt: now, UpdatedAt: now, Fingerprint: req.Fingerprint}
 	// A zero-byte upload has no chunk request. Create its empty part now so
 	// completion follows the same atomic rename path as every other upload.
 	if req.Size == 0 {
@@ -178,7 +183,7 @@ func (h *Handler) CreateUpload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Location", location)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(map[string]any{"uploadId": id, "uploadURL": location, "uploadedBytes": int64(0)})
+	_ = json.NewEncoder(w).Encode(map[string]any{"uploadId": id, "uploadURL": location, "uploadedBytes": int64(0), "fingerprint": req.Fingerprint})
 }
 
 func parseContentRange(value string) (int64, int64, int64, error) {
@@ -189,13 +194,32 @@ func parseContentRange(value string) (int64, int64, int64, error) {
 	return start, end, total, nil
 }
 
-func writeUploadPosition(w http.ResponseWriter, session *uploadSession, status int) {
+func (h *Handler) resumeFingerprint(session *uploadSession) (string, int64) {
+	length := min(session.UploadedBytes, int64(1024*1024))
+	if length == 0 || session.Completed {
+		return "", 0
+	}
+	offset := session.UploadedBytes - length
+	part, err := os.Open(h.uploadTempPath(session.ID))
+	if err != nil {
+		return "", 0
+	}
+	defer part.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, io.NewSectionReader(part, offset, length)); err != nil {
+		return "", 0
+	}
+	return hex.EncodeToString(hash.Sum(nil)), offset
+}
+
+func (h *Handler) writeUploadPosition(w http.ResponseWriter, session *uploadSession, status int) {
 	if session.UploadedBytes > 0 {
 		w.Header().Set("Range", "bytes=0-"+strconv.FormatInt(session.UploadedBytes-1, 10))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{"uploadedBytes": session.UploadedBytes, "totalBytes": session.TotalBytes, "completed": session.Completed})
+	resumeFingerprint, resumeOffset := h.resumeFingerprint(session)
+	_ = json.NewEncoder(w).Encode(map[string]any{"uploadedBytes": session.UploadedBytes, "totalBytes": session.TotalBytes, "completed": session.Completed, "fingerprint": session.Fingerprint, "resumeFingerprint": resumeFingerprint, "resumeOffset": resumeOffset})
 }
 
 // UploadChunk accepts only the next contiguous range. A completely acknowledged
@@ -216,19 +240,23 @@ func (h *Handler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if session.Completed {
-		writeUploadPosition(w, session, http.StatusOK)
+		h.writeUploadPosition(w, session, http.StatusOK)
 		return
 	}
 	if end < session.UploadedBytes {
-		writeUploadPosition(w, session, http.StatusPermanentRedirect)
+		h.writeUploadPosition(w, session, http.StatusPermanentRedirect)
 		return
 	}
 	if start != session.UploadedBytes {
-		writeUploadPosition(w, session, http.StatusConflict)
+		h.writeUploadPosition(w, session, http.StatusConflict)
 		return
 	}
 	queueStart := time.Now()
-	h.uploadGate <- struct{}{}
+	select {
+	case h.uploadGate <- struct{}{}:
+	case <-r.Context().Done():
+		return
+	}
 	queueDelay := time.Since(queueStart)
 	defer func() { <-h.uploadGate }()
 	writeStart := time.Now()
@@ -238,6 +266,10 @@ func (h *Handler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer part.Close()
+	if err := part.Truncate(start); err != nil {
+		h.respondError(w, "Cannot reset upload data", http.StatusInternalServerError)
+		return
+	}
 	if _, err := part.Seek(start, io.SeekStart); err != nil {
 		h.respondError(w, "Cannot seek upload data", http.StatusInternalServerError)
 		return
@@ -246,9 +278,16 @@ func (h *Handler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 	// Keep large sequential uploads from becoming valuable page-cache residents.
 	// This is advisory and does not alter the stream or the on-disk bytes.
 	prepareUploadRange(part, start, expected)
-	written, copyErr := io.CopyBuffer(part, io.LimitReader(r.Body, expected+1), make([]byte, 128*1024))
+	written, copyErr := io.CopyBuffer(part, io.LimitReader(r.Body, expected), make([]byte, 128*1024))
 	if copyErr != nil || written != expected {
+		_ = part.Truncate(start)
 		h.respondError(w, "Incomplete upload chunk", http.StatusBadRequest)
+		return
+	}
+	var extra [1]byte
+	if n, _ := r.Body.Read(extra[:]); n != 0 {
+		_ = part.Truncate(start)
+		h.respondError(w, "Upload chunk exceeds Content-Range", http.StatusBadRequest)
 		return
 	}
 	if err := part.Sync(); err != nil {
@@ -277,7 +316,7 @@ func (h *Handler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 	if session.UploadedBytes == session.TotalBytes {
 		status = http.StatusOK
 	}
-	writeUploadPosition(w, session, status)
+	h.writeUploadPosition(w, session, status)
 }
 
 func (h *Handler) UploadStatus(w http.ResponseWriter, r *http.Request) {
@@ -290,7 +329,7 @@ func (h *Handler) UploadStatus(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Upload session not found", http.StatusNotFound)
 		return
 	}
-	writeUploadPosition(w, session, http.StatusOK)
+	h.writeUploadPosition(w, session, http.StatusOK)
 }
 
 func (h *Handler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
@@ -320,13 +359,42 @@ func (h *Handler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Cannot create destination directory", http.StatusInternalServerError)
 		return
 	}
-	if err := os.Rename(h.uploadTempPath(id), target); err != nil {
+	partPath := h.uploadTempPath(id)
+	if _, err := os.Stat(partPath); os.IsNotExist(err) {
+		if info, statErr := os.Stat(target); statErr == nil && info.Size() == session.TotalBytes {
+			session.Completed = true
+			if err := h.writeUploadSession(session); err != nil {
+				h.respondError(w, "Cannot persist completed upload", http.StatusInternalServerError)
+				return
+			}
+			cache.InvalidateByPrefix(h.cache, "list:"+filepath.Dir(h.convertToVirtualPath(target)))
+			cache.InvalidateByPrefix(h.cache, "search:")
+			h.respondSuccess(w, map[string]any{"path": h.convertToVirtualPath(target)})
+			return
+		}
+	}
+	part, err := os.OpenFile(partPath, os.O_WRONLY, 0600)
+	if err != nil {
+		h.respondError(w, "Cannot finalize upload", http.StatusInternalServerError)
+		return
+	}
+	if err := part.Truncate(session.TotalBytes); err == nil {
+		err = part.Sync()
+	}
+	closeErr := part.Close()
+	if err != nil || closeErr != nil {
+		h.respondError(w, "Cannot finalize upload", http.StatusInternalServerError)
+		return
+	}
+	if err := os.Rename(partPath, target); err != nil {
 		h.respondError(w, "Cannot finalize upload", http.StatusInternalServerError)
 		return
 	}
 	session.Completed = true
 	if err := h.writeUploadSession(session); err != nil {
 		h.logger.Error("Upload completed but session metadata update failed", "id", id, "error", err)
+		h.respondError(w, "Cannot persist completed upload", http.StatusInternalServerError)
+		return
 	}
 	cache.InvalidateByPrefix(h.cache, "list:"+filepath.Dir(h.convertToVirtualPath(target)))
 	cache.InvalidateByPrefix(h.cache, "search:")
@@ -344,6 +412,5 @@ func (h *Handler) AbortUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = os.Remove(h.uploadTempPath(id))
 	_ = os.Remove(h.uploadMetadataPath(id))
-	h.uploadLocks.Delete(id)
 	w.WriteHeader(http.StatusNoContent)
 }

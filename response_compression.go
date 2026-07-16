@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"compress/gzip"
+	"errors"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,6 +25,8 @@ func responseCompressionMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// Identity and compressed representations both vary by this request header.
+		w.Header().Add("Vary", "Accept-Encoding")
 		encoding := selectContentEncoding(r.Header.Get("Accept-Encoding"))
 		if encoding == "" {
 			next.ServeHTTP(w, r)
@@ -44,6 +49,43 @@ type compressionResponseWriter struct {
 	started  bool
 	writer   io.Writer
 	closer   io.Closer
+}
+
+func (w *compressionResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func (w *compressionResponseWriter) Flush() {
+	if !w.started {
+		w.start()
+	}
+	if flusher, ok := w.writer.(interface{ Flush() error }); ok {
+		_ = flusher.Flush()
+	}
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (w *compressionResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("http.Hijacker is not supported")
+	}
+	return hijacker.Hijack()
+}
+
+func (w *compressionResponseWriter) Push(target string, opts *http.PushOptions) error {
+	pusher, ok := w.ResponseWriter.(http.Pusher)
+	if !ok {
+		return http.ErrNotSupported
+	}
+	return pusher.Push(target, opts)
+}
+
+func (w *compressionResponseWriter) ReadFrom(reader io.Reader) (int64, error) {
+	if !w.started {
+		w.start()
+	}
+	return io.Copy(w.writer, reader)
 }
 
 func (w *compressionResponseWriter) WriteHeader(status int) {
@@ -70,7 +112,6 @@ func (w *compressionResponseWriter) start() {
 		header := w.Header()
 		header.Del("Content-Length")
 		header.Set("Content-Encoding", w.encoding)
-		header.Add("Vary", "Accept-Encoding")
 		switch w.encoding {
 		case "br":
 			writer := brotli.NewWriterLevel(w.ResponseWriter, 4)

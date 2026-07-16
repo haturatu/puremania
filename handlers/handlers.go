@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"hash/fnv"
 	"log/slog"
 	"puremania/cache"
 	"puremania/types"
@@ -20,8 +21,14 @@ type Handler struct {
 	cache       *types.TTLCache
 	workerPool  *types.WorkerPool
 	logger      *slog.Logger
-	uploadLocks sync.Map      // map[upload id]*sync.Mutex; serializes writes to one session
-	uploadGate  chan struct{} // bounds concurrent disk writes across sessions
+	uploadLocks [256]sync.Mutex // fixed striped locks; serializes writes to one session without unbounded state
+	uploadGate  chan struct{}   // bounds concurrent disk writes across sessions
+}
+
+func (h *Handler) sessionMutex(id string) *sync.Mutex {
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(id))
+	return &h.uploadLocks[hash.Sum32()%uint32(len(h.uploadLocks))]
 }
 
 // NewHandler は新しいHandlerを生成

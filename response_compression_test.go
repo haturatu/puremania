@@ -83,3 +83,25 @@ func TestResponseCompressionSkipsRangesAndBinary(t *testing.T) {
 		}
 	}
 }
+
+func TestResponseCompressionVaryAndFlushForIdentityResponse(t *testing.T) {
+	flushed := false
+	handler := responseCompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if _, ok := w.(http.Flusher); !ok {
+			t.Fatal("compression writer does not preserve http.Flusher")
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("stream"))
+		w.(http.Flusher).Flush()
+		flushed = true
+	}))
+
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/stream", nil))
+	if !flushed {
+		t.Fatal("handler did not flush")
+	}
+	if got := res.Header().Get("Vary"); got != "Accept-Encoding" {
+		t.Fatalf("Vary = %q, want Accept-Encoding", got)
+	}
+}
