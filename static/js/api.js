@@ -6,6 +6,8 @@ export class ApiClient {
         this.app = app;
         this.directoryEtags = new Map();
         this.directoryCache = new Map();
+        this.directoryRequestId = 0;
+        this.directoryAbortController = null;
     }
 
     async postJson(url, payload) {
@@ -115,7 +117,7 @@ export class ApiClient {
         }
     }
 
-    async getFiles(path) {
+    async getFiles(path, signal) {
         try {
             const headers = {};
             const etag = this.directoryEtags.get(path);
@@ -123,7 +125,7 @@ export class ApiClient {
                 headers['If-None-Match'] = etag;
             }
 
-            const response = await fetch(buildApiUrl('/api/files', { path }), { headers });
+            const response = await fetch(buildApiUrl('/api/files', { path }), { headers, signal });
 
             if (response.status === 304) {
                 console.log(`Content for ${path} not modified. Using cache.`);
@@ -149,15 +151,21 @@ export class ApiClient {
                 throw new Error(result.message || 'API returned success:false');
             }
         } catch (error) {
+            if (error.name === 'AbortError') throw error;
             console.error(`Error in getFiles for path ${path}:`, error);
             return null;
         }
     }
 
     async loadFiles(path) {
+        const requestId = ++this.directoryRequestId;
+        this.directoryAbortController?.abort();
+        const controller = new AbortController();
+        this.directoryAbortController = controller;
         try {
             this.app.ui.showLoading();
-            const files = await this.getFiles(path);
+            const files = await this.getFiles(path, controller.signal);
+            if (requestId !== this.directoryRequestId || this.app.router.getCurrentPath() !== path) return;
 
             if (files !== null) {
                 this.app.ui.displayFiles(files);
@@ -171,11 +179,13 @@ export class ApiClient {
                 this.app.router.updatePath(path);
             }
         } catch (error) {
+            if (error.name === 'AbortError') return;
+            if (requestId !== this.directoryRequestId || this.app.router.getCurrentPath() !== path) return;
             this.notifyApiError('An unexpected error occurred while loading files.', { error, context: 'in loadFiles' });
             this.app.ui.displayFiles([]);
             this.app.router.updatePath(path);
         } finally {
-            this.app.ui.hideLoading();
+            if (requestId === this.directoryRequestId) this.app.ui.hideLoading();
         }
     }
 

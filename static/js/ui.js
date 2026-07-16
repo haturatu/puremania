@@ -345,6 +345,7 @@ export class UIManager {
             this.sortState.direction = 'asc';
         }
         this.displayFiles(this.currentFiles);
+        this.app.uploader.bindUploadEvents();
     }
 
     sortFiles(files) {
@@ -553,6 +554,7 @@ export class UIManager {
     setViewMode(mode) {
         this.viewMode = mode;
         this.displayFiles(this.currentFiles);
+        this.app.uploader.bindUploadEvents();
     }
 
     showToast(title, message, type = 'info') {
@@ -607,7 +609,7 @@ export class UIManager {
 
     updateSidebarActiveState(path) {
         document.querySelectorAll('.sidebar .nav-item.active').forEach(item => item.classList.remove('active'));
-        const activeItem = document.querySelector(`.sidebar .nav-item[data-path="${path}"]`);
+        const activeItem = [...document.querySelectorAll('.sidebar .nav-item')].find(item => item.dataset.path === path);
         if (activeItem) activeItem.classList.add('active');
     }
 

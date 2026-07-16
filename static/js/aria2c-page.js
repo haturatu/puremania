@@ -8,6 +8,8 @@ export class Aria2cPageHandler {
         this.lastStatus = null;
         this.previousPath = '/'; // Store the path before entering this page
         this.torrentsToCancel = new Set(); // Track torrents scheduled for cancellation
+        this.polling = false;
+        this.pollTimer = null;
     }
 
     init() {
@@ -25,7 +27,6 @@ export class Aria2cPageHandler {
         this.isInAria2cMode = true;
         this.fileManager.ui.showLoading();
         this.loadAria2cStatus();
-        this.updateInterval = setInterval(() => this.loadAria2cStatus(), 2000); // Update every 2 seconds
         
         const breadcrumbs = document.querySelector('.breadcrumbs');
         if (breadcrumbs) breadcrumbs.style.display = 'none';
@@ -34,7 +35,7 @@ export class Aria2cPageHandler {
     exitAria2cMode(navigate = true) {
         if (!this.isInAria2cMode) return;
         this.isInAria2cMode = false;
-        clearInterval(this.updateInterval);
+        clearTimeout(this.pollTimer);
         this.updateInterval = null;
         this.lastStatus = null;
 
@@ -45,18 +46,22 @@ export class Aria2cPageHandler {
     }
 
     async loadAria2cStatus() {
+        if (!this.isInAria2cMode || this.polling) return;
+        this.polling = true;
         try {
             const status = await this.fileManager.api.getAria2cStatus();
             if (status) {
                 this.lastStatus = status;
-                this.render(status);
+                if (this.isInAria2cMode && this.fileManager.router.getCurrentPath() === '/system/aria2c') this.render(status);
             } else {
                 // API method failed and should have shown a toast.
                 // Stop polling.
-                clearInterval(this.updateInterval);
+                this.isInAria2cMode = false;
             }
         } finally {
+            this.polling = false;
             this.fileManager.ui.hideLoading();
+            if (this.isInAria2cMode) this.pollTimer = setTimeout(() => this.loadAria2cStatus(), 2000);
         }
     }
 

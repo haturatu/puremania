@@ -6,6 +6,8 @@ export class UploadPageHandler {
         this.active = false;
         this.interval = null;
         this.selectedKeys = new Set();
+        this.polling = false;
+        this.timer = null;
         this.onJobsChanged = () => this.refresh();
     }
 
@@ -14,22 +16,27 @@ export class UploadPageHandler {
         this.active = true;
         window.addEventListener('puremania:upload-jobs-changed', this.onJobsChanged);
         this.refresh();
-        this.interval = setInterval(() => this.refresh(), 3000);
         document.querySelector('.breadcrumbs')?.style.setProperty('display', 'none');
     }
 
     exit() {
         if (!this.active) return;
         this.active = false;
-        clearInterval(this.interval);
+        clearTimeout(this.timer);
         window.removeEventListener('puremania:upload-jobs-changed', this.onJobsChanged);
         document.querySelector('.breadcrumbs')?.style.removeProperty('display');
     }
 
     async refresh() {
-        if (!this.active) return;
-        const jobs = await this.app.uploader.listJobs();
-        if (this.active) this.render(jobs);
+        if (!this.active || this.polling) return;
+        this.polling = true;
+        try {
+            const jobs = await this.app.uploader.listJobs();
+            if (this.active) this.render(jobs);
+        } finally {
+            this.polling = false;
+            if (this.active) this.timer = setTimeout(() => this.refresh(), 3000);
+        }
     }
 
     render(jobs) {

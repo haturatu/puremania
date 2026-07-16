@@ -11,7 +11,10 @@ const PREPARE_BATCH_SIZE = 500;
 const DB_NAME = 'puremania-upload-sessions';
 const DB_STORE = 'sessions';
 
-const pause = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const pause = (ms, signal) => new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('Upload interrupted', 'AbortError')); }, { once: true });
+});
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
 class AdaptiveUploadController {
@@ -76,9 +79,12 @@ class UploadSessionStore {
         return new Promise((resolve, reject) => {
             const tx = db.transaction(DB_STORE, mode);
             const request = action(tx.objectStore(DB_STORE));
-            request.onsuccess = () => resolve(request.result);
+            let result;
+            request.onsuccess = () => { result = request.result; };
             request.onerror = () => reject(request.error);
+            tx.oncomplete = () => resolve(result);
             tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
         });
     }
 }
@@ -341,7 +347,7 @@ export class Uploader {
             xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress(start + event.loaded); };
             xhr.onload = () => {
                 cleanup();
-                if (xhr.status >= 200 && xhr.status < 400) {
+                if (xhr.status === 200 || xhr.status === 308) {
                     controller?.record({
                         bytes: end - start + 1,
                         elapsed: performance.now() - startedAt,
@@ -349,7 +355,11 @@ export class Uploader {
                         writeTime: Number(xhr.getResponseHeader('Upload-Write-Time')) || 0,
                         recommendation: Number(xhr.getResponseHeader('Upload-Recommend-Concurrency')) || 0
                     });
-                    try { resolve(JSON.parse(xhr.responseText)); } catch (_) { resolve({ uploadedBytes: end + 1 }); }
+                    try {
+                        const result = JSON.parse(xhr.responseText);
+                        if (!Number.isInteger(result.uploadedBytes) || result.uploadedBytes < start || result.uploadedBytes > end + 1) throw new Error('Invalid upload position');
+                        resolve(result);
+                    } catch (error) { reject(error); }
                 } else { controller?.recordFailure(xhr.status); reject(new Error(`Chunk rejected (${xhr.status})`)); }
             };
             xhr.onerror = () => { cleanup(); controller?.recordFailure(); reject(new Error('Network error while sending chunk')); };
@@ -385,7 +395,7 @@ export class Uploader {
                     if (offset > end) { completed = true; break; }
                     if (attempt === MAX_RETRIES - 1) throw error;
                     this.setFileProgress(record.key, item, offset, `Retrying in ${2 ** attempt}s`);
-                    await pause((2 ** attempt) * 1000 + Math.floor(Math.random() * 250));
+                    await pause((2 ** attempt) * 1000 + Math.floor(Math.random() * 250), session.signal);
                 }
             }
             try { await this.store.put({ ...record, uploadedBytes: offset, updatedAt: Date.now() }); this.notifyJobsChanged(); } catch (_) { /* optional */ }
@@ -416,6 +426,10 @@ export class Uploader {
 
     async handleFileUpload(items, destinationOverride = null) {
         if (!items?.length) return;
+        if (this.activeUploadSession) {
+            this.app.ui.showToast('Upload in progress', 'Pause or finish the current upload first.', 'warning');
+            return;
+        }
         const session = this.createUploadSession();
         this.activeUploadSession = session;
         this.app.progressManager.setCurrentUpload(session);
