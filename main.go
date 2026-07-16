@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -121,6 +124,9 @@ func LoadConfig(logger *slog.Logger) *types.Config {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(runHealthcheck())
+	}
 	// ロガーを初期化
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
@@ -227,6 +233,51 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("Server stopped", "error", err)
 	}
+}
+
+func runHealthcheck() int {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	port := getEnvAsInt(logger, "PORT", 8844)
+	return runHealthcheckURL(fmt.Sprintf("http://127.0.0.1:%d/api/health", port), os.Stderr)
+}
+
+func runHealthcheckURL(url string, stderr io.Writer) int {
+	client := &http.Client{
+		Timeout: 4 * time.Second,
+		Transport: &http.Transport{
+			DisableKeepAlives: true,
+			DialContext:       (&net.Dialer{Timeout: 2 * time.Second, KeepAlive: -1}).DialContext,
+		},
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "puremania-healthcheck")
+	response, err := client.Do(req)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		fmt.Fprintf(stderr, "unexpected HTTP status: %s\n", response.Status)
+		return 1
+	}
+	var health struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 4<<10)).Decode(&health); err != nil {
+		fmt.Fprintf(stderr, "invalid health response: %v\n", err)
+		return 1
+	}
+	if health.Status != "ok" {
+		fmt.Fprintf(stderr, "unhealthy status: %q\n", health.Status)
+		return 1
+	}
+	return 0
 }
 
 func staticCacheMiddleware(next http.Handler) http.Handler {

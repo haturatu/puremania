@@ -78,18 +78,18 @@ func (h *Handler) GetStorageInfo(w http.ResponseWriter, r *http.Request) {
 
 // ヘルスチェック用エンドポイント
 func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
-	cacheEntries, cacheSize := cache.Stats(h.cache)
-	status := map[string]interface{}{
-		"status":         "healthy",
-		"timestamp":      time.Now().Format(time.RFC3339),
-		"active_workers": worker.ActiveWorkers(h.workerPool),
-		"cache_stats": map[string]interface{}{
-			"entries": cacheEntries,
-			"size":    cacheSize,
-		},
+	dir, err := os.Open(h.config.StorageDir)
+	if err != nil {
+		h.respondError(w, "Storage is unavailable", http.StatusServiceUnavailable)
+		return
 	}
-
-	h.respondSuccess(w, status)
+	defer dir.Close()
+	if _, err := dir.Stat(); err != nil {
+		h.respondError(w, "Storage is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // GetSpecificDirs は、設定された特定のディレクトリのリストを返す
