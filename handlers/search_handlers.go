@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -178,10 +177,7 @@ func (h *Handler) searchCurrentParallel(ctx context.Context, path string, matchF
 					}
 				}
 
-				mimeType := mime.TypeByExtension(filepath.Ext(entry.Name()))
-				if mimeType == "" {
-					mimeType = "application/octet-stream"
-				}
+				mimeType := mediaTypeByPath(entry.Name())
 
 				fullPath := filepath.Join(path, entry.Name())
 				virtualPath := h.convertToVirtualPath(fullPath)
@@ -244,10 +240,7 @@ func (h *Handler) searchRecursiveParallel(ctx context.Context, path string, matc
 				}
 			}
 
-			mimeType := mime.TypeByExtension(filepath.Ext(d.Name()))
-			if mimeType == "" {
-				mimeType = "application/octet-stream"
-			}
+			mimeType := mediaTypeByPath(d.Name())
 
 			virtualPath := h.convertToVirtualPath(filePath)
 

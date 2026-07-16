@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,6 +14,25 @@ import (
 	"sort"
 	"strings"
 )
+
+var fallbackMediaTypes = map[string]string{
+	".mp4": "video/mp4", ".m4v": "video/mp4", ".webm": "video/webm",
+	".ogv": "video/ogg", ".mov": "video/quicktime", ".mkv": "video/x-matroska",
+	".avi": "video/x-msvideo", ".mpeg": "video/mpeg", ".mpg": "video/mpeg", ".ts": "video/mp2t",
+	".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".flac": "audio/flac",
+	".ogg": "audio/ogg", ".opus": "audio/ogg", ".wav": "audio/wav",
+}
+
+func mediaTypeByPath(path string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	if mediaType := fallbackMediaTypes[ext]; mediaType != "" {
+		return mediaType
+	}
+	if mediaType := mime.TypeByExtension(ext); mediaType != "" {
+		return mediaType
+	}
+	return "application/octet-stream"
+}
 
 // 物理パスを仮想パスに変換するメソッド
 func (h *Handler) convertToVirtualPath(physicalPath string) string {
