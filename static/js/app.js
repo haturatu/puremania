@@ -75,7 +75,7 @@ class FileManagerApp {
         this.updateStorageInfo(storageResult);
 
         // Setup router
-        this.router.onChange((path) => {
+        this.router.onChange((path, { navigationType = 'initial' } = {}) => {
             if (path === '/system/uploads') {
                 if (this.aria2cPageHandler.isInAria2cMode) this.aria2cPageHandler.exitAria2cMode(false);
                 this.uploadPageHandler.enter();
@@ -95,7 +95,7 @@ class FileManagerApp {
                 if (this.aria2cPageHandler.isInAria2cMode) {
                     this.aria2cPageHandler.exitAria2cMode(false);
                 }
-                this.navigateToPath(path);
+                this.navigateToPath(path, { restoreScroll: navigationType === 'pop' });
             }
         });
     }
@@ -105,13 +105,13 @@ class FileManagerApp {
         this.uploader.bindUploadEvents();
     }
 
-    async navigateToPath(path) {
+    async navigateToPath(path, { restoreScroll = false } = {}) {
         const browser = document.querySelector('.file-browser');
         if (browser && this.renderedDirectoryPath && this.renderedDirectoryPath !== path) {
             this.directoryScrollPositions.set(this.renderedDirectoryPath, browser.scrollTop);
         }
         await this.loadFiles(path);
-        const restorePosition = this.directoryScrollPositions.get(path) || 0;
+        const restorePosition = restoreScroll ? (this.directoryScrollPositions.get(path) ?? 0) : 0;
         // File rendering replaces the browser contents. Restore after layout so
         // new directories start at the top while revisited ones retain context.
         requestAnimationFrame(() => {

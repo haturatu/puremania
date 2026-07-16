@@ -4,6 +4,7 @@ export class Router {
     constructor() {
         this.routes = {};
         this.currentPath = '';
+        this.navigationType = 'initial';
         this.route = { page: 'files', path: '/' };
         this.isInitialized = false;
         this.onRouteChange = null;
@@ -18,6 +19,7 @@ export class Router {
      */
     _setupEventListeners() {
         window.addEventListener('popstate', () => {
+            this.navigationType = 'pop';
             this.handleRouteChange();
         });
     }
@@ -63,7 +65,7 @@ export class Router {
         if (this.onRouteChange) {
             // FileManagerAppの初期化を待つための遅延
             setTimeout(() => {
-                this.onRouteChange(currentPath);
+                this.onRouteChange(currentPath, { navigationType: 'initial' });
             }, 100);
         }
     }
@@ -80,7 +82,7 @@ export class Router {
         if (cleanPath === this.currentPath) return;
         
         console.log('Navigating to:', cleanPath);
-        
+        this.navigationType = 'push';
         this._updateBrowserHistory(cleanPath, 'push');
         this.handleRouteChange();
     }
@@ -177,19 +179,21 @@ export class Router {
             page: path === '/system/uploads' ? 'uploads' : path === '/system/aria2c' ? 'aria2c' : 'files',
             path
         };
+        const navigationType = this.navigationType;
+        this.navigationType = 'unknown';
         
         // 登録されたルートのマッチングを試行
         const matchedRoute = this._findMatchingRoute(path);
         if (matchedRoute) {
             console.log('Route matched:', matchedRoute);
-            this.routes[matchedRoute](path);
+            this.routes[matchedRoute](path, { navigationType });
             return;
         }
         
         // デフォルトハンドラーを呼び出し
         if (this.onRouteChange) {
             console.log('Calling onRouteChange with:', path);
-            this.onRouteChange(path);
+            this.onRouteChange(path, { navigationType });
         }
     }
 
@@ -261,7 +265,7 @@ export class Router {
         // 既に初期化済みの場合は即座にコールバックを実行
         if (this.isInitialized && this.currentPath) {
             setTimeout(() => {
-                callback(this.currentPath);
+                callback(this.currentPath, { navigationType: 'initial' });
             }, 10);
         }
     }
