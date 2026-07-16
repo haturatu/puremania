@@ -164,15 +164,23 @@ func (h *Handler) CreateUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session := &uploadSession{ID: id, Destination: destination, RelativePath: relativePath, TotalBytes: req.Size, CreatedAt: now, UpdatedAt: now, Fingerprint: req.Fingerprint}
-	// A zero-byte upload has no chunk request. Create its empty part now so
-	// completion follows the same atomic rename path as every other upload.
-	if req.Size == 0 {
-		part, createErr := os.OpenFile(h.uploadTempPath(id), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-		if createErr != nil {
-			h.respondError(w, "Cannot create upload data", http.StatusInternalServerError)
-			return
-		}
-		_ = part.Close()
+	// Reserve storage before acknowledging the session. KEEP_SIZE allocation
+	// preserves resumable writes' logical length and catches ENOSPC early.
+	part, createErr := os.OpenFile(h.uploadTempPath(id), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if createErr != nil {
+		h.respondError(w, "Cannot create upload data", http.StatusInternalServerError)
+		return
+	}
+	if req.Size > 0 && h.config.PreallocateUploads {
+		createErr = preallocateUpload(part, req.Size)
+	}
+	if closeErr := part.Close(); createErr == nil {
+		createErr = closeErr
+	}
+	if createErr != nil {
+		_ = os.Remove(h.uploadTempPath(id))
+		h.respondError(w, "Cannot reserve upload storage", http.StatusInsufficientStorage)
+		return
 	}
 	if err := h.writeUploadSession(session); err != nil {
 		_ = os.Remove(h.uploadTempPath(id))

@@ -13,4 +13,5 @@ type Config struct {
 	Aria2cRPCToken        string
 	Aria2cEnabled         bool
 	UploadSessionTTLHours int
+	PreallocateUploads    bool
 }
