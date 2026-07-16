@@ -32,6 +32,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
+        media-types \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --system --uid 1000 --home-dir /home/puremania --create-home --shell /usr/bin/nologin puremania \

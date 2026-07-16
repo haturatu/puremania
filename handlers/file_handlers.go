@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"os"
 	"os/exec"
@@ -426,10 +425,7 @@ func (h *Handler) processDirectoryEntries(entries []os.DirEntry, basePath string
 			isEditable := false
 
 			if !entry.IsDir() {
-				mimeType = mime.TypeByExtension(filepath.Ext(entry.Name()))
-				if mimeType == "" {
-					mimeType = "application/octet-stream"
-				}
+				mimeType = mediaTypeByPath(entry.Name())
 				isEditable = utils.IsTextFile(mimeType) || utils.IsEditableByExtension(entry.Name())
 			} else {
 				mimeType = "application/octet-stream"
@@ -681,10 +677,7 @@ func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	contentType := mime.TypeByExtension(filepath.Ext(path))
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
+	contentType := mediaTypeByPath(path)
 
 	filename := filepath.Base(path)
 	w.Header().Set("Content-Type", contentType)
@@ -722,7 +715,7 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mimeType := mime.TypeByExtension(filepath.Ext(path))
+	mimeType := mediaTypeByPath(path)
 
 	// 画像ファイルの場合はhttp.ServeFileで最適化
 	if mimeType != "" && strings.HasPrefix(mimeType, "image/") {

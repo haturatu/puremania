@@ -121,3 +121,15 @@ func TestProtectedRootCannotBeDeletedAndSymlinkEscapesAreRejected(t *testing.T) 
 		t.Fatalf("storage root was removed: %v", err)
 	}
 }
+
+func TestMediaTypeByPathHasContainerIndependentVideoFallbacks(t *testing.T) {
+	for path, want := range map[string]string{
+		"clip.mp4":  "video/mp4",
+		"clip.webm": "video/webm",
+		"clip.mkv":  "video/x-matroska",
+	} {
+		if got := mediaTypeByPath(path); got != want {
+			t.Errorf("mediaTypeByPath(%q) = %q, want %q", path, got, want)
+		}
+	}
+}
