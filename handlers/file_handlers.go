@@ -292,6 +292,7 @@ func getOptimalBufferSize(fileSize int64) int {
 
 // ListFiles - TTLキャッシュ、ETagによる差分検知を使用
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "private, no-cache")
 	path := r.URL.Query().Get("path")
 	if path == "" {
 		path = "/"
@@ -689,6 +690,7 @@ func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 
 // GetFileContent - 画像はhttp.ServeFileで最適化、テキストはキャッシュ使用
 func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "private, no-cache")
 	path := r.URL.Query().Get("path")
 	if path == "" {
 		h.respondError(w, "Path required", http.StatusBadRequest)

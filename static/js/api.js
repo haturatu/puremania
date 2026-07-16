@@ -1,6 +1,9 @@
 import { showConfirmDialog, showPromptDialog } from './modal.js';
 import { buildApiUrl } from './util.js';
 
+const MAX_CACHED_DIRECTORIES = 20;
+const MAX_CACHED_ENTRIES = 100000;
+
 export class ApiClient {
     constructor(app) {
         this.app = app;
@@ -8,6 +11,28 @@ export class ApiClient {
         this.directoryCache = new Map();
         this.directoryRequestId = 0;
         this.directoryAbortController = null;
+    }
+
+    cacheDirectory(path, etag, files) {
+        // Do not retain a single massive listing in addition to its rendered UI.
+        if (files.length > MAX_CACHED_ENTRIES) {
+            this.directoryEtags.delete(path);
+            this.directoryCache.delete(path);
+            return;
+        }
+        this.directoryEtags.set(path, etag);
+        this.directoryCache.set(path, { files, usedAt: Date.now() });
+        while (this.directoryCache.size > MAX_CACHED_DIRECTORIES || this.cachedEntryCount() > MAX_CACHED_ENTRIES) {
+            const oldest = [...this.directoryCache.entries()].reduce((candidate, entry) => entry[1].usedAt < candidate[1].usedAt ? entry : candidate)[0];
+            this.directoryCache.delete(oldest);
+            this.directoryEtags.delete(oldest);
+        }
+    }
+
+    cachedEntryCount() {
+        let count = 0;
+        for (const entry of this.directoryCache.values()) count += entry.files.length;
+        return count;
     }
 
     async postJson(url, payload) {
@@ -129,7 +154,9 @@ export class ApiClient {
 
             if (response.status === 304) {
                 console.log(`Content for ${path} not modified. Using cache.`);
-                return this.directoryCache.get(path);
+                const cached = this.directoryCache.get(path);
+                if (cached) cached.usedAt = Date.now();
+                return cached?.files || null;
             }
 
             if (!response.ok) {
@@ -142,10 +169,7 @@ export class ApiClient {
             
             if (result.success) {
                 const files = result.data || [];
-                if (newEtag) {
-                    this.directoryEtags.set(path, newEtag);
-                }
-                this.directoryCache.set(path, files);
+                this.cacheDirectory(path, newEtag || '', files);
                 return files;
             } else {
                 throw new Error(result.message || 'API returned success:false');

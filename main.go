@@ -201,12 +201,23 @@ func main() {
 	// 静的ファイルのサービス
 	staticFileHandler := http.StripPrefix("/static/", staticCacheMiddleware(http.FileServer(http.Dir("./static/"))))
 	r.PathPrefix("/static/").Handler(staticFileHandler)
+	indexETag := ""
+	if info, err := os.Stat("./static/index.html"); err == nil {
+		indexETag = fmt.Sprintf("\"%x-%x\"", info.ModTime().UnixNano(), info.Size())
+	}
 
 	// その他のリクエストはindex.htmlを返す
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 		// APIパス以外はindex.htmlを返す
 		if !strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/static/") {
+			if indexETag != "" {
+				w.Header().Set("ETag", indexETag)
+				if r.Header.Get("If-None-Match") == indexETag {
+					w.WriteHeader(http.StatusNotModified)
+					return
+				}
+			}
 			http.ServeFile(w, r, "./static/index.html")
 		} else {
 			// muxがよしなに処理してくれるので、ここはシンプルに
@@ -220,6 +231,7 @@ func main() {
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    32 << 10,
 	}
 	shutdownContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
