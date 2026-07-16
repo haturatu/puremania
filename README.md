@@ -259,6 +259,7 @@ The following environment variables can be configured in the `.env` file:
 | `MOUNT_DIRS`       | Comma-separated list of additional directories to mount.                                                                                               | (empty)              |  
 | `MAX_FILE_SIZE_MB` | Maximum file size for uploads in megabytes.                                                                                                            | `102400`             |
 | `UPLOAD_SESSION_TTL_HOURS` | Hours that an interrupted resumable-upload session is retained for resumption.                                                              | `168`                |
+| `UPLOAD_PREALLOCATE` | Reserve disk blocks when a resumable upload session is created (Linux). Set `false` for sparse-file or thin-provisioned storage. | `true` |
 | `PORT`             | The port on which the server will run.                                                                                                                 | `8844`               |  
 | `ZIP_TIMEOUT`      | Timeout in seconds for ZIP file creation.                                                                                                              | `300`                |  
 | `MAX_ZIP_SIZE`     | Maximum size in MB for files to be zipped.                                                                                                             | `1024`               |

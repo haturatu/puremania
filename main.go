@@ -100,6 +100,7 @@ func LoadConfig(logger *slog.Logger) *types.Config {
 		MaxZipSize:            getEnvAsInt64(logger, "MAX_ZIP_SIZE", 1024),
 		SpecificDirs:          getEnvAsStringSlice("SPECIFIC_DIRS", []string{}),
 		UploadSessionTTLHours: getEnvAsInt(logger, "UPLOAD_SESSION_TTL_HOURS", 168),
+		PreallocateUploads:    getEnvAsBool("UPLOAD_PREALLOCATE", true),
 		// Aria2cEnabled は後で設定
 	}
 
@@ -299,6 +300,18 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func getEnvAsBool(key string, fallback bool) bool {
+	value, exists := os.LookupEnv(key)
+	if !exists {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 // getEnvAsInt は環境変数を整数として読み込み
