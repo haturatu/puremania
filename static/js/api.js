@@ -143,11 +143,11 @@ export class ApiClient {
         }
     }
 
-    async getFiles(path, signal) {
+    async getFiles(path, { signal = null, useCache = true, detailed = false } = {}) {
         try {
             const headers = {};
             const etag = this.directoryEtags.get(path);
-            if (etag && this.directoryCache.has(path)) {
+            if (useCache && etag && this.directoryCache.has(path)) {
                 headers['If-None-Match'] = etag;
             }
 
@@ -157,7 +157,8 @@ export class ApiClient {
                 console.log(`Content for ${path} not modified. Using cache.`);
                 const cached = this.directoryCache.get(path);
                 if (cached) cached.usedAt = Date.now();
-                return cached?.files || null;
+                const response = { files: cached?.files || [], notModified: true, error: null };
+                return detailed ? response : response.files;
             }
 
             if (!response.ok) {
@@ -171,14 +172,15 @@ export class ApiClient {
             if (result.success) {
                 const files = result.data || [];
                 this.cacheDirectory(path, newEtag || '', files);
-                return files;
+                const response = { files, notModified: false, error: null };
+                return detailed ? response : files;
             } else {
                 throw new Error(result.message || 'API returned success:false');
             }
         } catch (error) {
             if (error.name === 'AbortError') throw error;
             console.error(`Error in getFiles for path ${path}:`, error);
-            return null;
+            return detailed ? { files: null, notModified: false, error } : null;
         }
     }
 
@@ -187,29 +189,47 @@ export class ApiClient {
         this.directoryAbortController?.abort();
         const controller = new AbortController();
         this.directoryAbortController = controller;
+        const cached = this.directoryCache.get(path);
+        const usesCachedView = Boolean(cached);
+        let ownsLoadingOverlay = false;
         try {
-            this.app.ui.showLoading();
-            const files = await this.getFiles(path, controller.signal);
+            if (cached) {
+                cached.usedAt = Date.now();
+                this.app.ui.displayFiles(cached.files);
+                this.app.ui.updateBreadcrumb(path);
+                this.app.ui.updateSidebarActiveState(path);
+                this.app.ui.setDirectoryStatus('refreshing', 'Refreshing directory…');
+            } else {
+                ownsLoadingOverlay = true;
+                this.app.ui.showLoading();
+                this.app.ui.setDirectoryStatus('loading', 'Loading directory…');
+            }
+            const response = await this.getFiles(path, { signal: controller.signal, detailed: true });
             if (requestId !== this.directoryRequestId || this.app.router.getCurrentPath() !== path) return;
 
-            if (files !== null) {
-                this.app.ui.displayFiles(files);
+            if (response.files !== null) {
+                if (!response.notModified) this.app.ui.displayFiles(response.files);
                 this.app.ui.updateBreadcrumb(path);
                 this.app.ui.updateSidebarActiveState(path);
                 this.app.ui.updateToolbar();
+                this.app.ui.setDirectoryStatus('ready');
             } else {
-                this.notifyApiError(`Failed to load directory: ${path}`);
-                this.app.ui.displayFiles([]);
+                const message = response.error?.message || `Failed to load directory: ${path}`;
+                this.notifyApiError(message);
+                if (usesCachedView) this.app.ui.setDirectoryStatus('stale', 'Showing saved results · refresh failed');
+                else this.app.ui.displayDirectoryError(path, message);
             }
         } catch (error) {
             if (error.name === 'AbortError') return;
             if (requestId !== this.directoryRequestId || this.app.router.getCurrentPath() !== path) return;
-            this.notifyApiError('An unexpected error occurred while loading files.', { error, context: 'in loadFiles' });
-            this.app.ui.displayFiles([]);
+            const message = 'An unexpected error occurred while loading files.';
+            this.notifyApiError(message, { error, context: 'in loadFiles' });
+            if (usesCachedView) this.app.ui.setDirectoryStatus('stale', 'Showing saved results · refresh failed');
+            else this.app.ui.displayDirectoryError(path, message);
         } finally {
             // Every request owns one loading reference, including requests that
             // become stale or are aborted by a newer navigation.
-            this.app.ui.hideLoading();
+            if (ownsLoadingOverlay) this.app.ui.hideLoading();
         }
     }
 
