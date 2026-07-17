@@ -22,6 +22,7 @@ class FileManagerApp {
         this.renderedDirectoryPath = null;
         this.editRequestId = 0;
         this.isPC = !/Mobi|Android/i.test(navigator.userAgent);
+        this.eventBus = new EventTarget();
 
         // Initialize modules that don't depend on templates in their constructor
         this.router = new Router();
@@ -39,6 +40,12 @@ class FileManagerApp {
         this.searchHandler = new SearchHandler(this);
         this.aria2cPageHandler = new Aria2cPageHandler(this);
         this.uploadPageHandler = new UploadPageHandler(this);
+    }
+
+    emit(type, detail = {}, { cancelable = false } = {}) {
+        const event = new CustomEvent(type, { detail, cancelable });
+        this.eventBus.dispatchEvent(event);
+        return event;
     }
 
     async init() {

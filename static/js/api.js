@@ -133,6 +133,7 @@ export class ApiClient {
             if (onSuccess) {
                 await onSuccess(result);
             }
+            this.app.emit('files-mutated', { endpoint, payload });
             return { success: true, result };
         } catch (error) {
             this.notifyApiError(errorMessage, { error, context: logContext });
@@ -340,6 +341,7 @@ export class ApiClient {
                     this.app.ui.showToast('Success', message, 'success');
                 }
                 await this.refreshCurrentDirectory([targetDir], true);
+                this.app.emit('files-mutated', { endpoint: '/api/files/move', count: successCount });
             } else {
                 this.app.ui.showToast('Error', 'All items failed to move', 'error');
             }

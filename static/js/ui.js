@@ -563,6 +563,8 @@ export class UIManager {
     }
 
     setViewMode(mode) {
+        const event = this.app.emit('view-change-requested', { mode }, { cancelable: true });
+        if (event.defaultPrevented) return;
         this.viewMode = mode;
         this.displayFiles(this.currentFiles);
         this.app.uploader.bindUploadEvents();

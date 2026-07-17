@@ -16,6 +16,7 @@ export class SearchHandler {
         this.cursorHistory = [''];
         this.nextCursor = '';
         this.hasMore = false;
+        this.refreshTimer = null;
         this.sortField = 'name';
         this.sortDirection = 'asc';
         this.isInSearchMode = false;
@@ -45,39 +46,19 @@ export class SearchHandler {
     }
 
     setupFileOperationListeners() {
-        const api = this.fileManager.api;
-        const ui = this.fileManager.ui;
-        const originalMethods = {
-            deleteFile: api.deleteFile.bind(api),
-            renameFile: api.renameFile.bind(api),
-            moveFile: api.moveFile.bind(api),
-            createNewFile: api.createNewFile.bind(api),
-            createNewFolder: api.createNewFolder.bind(api),
-            setViewMode: ui.setViewMode.bind(ui)
-        };
-
-        const hook = (originalFn) => async (...args) => {
-            const result = await originalFn(...args);
+        this.fileManager.eventBus.addEventListener('files-mutated', () => {
             if (this.isInSearchMode && this.lastSearchTerm) {
-                setTimeout(() => this.refreshSearchResults(), 100);
+                clearTimeout(this.refreshTimer);
+                this.refreshTimer = setTimeout(() => this.refreshSearchResults(), 100);
             }
-            return result;
-        };
-
-        api.deleteFile = hook(originalMethods.deleteFile);
-        api.renameFile = hook(originalMethods.renameFile);
-        api.moveFile = hook(originalMethods.moveFile);
-        api.createNewFile = hook(originalMethods.createNewFile);
-        api.createNewFolder = hook(originalMethods.createNewFolder);
-
-        ui.setViewMode = (mode) => {
+        });
+        this.fileManager.eventBus.addEventListener('view-change-requested', event => {
             if (this.isInSearchMode && this.lastSearchResults && this.lastSearchTerm) {
-                ui.viewMode = mode;
+                event.preventDefault();
+                this.fileManager.ui.viewMode = event.detail.mode;
                 this.redisplayResults(this.currentPage);
-            } else {
-                originalMethods.setViewMode(mode);
             }
-        };
+        });
     }
 
     bindEvents() {
