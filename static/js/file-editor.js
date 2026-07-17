@@ -308,16 +308,6 @@ export class FileEditor {
     }
 
     showToast(message, type) {
-        if (window.fileManager && window.fileManager.showToast) {
-            window.fileManager.showToast('Editor', message, type);
-            return;
-        }
-
-        const toast = document.createElement('div');
-        toast.className = 'toast-message';
-        toast.textContent = message;
-        toast.style.background = type === 'success' ? 'var(--success)' : 'var(--error)';
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
+        this.app.ui.showToast('Editor', message, type);
     }
 }

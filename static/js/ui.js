@@ -572,6 +572,9 @@ export class UIManager {
 
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
+        toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+        toast.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+        toast.setAttribute('aria-atomic', 'true');
         const template = getTemplateContent('/static/templates/components/toast.html');
         template.querySelector('.toast-title').textContent = title;
         template.querySelector('.toast-message').textContent = message;
@@ -584,7 +587,7 @@ export class UIManager {
             setTimeout(() => toast.remove(), 300);
         };
         toast.querySelector('.toast-close').addEventListener('click', removeToast);
-        setTimeout(removeToast, 5000);
+        setTimeout(removeToast, type === 'error' ? 10000 : 5000);
     }
 
     showLoading() {
