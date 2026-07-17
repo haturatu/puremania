@@ -227,41 +227,34 @@ export class EventHandler {
         }
 
         const fileItems = Array.from(document.querySelectorAll('.file-item, .masonry-item, .video-card'));
+        const anchorIndex = fileItems.findIndex(item => item.dataset.path === this.app.selectionAnchorPath);
         const currentIndex = fileItems.indexOf(fileItem);
+        let nextSelection = new Set(this.app.selectedFiles);
+        let nextAnchor = this.app.selectionAnchorPath;
         
-        if (event.shiftKey && this.app.lastSelectedIndex !== -1 && this.app.lastSelectedIndex !== currentIndex) {
-            this.app.clearSelection();
-            
-            const start = Math.min(this.app.lastSelectedIndex, currentIndex);
-            const end = Math.max(this.app.lastSelectedIndex, currentIndex);
-            
+        if (event.shiftKey && anchorIndex !== -1 && anchorIndex !== currentIndex) {
+            nextSelection = new Set();
+            const start = Math.min(anchorIndex, currentIndex);
+            const end = Math.max(anchorIndex, currentIndex);
             for (let i = start; i <= end; i++) {
                 if (i < fileItems.length) {
-                    const item = fileItems[i];
-                    const itemPath = item.dataset.path;
-                    this.app.selectedFiles.add(itemPath);
-                    item.classList.add('selected');
+                    nextSelection.add(fileItems[i].dataset.path);
                 }
             }
         } 
         else if (event.ctrlKey || event.metaKey) {
             if (isSelected) {
-                this.app.selectedFiles.delete(path);
-                fileItem.classList.remove('selected');
+                nextSelection.delete(path);
             } else {
-                this.app.selectedFiles.add(path);
-                fileItem.classList.add('selected');
-                this.app.lastSelectedIndex = currentIndex;
+                nextSelection.add(path);
+                nextAnchor = path;
             }
         } 
         else {
-            this.app.clearSelection();
-            this.app.selectedFiles.add(path);
-            fileItem.classList.add('selected');
-            this.app.lastSelectedIndex = currentIndex;
+            nextSelection = new Set([path]);
+            nextAnchor = path;
         }
-        
-        this.app.ui.updateToolbar();
+        this.app.setSelection(nextSelection, nextAnchor);
     }
 
     handleFileDoubleClick(fileItem) {
