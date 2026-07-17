@@ -17,6 +17,7 @@ import (
 	"puremania/types"
 	"puremania/utils"
 	"puremania/worker"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -309,6 +310,10 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 		h.serveFreshFileList(w, path, "") // ETagなしで提供
 		return
 	}
+	if limit, parseErr := strconv.Atoi(r.URL.Query().Get("limit")); parseErr == nil && limit > 0 {
+		h.servePaginatedFileList(w, r, path, currentStateKey, limit)
+		return
+	}
 
 	// 2. クライアントのETagと比較
 	clientEtag := r.Header.Get("If-None-Match")
@@ -331,6 +336,109 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 
 	// 5. キャッシュがない場合は、新しいファイルリストを生成
 	h.serveFreshFileList(w, path, currentStateKey)
+}
+
+type directoryPage struct {
+	Data       []types.FileInfo `json:"data"`
+	NextCursor string           `json:"nextCursor,omitempty"`
+	HasMore    bool             `json:"hasMore"`
+	Offset     int              `json:"offset"`
+	Total      int              `json:"total"`
+}
+
+func (h *Handler) servePaginatedFileList(w http.ResponseWriter, r *http.Request, path, stateKey string, limit int) {
+	if limit > 500 {
+		limit = 500
+	}
+	offset, _ := strconv.Atoi(r.URL.Query().Get("cursor"))
+	if offset < 0 {
+		offset = 0
+	}
+	sortField := r.URL.Query().Get("sort")
+	if sortField == "" {
+		sortField = "name"
+	}
+	direction := r.URL.Query().Get("direction")
+	if direction != "desc" {
+		direction = "asc"
+	}
+	pageState := fmt.Sprintf("%s:%d:%d:%s:%s", stateKey, offset, limit, sortField, direction)
+	pageHash := sha256.Sum256([]byte(pageState))
+	etag := hex.EncodeToString(pageHash[:])
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("ETag", etag)
+
+	cacheKey := "list:" + stateKey
+	var files []types.FileInfo
+	if cached, found := cache.Get(h.cache, cacheKey); found {
+		files, _ = cached.([]types.FileInfo)
+	}
+	if files == nil {
+		var err error
+		files, err = h.getFileList(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				h.respondError(w, "Directory not found", http.StatusNotFound)
+			} else {
+				h.respondError(w, "Cannot read directory", http.StatusInternalServerError)
+			}
+			return
+		}
+		cache.Set(h.cache, cacheKey, files, int64(len(files)*200), CacheTTL)
+	}
+
+	pageFiles := append([]types.FileInfo(nil), files...)
+	sort.SliceStable(pageFiles, func(i, j int) bool {
+		left, right := pageFiles[i], pageFiles[j]
+		comparison := 0
+		switch sortField {
+		case "size":
+			comparison = compareInt64(left.Size, right.Size)
+		case "modified":
+			comparison = strings.Compare(left.ModTime, right.ModTime)
+		case "type":
+			comparison = strings.Compare(fileSortType(left), fileSortType(right))
+		default:
+			comparison = strings.Compare(strings.ToLower(left.Name), strings.ToLower(right.Name))
+		}
+		if comparison == 0 {
+			comparison = strings.Compare(left.Path, right.Path)
+		}
+		if direction == "desc" {
+			return comparison > 0
+		}
+		return comparison < 0
+	})
+	if offset > len(pageFiles) {
+		offset = len(pageFiles)
+	}
+	end := min(offset+limit, len(pageFiles))
+	hasMore := end < len(pageFiles)
+	nextCursor := ""
+	if hasMore {
+		nextCursor = strconv.Itoa(end)
+	}
+	h.respondSuccess(w, directoryPage{Data: pageFiles[offset:end], NextCursor: nextCursor, HasMore: hasMore, Offset: offset, Total: len(pageFiles)})
+}
+
+func compareInt64(left, right int64) int {
+	if left < right {
+		return -1
+	}
+	if left > right {
+		return 1
+	}
+	return 0
+}
+
+func fileSortType(file types.FileInfo) string {
+	if file.IsDir {
+		return "dir"
+	}
+	return file.MimeType
 }
 
 // serveFreshFileList は新しいファイルリストを生成し、必要に応じてキャッシュに保存する

@@ -13,15 +13,19 @@ export class ApiClient {
         this.directoryAbortController = null;
     }
 
-    cacheDirectory(path, etag, files) {
+    directoryCacheKey(path, { limit = 0, cursor = '', sort = '', direction = '' } = {}) {
+        return limit ? `${path}|${limit}|${cursor}|${sort}|${direction}` : path;
+    }
+
+    cacheDirectory(key, path, etag, files, page = null) {
         // Do not retain a single massive listing in addition to its rendered UI.
         if (files.length > MAX_CACHED_ENTRIES) {
-            this.directoryEtags.delete(path);
-            this.directoryCache.delete(path);
+            this.directoryEtags.delete(key);
+            this.directoryCache.delete(key);
             return;
         }
-        this.directoryEtags.set(path, etag);
-        this.directoryCache.set(path, { files, usedAt: Date.now() });
+        this.directoryEtags.set(key, etag);
+        this.directoryCache.set(key, { path, files, page, usedAt: Date.now() });
         while (this.directoryCache.size > MAX_CACHED_DIRECTORIES || this.cachedEntryCount() > MAX_CACHED_ENTRIES) {
             const oldest = [...this.directoryCache.entries()].reduce((candidate, entry) => entry[1].usedAt < candidate[1].usedAt ? entry : candidate)[0];
             this.directoryCache.delete(oldest);
@@ -91,8 +95,12 @@ export class ApiClient {
 
     invalidateDirectory(path) {
         if (!path) return;
-        this.directoryEtags.delete(path);
-        this.directoryCache.delete(path);
+        for (const [key, entry] of this.directoryCache) {
+            if (entry.path === path) {
+                this.directoryEtags.delete(key);
+                this.directoryCache.delete(key);
+            }
+        }
     }
 
     invalidateDirectories(paths) {
@@ -143,22 +151,25 @@ export class ApiClient {
         }
     }
 
-    async getFiles(path, { signal = null, useCache = true, detailed = false } = {}) {
+    async getFiles(path, { signal = null, useCache = true, detailed = false, limit = 0, cursor = '', sort = '', direction = '' } = {}) {
         try {
+            const key = this.directoryCacheKey(path, { limit, cursor, sort, direction });
             const headers = {};
-            const etag = this.directoryEtags.get(path);
-            if (useCache && etag && this.directoryCache.has(path)) {
+            const etag = this.directoryEtags.get(key);
+            if (useCache && etag && this.directoryCache.has(key)) {
                 headers['If-None-Match'] = etag;
             }
 
-            const response = await fetch(buildApiUrl('/api/files', { path }), { headers, signal });
+            const query = { path };
+            if (limit) Object.assign(query, { limit, cursor, sort, direction });
+            const response = await fetch(buildApiUrl('/api/files', query), { headers, signal });
 
             if (response.status === 304) {
                 console.log(`Content for ${path} not modified. Using cache.`);
-                const cached = this.directoryCache.get(path);
+                const cached = this.directoryCache.get(key);
                 if (cached) cached.usedAt = Date.now();
-                const response = { files: cached?.files || [], notModified: true, error: null };
-                return detailed ? response : response.files;
+                const result = { files: cached?.files || [], page: cached?.page || null, notModified: true, error: null };
+                return detailed ? result : result.files;
             }
 
             if (!response.ok) {
@@ -170,9 +181,10 @@ export class ApiClient {
             const result = await response.json();
             
             if (result.success) {
-                const files = result.data || [];
-                this.cacheDirectory(path, newEtag || '', files);
-                const response = { files, notModified: false, error: null };
+                const page = limit ? result.data : null;
+                const files = limit ? (page?.data || []) : (result.data || []);
+                this.cacheDirectory(key, path, newEtag || '', files, page);
+                const response = { files, page, notModified: false, error: null };
                 return detailed ? response : files;
             } else {
                 throw new Error(result.message || 'API returned success:false');
@@ -184,18 +196,20 @@ export class ApiClient {
         }
     }
 
-    async loadFiles(path) {
+    async loadFiles(path, { cursor = '', pageNumber = 0 } = {}) {
         const requestId = ++this.directoryRequestId;
         this.directoryAbortController?.abort();
         const controller = new AbortController();
         this.directoryAbortController = controller;
-        const cached = this.directoryCache.get(path);
+        const pagination = { limit: 200, cursor, sort: this.app.ui.sortState.field, direction: this.app.ui.sortState.direction };
+        const cacheKey = this.directoryCacheKey(path, pagination);
+        const cached = this.directoryCache.get(cacheKey);
         const usesCachedView = Boolean(cached);
         let ownsLoadingOverlay = false;
         try {
             if (cached) {
                 cached.usedAt = Date.now();
-                this.app.ui.displayFiles(cached.files);
+                this.app.ui.displayFiles(cached.files, { page: cached.page, pageNumber });
                 this.app.ui.updateBreadcrumb(path);
                 this.app.ui.updateSidebarActiveState(path);
                 this.app.ui.setDirectoryStatus('refreshing', 'Refreshing directory…');
@@ -204,11 +218,11 @@ export class ApiClient {
                 this.app.ui.showLoading();
                 this.app.ui.setDirectoryStatus('loading', 'Loading directory…');
             }
-            const response = await this.getFiles(path, { signal: controller.signal, detailed: true });
+            const response = await this.getFiles(path, { signal: controller.signal, detailed: true, ...pagination });
             if (requestId !== this.directoryRequestId || this.app.router.getCurrentPath() !== path) return;
 
             if (response.files !== null) {
-                if (!response.notModified) this.app.ui.displayFiles(response.files);
+                if (!response.notModified) this.app.ui.displayFiles(response.files, { page: response.page, pageNumber });
                 this.app.ui.updateBreadcrumb(path);
                 this.app.ui.updateSidebarActiveState(path);
                 this.app.ui.updateToolbar();

@@ -9,17 +9,25 @@ export class UIManager {
         this.previousPath = null;
         this.currentFiles = [];
         this.sortState = {
-            field: 'type',
-            direction: 'desc'
+            field: 'name',
+            direction: 'asc'
         };
         this.fileBrowserExtensionsVisible = false;
         this.lazyImageObserver = null;
         this.imageLoader = new ImageLoader();
         this.pendingOperations = 0;
+        this.directoryPage = null;
+        this.directoryPageNumber = 0;
+        this.removeVirtualScroll = null;
+        this.nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
     }
 
-    displayFiles(files) {
+    displayFiles(files, { page = null, pageNumber = 0 } = {}) {
         this.currentFiles = files;
+        this.directoryPage = page;
+        this.directoryPageNumber = pageNumber;
+        this.removeVirtualScroll?.();
+        this.removeVirtualScroll = null;
         const container = document.querySelector('.file-browser');
         if (!container) return;
         this.resetLazyImageObserver();
@@ -27,14 +35,6 @@ export class UIManager {
         const currentPath = this.app.router.getCurrentPath();
         const isNewFolder = currentPath !== this.previousPath;
         this.previousPath = currentPath;
-
-        if (isNewFolder) {
-            const imageFileCount = files.filter(file => file.mime_type && file.mime_type.startsWith('image/')).length;
-            const musicFileCount = files.filter(file => file.mime_type && file.mime_type.startsWith('audio/')).length;
-            const shouldPreferNameSort = imageFileCount >= 10 || musicFileCount >= 10;
-            this.sortState.field = shouldPreferNameSort ? 'name' : 'type';
-            this.sortState.direction = shouldPreferNameSort ? 'asc' : 'desc';
-        }
 
         container.innerHTML = '';
         this.renderHeaderToggle();
@@ -48,21 +48,24 @@ export class UIManager {
             return;
         }
 
-        const sortedFiles = this.sortFiles(files);
+        const sortedFiles = page ? files : this.sortFiles(files);
         const imageCount = sortedFiles.filter(f => f.mime_type && f.mime_type.startsWith('image/')).length;
         const videoCount = sortedFiles.filter(f => f.mime_type && f.mime_type.startsWith('video/')).length;
         const hasMasonrySupport = imageCount >= 10;
         const hasVideoSupport = videoCount > 0;
+        const isLargeDirectory = (page?.total || files.length) > files.length;
 
-            if (isNewFolder && hasMasonrySupport) this.viewMode = 'masonry';
+            if (isNewFolder && hasMasonrySupport && !isLargeDirectory) this.viewMode = 'masonry';
             // if (isNewFolder && hasVideoSupport && !hasMasonrySupport) this.viewMode = 'video';
             if (this.viewMode === 'masonry' && !hasMasonrySupport) this.viewMode = 'grid';
             if (this.viewMode === 'video' && !hasVideoSupport) this.viewMode = 'grid';
+            if (isLargeDirectory && (this.viewMode === 'masonry' || this.viewMode === 'video')) this.viewMode = 'grid';
         if (this.viewMode === 'masonry') {
             this.renderMasonryView(sortedFiles, container, hasVideoSupport);
         } else {
             this.renderStandardView(sortedFiles, container, hasMasonrySupport, hasVideoSupport);
         }
+        this.renderDirectoryPagination(container);
         this.syncSelectionClasses(container);
     }
 
@@ -207,6 +210,7 @@ export class UIManager {
         container.appendChild(viewToggle);
 
         const fileContainer = document.createElement('div');
+        container.appendChild(fileContainer);
         if (this.viewMode === 'list') {
             fileContainer.className = 'table-view-container';
             this.renderListView(files, fileContainer);
@@ -217,7 +221,6 @@ export class UIManager {
             fileContainer.className = 'file-grid';
             this.renderGridView(files, fileContainer);
         }
-        container.appendChild(fileContainer);
     }
 
     renderVideoView(files, container) {
@@ -321,6 +324,10 @@ export class UIManager {
     }
 
     renderGridView(files, container) {
+        if (files.length > 80) {
+            this.renderVirtualGrid(files, container);
+            return;
+        }
         files.forEach(file => {
             const fileItem = this.createFileItem(file);
             container.appendChild(fileItem);
@@ -350,6 +357,10 @@ export class UIManager {
     }
 
     renderListView(files, container) {
+        if (files.length > 80) {
+            this.renderVirtualList(files, container);
+            return;
+        }
         const table = this.createListViewTable(
             files,
             this.sortState.field,
@@ -395,8 +406,98 @@ export class UIManager {
             this.sortState.field = field;
             this.sortState.direction = 'asc';
         }
-        this.displayFiles(this.currentFiles);
-        this.app.uploader.bindUploadEvents();
+        this.app.loadFiles(this.app.router.getCurrentPath());
+    }
+
+    bindVirtualScroll(render) {
+        const browser = document.querySelector('.file-browser');
+        if (!browser) return;
+        let frame = 0;
+        const onScroll = () => {
+            if (frame) return;
+            frame = requestAnimationFrame(() => { frame = 0; render(); });
+        };
+        browser.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', onScroll);
+        this.removeVirtualScroll = () => {
+            browser.removeEventListener('scroll', onScroll);
+            window.removeEventListener('resize', onScroll);
+            if (frame) cancelAnimationFrame(frame);
+        };
+        render();
+    }
+
+    renderVirtualGrid(files, container) {
+        const rowHeight = 190;
+        this.bindVirtualScroll(() => {
+            const browser = document.querySelector('.file-browser');
+            const columns = Math.max(1, Math.floor(container.clientWidth / 160));
+            const firstRow = Math.max(0, Math.floor((browser.scrollTop - container.offsetTop) / rowHeight) - 3);
+            const visibleRows = Math.ceil(browser.clientHeight / rowHeight) + 6;
+            const lastRow = Math.min(Math.ceil(files.length / columns), firstRow + visibleRows);
+            const start = firstRow * columns;
+            const end = Math.min(files.length, lastRow * columns);
+            const top = document.createElement('div');
+            top.className = 'virtual-spacer';
+            top.style.cssText = `grid-column:1/-1;height:${firstRow * rowHeight}px`;
+            const bottom = document.createElement('div');
+            bottom.className = 'virtual-spacer';
+            bottom.style.cssText = `grid-column:1/-1;height:${Math.max(0, (Math.ceil(files.length / columns) - lastRow) * rowHeight)}px`;
+            container.replaceChildren(top, ...files.slice(start, end).map(file => this.createFileItem(file)), bottom);
+            this.syncSelectionClasses(container);
+        });
+    }
+
+    renderVirtualList(files, container) {
+        const table = this.createListViewTable([], this.sortState.field, this.sortState.direction, field => this.setSort(field));
+        const body = table.querySelector('tbody');
+        container.appendChild(table);
+        const rowHeight = 48;
+        this.bindVirtualScroll(() => {
+            const browser = document.querySelector('.file-browser');
+            const start = Math.max(0, Math.floor((browser.scrollTop - table.offsetTop) / rowHeight) - 10);
+            const count = Math.ceil(browser.clientHeight / rowHeight) + 20;
+            const end = Math.min(files.length, start + count);
+            const spacer = height => {
+                const row = document.createElement('tr');
+                row.className = 'virtual-spacer';
+                const cell = document.createElement('td');
+                cell.colSpan = 5;
+                cell.style.height = `${height}px`;
+                row.appendChild(cell);
+                return row;
+            };
+            body.replaceChildren(spacer(start * rowHeight), ...files.slice(start, end).map(file => this.createTableRow(file)), spacer((files.length - end) * rowHeight));
+            this.syncSelectionClasses(body);
+        });
+    }
+
+    renderDirectoryPagination(container) {
+        const page = this.directoryPage;
+        if (!page || (page.offset === 0 && !page.hasMore)) return;
+        const controls = document.createElement('nav');
+        controls.className = 'pagination-controls directory-pagination';
+        controls.setAttribute('aria-label', 'Directory pages');
+        const previous = document.createElement('button');
+        previous.type = 'button';
+        previous.className = 'pagination-btn';
+        previous.textContent = '← Previous';
+        previous.disabled = page.offset === 0;
+        previous.addEventListener('click', () => this.app.loadFiles(this.app.router.getCurrentPath(), {
+            cursor: String(Math.max(0, page.offset - 200)), pageNumber: Math.max(0, this.directoryPageNumber - 1)
+        }));
+        const label = document.createElement('span');
+        label.textContent = `Page ${this.directoryPageNumber + 1} · ${page.offset + 1}-${page.offset + page.data.length} of ${page.total}`;
+        const next = document.createElement('button');
+        next.type = 'button';
+        next.className = 'pagination-btn';
+        next.textContent = 'Next →';
+        next.disabled = !page.hasMore;
+        next.addEventListener('click', () => this.app.loadFiles(this.app.router.getCurrentPath(), {
+            cursor: page.nextCursor, pageNumber: this.directoryPageNumber + 1
+        }));
+        controls.append(previous, label, next);
+        container.appendChild(controls);
     }
 
     sortFiles(files) {
@@ -404,8 +505,13 @@ export class UIManager {
             const field = this.sortState.field;
             const dir = this.sortState.direction === 'asc' ? 1 : -1;
             
-            let valA = field === 'name' ? a.name.toLowerCase() : (a[field] || 0);
-            let valB = field === 'name' ? b.name.toLowerCase() : (b[field] || 0);
+            if (field === 'name') {
+                const comparison = this.nameCollator.compare(a.name, b.name);
+                return comparison * dir;
+            }
+
+            let valA = a[field] || 0;
+            let valB = b[field] || 0;
 
             if (field === 'type') {
                 valA = a.is_dir ? 'dir' : (a.mime_type || 'file');

@@ -107,8 +107,8 @@ class FileManagerApp {
         });
     }
 
-    async loadFiles(path) {
-        await this.api.loadFiles(path);
+    async loadFiles(path, options = {}) {
+        await this.api.loadFiles(path, options);
         this.uploader.bindUploadEvents();
     }
 
