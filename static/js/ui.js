@@ -68,7 +68,9 @@ export class UIManager {
 
     syncSelectionClasses(container = document) {
         container.querySelectorAll('.file-item, .masonry-item, .video-card').forEach(item => {
-            item.classList.toggle('selected', this.app.selectedFiles.has(item.dataset.path));
+            const selected = this.app.selectedFiles.has(item.dataset.path);
+            item.classList.toggle('selected', selected);
+            item.setAttribute('aria-selected', String(selected));
         });
     }
 

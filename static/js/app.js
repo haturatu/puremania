@@ -16,7 +16,7 @@ import { loadTemplates } from './template.js';
 class FileManagerApp {
     constructor() {
         this.selectedFiles = new Set();
-        this.lastSelectedIndex = -1;
+        this.selectionAnchorPath = null;
         this.config = {};
         this.directoryScrollPositions = new Map();
         this.renderedDirectoryPath = null;
@@ -160,13 +160,15 @@ class FileManagerApp {
         }
     }
 
-    clearSelection() {
-        document.querySelectorAll('.file-item.selected, .masonry-item.selected, .video-card.selected').forEach(item => {
-            item.classList.remove('selected');
-        });
-        this.selectedFiles.clear();
-        this.lastSelectedIndex = -1;
+    setSelection(paths, anchorPath = this.selectionAnchorPath) {
+        this.selectedFiles = new Set(paths);
+        this.selectionAnchorPath = anchorPath;
+        this.ui.syncSelectionClasses();
         this.ui.updateToolbar();
+    }
+
+    clearSelection() {
+        this.setSelection([], null);
     }
 
     updateStorageInfo(result) {
