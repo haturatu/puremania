@@ -17,6 +17,19 @@ const pause = (ms, signal) => new Promise((resolve, reject) => {
 });
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
+async function mapWithConcurrency(items, limit, mapper) {
+    const results = new Array(items.length);
+    let nextIndex = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (nextIndex < items.length) {
+            const index = nextIndex++;
+            results[index] = await mapper(items[index], index);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+}
+
 class AdaptiveUploadController {
     constructor() {
         this.target = MIN_CONCURRENT_FILES;
@@ -257,7 +270,7 @@ export class Uploader {
         input.click();
     }
 
-    async listJobs() {
+    async listJobs(signal) {
         let records = [];
         try { records = await this.store.getAll(); } catch (_) { return []; }
         // /system/uploads is a client-side route, not a writable virtual path.
@@ -265,19 +278,20 @@ export class Uploader {
         // continue as duplicate uploads or remain misleading in this list.
         const invalidRouteRecords = records.filter(record => record.destination === '/system/uploads');
         if (invalidRouteRecords.length) {
-            await Promise.all(invalidRouteRecords.map(record => this.discardJob(record.key)));
+            await mapWithConcurrency(invalidRouteRecords, 6, record => this.discardJob(record.key));
             records = records.filter(record => record.destination !== '/system/uploads');
         }
-        const jobs = await Promise.all(records.map(async record => {
+        const jobs = await mapWithConcurrency(records, 6, async record => {
             try {
-                const status = await this.apiJSON(record.url);
+                const status = await this.apiJSON(record.url, { signal });
                 const active = this.activeUploadSession && this.progress.has(record.key);
                 return { ...record, uploadedBytes: status.uploadedBytes, totalBytes: status.totalBytes, completed: status.completed, state: status.completed ? 'completed' : active ? 'active' : 'paused' };
             } catch (error) {
+                if (error.name === 'AbortError') throw error;
                 if (error.status === 404) { await this.store.remove(record.key); return null; }
                 return { ...record, uploadedBytes: record.uploadedBytes || 0, totalBytes: record.size, state: 'offline' };
             }
-        }));
+        });
         return jobs.filter(Boolean);
     }
 
@@ -432,7 +446,6 @@ export class Uploader {
         }
         const session = this.createUploadSession();
         this.activeUploadSession = session;
-        this.app.progressManager.setCurrentUpload(session);
         const destination = destinationOverride || this.app.router.getCurrentPath();
         this.progress.clear();
         document.querySelector('.upload-area')?.classList.add('uploading');
@@ -471,7 +484,6 @@ export class Uploader {
         } finally {
             document.querySelector('.upload-area')?.classList.remove('uploading');
             if (this.activeUploadSession === session) this.activeUploadSession = null;
-            if (this.app.progressManager.currentUpload === session) this.app.progressManager.setCurrentUpload(null);
             this.notifyJobsChanged();
         }
     }

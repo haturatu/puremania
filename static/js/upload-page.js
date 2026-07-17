@@ -4,10 +4,10 @@ export class UploadPageHandler {
     constructor(app) {
         this.app = app;
         this.active = false;
-        this.interval = null;
         this.selectedKeys = new Set();
         this.polling = false;
         this.timer = null;
+        this.refreshController = null;
         this.onJobsChanged = () => this.refresh();
     }
 
@@ -23,6 +23,8 @@ export class UploadPageHandler {
         if (!this.active) return;
         this.active = false;
         clearTimeout(this.timer);
+        this.refreshController?.abort();
+        this.refreshController = null;
         window.removeEventListener('puremania:upload-jobs-changed', this.onJobsChanged);
         document.querySelector('.breadcrumbs')?.style.removeProperty('display');
     }
@@ -30,10 +32,15 @@ export class UploadPageHandler {
     async refresh() {
         if (!this.active || this.polling) return;
         this.polling = true;
+        const controller = new AbortController();
+        this.refreshController = controller;
         try {
-            const jobs = await this.app.uploader.listJobs();
-            if (this.active) this.render(jobs);
+            const jobs = await this.app.uploader.listJobs(controller.signal);
+            if (this.active && !controller.signal.aborted) this.render(jobs);
+        } catch (error) {
+            if (error.name !== 'AbortError') console.error('Failed to refresh uploads', error);
         } finally {
+            if (this.refreshController === controller) this.refreshController = null;
             this.polling = false;
             if (this.active) this.timer = setTimeout(() => this.refresh(), 3000);
         }

@@ -3,7 +3,6 @@ import { getTemplateContent } from './template.js';
 export class ProgressManager {
     constructor() {
         this.progressOverlay = null;
-        this.currentUpload = null;
         this.isCompleted = false;
         this.startTime = null;
         this.timerInterval = null;
@@ -201,7 +200,6 @@ export class ProgressManager {
         if (this.progressOverlay) {
             this.progressOverlay.style.display = 'none';
         }
-        this.currentUpload = null;
         this.isCompleted = false;
         this.isMinimized = false;
         this.stopTimer();
@@ -237,10 +235,4 @@ export class ProgressManager {
         }
     }
 
-    setCurrentUpload(upload) {
-        this.currentUpload = upload;
-        if (upload) {
-            this.isCompleted = false;
-        }
-    }
 }
