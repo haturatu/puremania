@@ -46,5 +46,12 @@ export function getTemplateContent(url) {
  * @param {string[]} urls - An array of template URLs to load.
  */
 export async function loadTemplates(urls) {
-  await Promise.all(urls.map(url => loadTemplate(url)));
+  const results = await Promise.allSettled(urls.map(url => loadTemplate(url)));
+  const failures = results.flatMap((result, index) => result.status === 'rejected' ? [{ url: urls[index], error: result.reason }] : []);
+  if (failures.length) {
+    const error = new Error(`Failed to load ${failures.length} application template${failures.length === 1 ? '' : 's'}`);
+    error.name = 'TemplateLoadError';
+    error.failures = failures;
+    throw error;
+  }
 }

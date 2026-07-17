@@ -57,7 +57,7 @@ class FileManagerApp {
         // Fetch config first
         this.config = await this.api.getConfig();
         if (!this.config) {
-            return; // Stop initialization if config fails
+            throw new Error('Failed to load the application configuration.');
         }
 
         // Update UI based on config
@@ -219,8 +219,51 @@ async function main() {
     await app.init();
 }
 
+function renderStartupError(error) {
+    console.error('Failed to initialize Pure Mania', error);
+    const root = document.getElementById('app-root') || document.body;
+    const panel = document.createElement('main');
+    panel.className = 'startup-error';
+    panel.setAttribute('role', 'alert');
+
+    const title = document.createElement('h1');
+    title.textContent = 'Pure Mania could not start';
+    const message = document.createElement('p');
+    message.textContent = navigator.onLine
+        ? 'Some application resources could not be loaded.'
+        : 'You appear to be offline. Check your connection and try again.';
+    panel.append(title, message);
+
+    if (Array.isArray(error?.failures)) {
+        const details = document.createElement('details');
+        const summary = document.createElement('summary');
+        summary.textContent = 'Failed resources';
+        const list = document.createElement('ul');
+        error.failures.forEach(({ url }) => {
+            const item = document.createElement('li');
+            item.textContent = url;
+            list.appendChild(item);
+        });
+        details.append(summary, list);
+        panel.appendChild(details);
+    }
+
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'btn btn-primary';
+    retry.textContent = 'Retry';
+    retry.addEventListener('click', () => window.location.reload());
+    panel.appendChild(retry);
+    root.replaceChildren(panel);
+    retry.focus();
+}
+
+function startApplication() {
+    void main().catch(renderStartupError);
+}
+
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', main, { once: true });
+    document.addEventListener('DOMContentLoaded', startApplication, { once: true });
 } else {
-    void main();
+    startApplication();
 }
