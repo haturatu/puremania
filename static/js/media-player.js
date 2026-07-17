@@ -2,7 +2,8 @@ import { createModalOverlay, bindModalClose, hideModalOverlay, showModalOverlay 
 import { buildApiUrl } from './util.js';
 
 export class MediaPlayer {
-    constructor() {
+    constructor(app) {
+        this.app = app;
         this.audioElement = null;
         this.videoElement = null;
         this.currentMedia = null;
@@ -26,6 +27,7 @@ export class MediaPlayer {
 
         this.currentDirectory = '';
         this.albumArtCache = new Map();
+        this.maxAlbumArtEntries = 32;
     }
 
     init() {
@@ -172,6 +174,29 @@ export class MediaPlayer {
         this.videoElement = player.querySelector('video');
         this.audioElement.volume = this.volume;
         this.videoElement.volume = this.volume;
+        const labels = new Map([
+            ['.mode-btn', 'Change playback mode'], ['.prev', 'Previous track'],
+            ['.play-pause', 'Play'], ['.next', 'Next track'],
+            ['.repeat-btn', 'Repeat playlist'], ['.volume-btn', 'Mute'],
+            ['.minimize-btn', 'Minimize player'], ['.close-btn', 'Close player']
+        ]);
+        for (const [selector, label] of labels) {
+            player.querySelectorAll(selector).forEach(button => button.setAttribute('aria-label', label));
+        }
+        const progress = player.querySelector('.ui-progress');
+        progress.tabIndex = 0;
+        progress.setAttribute('role', 'slider');
+        progress.setAttribute('aria-label', 'Playback position');
+        progress.setAttribute('aria-valuemin', '0');
+        progress.setAttribute('aria-valuemax', '100');
+        progress.setAttribute('aria-valuenow', '0');
+        const volume = player.querySelector('.volume-slider');
+        volume.tabIndex = 0;
+        volume.setAttribute('role', 'slider');
+        volume.setAttribute('aria-label', 'Volume');
+        volume.setAttribute('aria-valuemin', '0');
+        volume.setAttribute('aria-valuemax', '100');
+        volume.setAttribute('aria-valuenow', String(Math.round(this.volume * 100)));
         this.updateVolumeUI();
     }
    
@@ -185,9 +210,25 @@ export class MediaPlayer {
             const rect = e.currentTarget.getBoundingClientRect();
             this.seekTo((e.clientX - rect.left) / rect.width);
         });
+        this.playerElement.querySelector('.ui-progress').addEventListener('keydown', (event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            const media = this.currentMedia?.type === 'audio' ? this.audioElement : this.modalVideoElement;
+            if (!media || !Number.isFinite(media.duration)) return;
+            if (event.key === 'Home') media.currentTime = 0;
+            else if (event.key === 'End') media.currentTime = media.duration;
+            else media.currentTime = Math.max(0, Math.min(media.duration, media.currentTime + (event.key === 'ArrowLeft' ? -5 : 5)));
+        });
         this.playerElement.querySelector('.volume-slider').addEventListener('click', (e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             this.setVolume((e.clientX - rect.left) / rect.width);
+        });
+        this.playerElement.querySelector('.volume-slider').addEventListener('keydown', (event) => {
+            if (!['ArrowDown', 'ArrowLeft', 'ArrowUp', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            if (event.key === 'Home') this.setVolume(0);
+            else if (event.key === 'End') this.setVolume(1);
+            else this.setVolume(this.volume + (['ArrowDown', 'ArrowLeft'].includes(event.key) ? -0.05 : 0.05));
         });
         this.playerElement.querySelector('.volume-btn').addEventListener('click', () => this.toggleMute());
         this.playerElement.querySelectorAll('.minimize-btn').forEach(btn => btn.addEventListener('click', () => this.toggleMinimize()));
@@ -251,8 +292,7 @@ export class MediaPlayer {
         const media = this.playlist[this.currentIndex];
         this.currentMedia = { type: 'audio', path: media.path };
         this.audioElement.src = buildApiUrl('/api/files/download', { path: media.path });
-        this.audioElement.play().catch(error => console.error('Audio play error:', error));
-        this.isPlaying = true;
+        this.startPlayback(this.audioElement);
         this.updateMediaInfo(media.path);
         this.updatePlayButton();
         this.show();
@@ -421,8 +461,11 @@ export class MediaPlayer {
                 modeBtn.setAttribute('title', 'Mode: Off');
                 break;
         }
+        modeBtn.setAttribute('aria-label', modeBtn.title);
+        modeBtn.setAttribute('aria-pressed', String(this.playbackMode.main !== 'off'));
 
         repeatBtn.style.color = this.playbackMode.repeat_playlist ? '#4A90E2' : '';
+        repeatBtn.setAttribute('aria-pressed', String(this.playbackMode.repeat_playlist));
         icons.repeatOn.style.display = this.playbackMode.repeat_playlist ? 'block' : 'none';
         icons.repeatOff.style.display = this.playbackMode.repeat_playlist ? 'none' : 'block';
     }
@@ -432,12 +475,24 @@ export class MediaPlayer {
     play() {
         if (!this.currentMedia) return;
         if (this.currentMedia.type === 'audio') {
-            this.audioElement.play().catch(e => console.error('Play error:', e));
+            this.startPlayback(this.audioElement);
         } else if (this.currentMedia.type === 'video') {
-            this.isVideoModalOpen ? this.modalVideoElement.play() : this.showVideoModal();
+            if (this.isVideoModalOpen) this.startPlayback(this.modalVideoElement);
+            else this.showVideoModal();
         }
-        this.isPlaying = true;
-        this.updatePlayButton();
+    }
+
+    async startPlayback(mediaElement) {
+        try {
+            await mediaElement.play();
+            this.isPlaying = true;
+            this.updatePlayButton();
+        } catch (error) {
+            this.isPlaying = false;
+            this.updatePlayButton();
+            this.app?.ui.showToast('Playback error', 'The browser could not start media playback.', 'error');
+            console.error('Media play error:', error);
+        }
     }
 
     pause() {
@@ -507,6 +562,7 @@ export class MediaPlayer {
         const { currentTime = 0, duration = 0 } = media;
         const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
         this.playerElement.querySelector('.ui-progress__fill').style.width = `${progressPercent}%`;
+        this.playerElement.querySelector('.ui-progress').setAttribute('aria-valuenow', String(Math.round(progressPercent)));
         const timeElements = this.playerElement.querySelectorAll('.progress-time');
         timeElements[0].textContent = this.formatTime(currentTime);
         timeElements[1].textContent = this.formatTime(duration);
@@ -514,6 +570,7 @@ export class MediaPlayer {
 
     resetProgressUI() {
         this.playerElement.querySelector('.ui-progress__fill').style.width = '0%';
+        this.playerElement.querySelector('.ui-progress').setAttribute('aria-valuenow', '0');
         const timeElements = this.playerElement.querySelectorAll('.progress-time');
         timeElements[0].textContent = '0:00';
         timeElements[1].textContent = '0:00';
@@ -523,12 +580,18 @@ export class MediaPlayer {
         const isPlaying = this.isPlaying;
         this.playerElement.querySelectorAll('.play-icon').forEach(i => i.style.display = isPlaying ? 'none' : 'block');
         this.playerElement.querySelectorAll('.pause-icon').forEach(i => i.style.display = isPlaying ? 'block' : 'none');
+        this.playerElement.querySelectorAll('.play-pause').forEach(button => {
+            button.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
+            button.setAttribute('aria-pressed', String(isPlaying));
+        });
     }
 
     updateVolumeUI() {
         if (!this.playerElement) return;
         const volumeFilled = this.playerElement.querySelector('.volume-filled');
         if(volumeFilled) volumeFilled.style.width = `${this.volume * 100}%`;
+        this.playerElement.querySelector('.volume-slider')?.setAttribute('aria-valuenow', String(Math.round(this.volume * 100)));
+        this.playerElement.querySelector('.volume-btn')?.setAttribute('aria-label', this.volume === 0 ? 'Unmute' : 'Mute');
         
         const icons = {
             high: this.playerElement.querySelector('.volume-high'),
@@ -651,7 +714,10 @@ export class MediaPlayer {
     async getAlbumArt(filePath) {
         const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
         if (this.albumArtCache.has(dirPath)) {
-            return this.albumArtCache.get(dirPath);
+            const cached = this.albumArtCache.get(dirPath);
+            this.albumArtCache.delete(dirPath);
+            this.albumArtCache.set(dirPath, cached);
+            return cached;
         }
 
         try {
@@ -662,7 +728,7 @@ export class MediaPlayer {
                     const response = await fetch(buildApiUrl('/api/files/download', { path: coverPath }));
                     if (response.ok) {
                         const imageUrl = URL.createObjectURL(await response.blob());
-                        this.albumArtCache.set(dirPath, imageUrl);
+                        this.cacheAlbumArt(dirPath, imageUrl);
                         return imageUrl;
                     }
                 } catch (e) {
@@ -674,8 +740,21 @@ export class MediaPlayer {
         }
 
         const defaultArt = this.getDefaultAlbumArt();
-        this.albumArtCache.set(dirPath, defaultArt);
+        this.cacheAlbumArt(dirPath, defaultArt);
         return defaultArt;
+    }
+
+    cacheAlbumArt(path, url) {
+        const existing = this.albumArtCache.get(path);
+        if (existing?.startsWith('blob:') && existing !== url) URL.revokeObjectURL(existing);
+        this.albumArtCache.delete(path);
+        this.albumArtCache.set(path, url);
+        while (this.albumArtCache.size > this.maxAlbumArtEntries) {
+            const oldestKey = this.albumArtCache.keys().next().value;
+            const oldestUrl = this.albumArtCache.get(oldestKey);
+            this.albumArtCache.delete(oldestKey);
+            if (oldestUrl?.startsWith('blob:')) URL.revokeObjectURL(oldestUrl);
+        }
     }
 
     getDefaultAlbumArt() {
