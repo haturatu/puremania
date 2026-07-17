@@ -11,6 +11,11 @@ export class SearchHandler {
         this.currentPage = 0;
         this.pageSize = 100;
         this.totalResults = 0;
+        this.searchRequestId = 0;
+        this.searchController = null;
+        this.cursorHistory = [''];
+        this.nextCursor = '';
+        this.hasMore = false;
         this.sortField = 'name';
         this.sortDirection = 'asc';
         this.isInSearchMode = false;
@@ -379,12 +384,23 @@ export class SearchHandler {
         }
         this.lastSearchTerm = searchTerm;
         this.currentPage = page;
+        if (page === 0) this.cursorHistory = [''];
+        const cursor = this.cursorHistory[page] ?? '';
+        const requestId = ++this.searchRequestId;
+        this.searchController?.abort();
+        const controller = new AbortController();
+        this.searchController = controller;
         this.fileManager.ui.showLoading();
         try {
-            const result = await this.fileManager.api.search(searchTerm, this.fileManager.router.getCurrentPath(), this.searchOptions, this.pageSize, page * this.pageSize);
+            const result = await this.fileManager.api.search(searchTerm, this.fileManager.router.getCurrentPath(), this.searchOptions, this.pageSize, cursor, controller.signal);
+            if (requestId !== this.searchRequestId || controller.signal.aborted) return;
             if (result && result.success) {
-                this.lastSearchResults = this.sortResults(result.data || [], this.sortField, this.sortDirection);
-                this.totalResults = this.lastSearchResults.length;
+                const searchPage = result.data || {};
+                this.lastSearchResults = this.sortResults(searchPage.data || [], this.sortField, this.sortDirection);
+                this.nextCursor = searchPage.nextCursor || '';
+                this.hasMore = Boolean(searchPage.hasMore);
+                if (this.hasMore) this.cursorHistory[page + 1] = this.nextCursor;
+                this.cursorHistory.length = this.hasMore ? page + 2 : page + 1;
                 if (this.fileManager.ui.viewMode === 'masonry') {
                     this.fileManager.ui.viewMode = 'grid';
                 }
@@ -393,6 +409,8 @@ export class SearchHandler {
                 this.fileManager.ui.showToast('Search Error', result ? result.message : 'Unknown error', 'error');
             }
         } catch (error) {
+            if (error.name === 'AbortError') return;
+            if (requestId !== this.searchRequestId) return;
             this.fileManager.ui.showToast('Search Error', 'Failed to perform search', 'error');
         } finally {
             this.fileManager.ui.hideLoading();
@@ -402,14 +420,7 @@ export class SearchHandler {
     async refreshSearchResults() {
         if (!this.isInSearchMode || !this.lastSearchTerm) return;
         try {
-            const result = await this.fileManager.api.search(this.lastSearchTerm, this.fileManager.router.getCurrentPath(), this.searchOptions, this.pageSize, 0);
-            if (result && result.success) {
-                this.lastSearchResults = this.sortResults(result.data || [], this.sortField, this.sortDirection);
-                this.totalResults = this.lastSearchResults.length;
-                const totalPages = Math.ceil(this.lastSearchResults.length / this.pageSize);
-                if (this.currentPage >= totalPages) this.currentPage = Math.max(0, totalPages - 1);
-                this.displaySearchResults(this.lastSearchResults, this.lastSearchTerm, this.currentPage);
-            }
+            await this.performSearch(this.currentPage);
         } catch (error) {
             console.error('Error refreshing search results:', error);
         }
@@ -421,17 +432,15 @@ export class SearchHandler {
         container.innerHTML = '';
         results = results || [];
         const startIndex = page * this.pageSize;
-        const endIndex = Math.min(startIndex + this.pageSize, results.length);
-        const pageResults = results.slice(startIndex, endIndex);
-        const totalPages = Math.ceil(results.length / this.pageSize);
+        const endIndex = startIndex + results.length;
 
         const header = document.createElement('div');
         header.className = 'search-results-header';
         const headerTemplate = getTemplateContent('/static/templates/components/search_results_header.html');
-        headerTemplate.querySelector('.search-results-count div').textContent = `Search Results for "${searchTerm}" (${results.length} found)`;
-        if (results.length > this.pageSize) {
-            headerTemplate.querySelector('.pagination-info').textContent = `[${page + 1}/${totalPages}] Showing ${startIndex + 1}-${endIndex} of ${results.length} results`;
-        }
+        headerTemplate.querySelector('.search-results-count div').textContent = `Search Results for "${searchTerm}"`;
+        headerTemplate.querySelector('.pagination-info').textContent = results.length
+            ? `Page ${page + 1} · Showing ${startIndex + 1}-${endIndex}${this.hasMore ? '+' : ''}`
+            : `Page ${page + 1}`;
         const options = [];
         if (this.searchOptions.useRegex) options.push('REGEX');
         if (this.searchOptions.caseSensitive) options.push('CASE-SENSITIVE');
@@ -440,7 +449,7 @@ export class SearchHandler {
             headerTemplate.querySelector('.search-options-display').textContent = `[${options.join(', ')}]`;
         }
         header.appendChild(headerTemplate);
-        header.querySelector('.search-controls').appendChild(this.createPaginationControls(page, totalPages));
+        header.querySelector('.search-controls').appendChild(this.createPaginationControls(page, this.hasMore));
         container.appendChild(header);
         header.querySelector('.search-back-btn').addEventListener('click', () => this.exitSearchMode());
 
@@ -458,17 +467,17 @@ export class SearchHandler {
         }
 
         this.fileManager.ui.renderSearchResultsFiles(
-            pageResults,
+            results,
             container,
             this.sortField,
             this.sortDirection,
             (field) => this.setSort(field)
         );
 
-        if (totalPages > 1) {
+        if (page > 0 || this.hasMore) {
             const footerPagination = document.createElement('div');
             footerPagination.className = 'search-pagination-footer';
-            footerPagination.appendChild(this.createPaginationControls(page, totalPages));
+            footerPagination.appendChild(this.createPaginationControls(page, this.hasMore));
             container.appendChild(footerPagination);
         }
         container.scrollTop = 0;
@@ -479,6 +488,9 @@ export class SearchHandler {
         this.lastSearchResults = null;
         this.lastSearchTerm = '';
         this.currentPage = 0;
+        this.searchController?.abort();
+        this.searchController = null;
+        this.cursorHistory = [''];
         const searchInput = document.querySelector('.search-input');
         if (searchInput) searchInput.value = '';
         this.isCdMode = false;
@@ -493,8 +505,8 @@ export class SearchHandler {
         }
     }
 
-    createPaginationControls(currentPage, totalPages) {
-        if (totalPages <= 1) return document.createDocumentFragment();
+    createPaginationControls(currentPage, hasMore) {
+        if (currentPage === 0 && !hasMore) return document.createDocumentFragment();
         const controls = document.createElement('div');
         controls.className = 'pagination-controls';
         
@@ -507,40 +519,12 @@ export class SearchHandler {
             return btn;
         };
 
-        const createPageBtn = (text, page) => {
-            const btn = document.createElement('button');
-            btn.className = 'page-btn';
-            btn.textContent = text;
-            btn.addEventListener('click', () => this.performSearch(page));
-            return btn;
-        };
-
         controls.appendChild(createNavBtn('← Previous', currentPage - 1, currentPage === 0));
-        
-        const pageNumbers = document.createElement('div');
-        pageNumbers.className = 'page-numbers';
-        
-        const startPage = Math.max(0, currentPage - 2);
-        const endPage = Math.min(totalPages - 1, currentPage + 2);
-
-        if (startPage > 0) {
-            pageNumbers.appendChild(createPageBtn('1', 0));
-            if (startPage > 1) pageNumbers.insertAdjacentHTML('beforeend', '<span class="page-ellipsis">...</span>');
-        }
-
-        for (let i = startPage; i <= endPage; i++) {
-            const btn = createPageBtn(i + 1, i);
-            if (i === currentPage) btn.classList.add('active');
-            pageNumbers.appendChild(btn);
-        }
-
-        if (endPage < totalPages - 1) {
-            if (endPage < totalPages - 2) pageNumbers.insertAdjacentHTML('beforeend', '<span class="page-ellipsis">...</span>');
-            pageNumbers.appendChild(createPageBtn(totalPages, totalPages - 1));
-        }
-
-        controls.appendChild(pageNumbers);
-        controls.appendChild(createNavBtn('Next →', currentPage + 1, currentPage === totalPages - 1));
+        const pageLabel = document.createElement('span');
+        pageLabel.className = 'pagination-info';
+        pageLabel.textContent = `Page ${currentPage + 1}`;
+        controls.appendChild(pageLabel);
+        controls.appendChild(createNavBtn('Next →', currentPage + 1, !hasMore));
         return controls;
     }
 

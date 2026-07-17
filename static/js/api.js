@@ -651,16 +651,15 @@ export class ApiClient {
         return result.data;
     }
 
-    async search(term, path, options, limit, offset) {
+    async search(term, path, options, limit, cursor = '', signal) {
         const body = {
             term: term,
             path: path,
             useRegex: options.useRegex,
             caseSensitive: options.caseSensitive,
             scope: options.scope,
-            maxResults: 10000, // This seems high, but matching original logic
-            offset: offset,
-            limit: limit
+            cursor,
+            limit
         };
 
         const response = await fetch('/api/search', {
@@ -668,7 +667,8 @@ export class ApiClient {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
+            signal
         });
         
         return await response.json();
