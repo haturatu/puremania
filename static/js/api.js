@@ -206,7 +206,9 @@ export class ApiClient {
             this.notifyApiError('An unexpected error occurred while loading files.', { error, context: 'in loadFiles' });
             this.app.ui.displayFiles([]);
         } finally {
-            if (requestId === this.directoryRequestId) this.app.ui.hideLoading();
+            // Every request owns one loading reference, including requests that
+            // become stale or are aborted by a newer navigation.
+            this.app.ui.hideLoading();
         }
     }
 
