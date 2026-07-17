@@ -66,7 +66,11 @@ export class ProgressManager {
         const closeBtn = this.progressOverlay.querySelector('.progress-close');
 
         if (statusElement) {
-            statusElement.innerHTML = `Error: ${message}<br><strong>Click close to dismiss</strong>`;
+            statusElement.replaceChildren();
+            statusElement.append(document.createTextNode(`Error: ${message}`), document.createElement('br'));
+            const dismissHint = document.createElement('strong');
+            dismissHint.textContent = 'Click close to dismiss';
+            statusElement.appendChild(dismissHint);
             statusElement.style.color = 'var(--error, #f44336)';
         }
 

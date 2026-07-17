@@ -559,7 +559,7 @@ export class MediaPlayer {
             <div class="modal">
                 <div class="modal-header">
                     <div class="video-modal-header-main">
-                        <div class="modal-title" title="${fileName}">${fileName}</div>
+                        <div class="modal-title"></div>
                         <div class="video-modal-meta">Esc: close / Space: play-pause / ← →: seek 5s</div>
                     </div>
                     <button class="modal-close">&times;</button>
@@ -570,6 +570,9 @@ export class MediaPlayer {
             </div>
         `
         });
+        const title = modal.querySelector('.modal-title');
+        title.textContent = fileName;
+        title.title = fileName;
         const video = modal.querySelector('video');
         video.src = buildApiUrl('/api/files/download', { path: this.currentMedia.path });
         video.volume = this.volume;

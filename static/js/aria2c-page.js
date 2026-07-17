@@ -183,7 +183,7 @@ export class Aria2cPageHandler {
         template.querySelector('.progress-text').textContent = `${progress.toFixed(2)}%`;
         template.querySelector('.status').textContent = item.status;
         template.querySelector('.speed').textContent = `${this.fileManager.ui.formatFileSize(downloadSpeed)}/s`;
-        template.querySelector('.actions').innerHTML = this.createActionButtons(item.status, item.gid);
+        template.querySelector('.actions').replaceChildren(...this.createActionButtons(item.status, item.gid));
         
         tr.appendChild(template);
         return tr;
@@ -194,22 +194,31 @@ export class Aria2cPageHandler {
     }
 
     createActionButtons(status, gid) {
-        let buttons = '';
+        const buttons = [];
+        const addButton = (label, action, className) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = `btn btn-sm ${className}`;
+            button.dataset.action = action;
+            button.dataset.gid = gid;
+            button.textContent = label;
+            buttons.push(button);
+        };
         switch (status) {
             case 'active':
-                buttons += `<button class="btn btn-sm btn-warning" data-action="pause" data-gid="${gid}">Pause</button>`;
-                buttons += `<button class="btn btn-sm btn-danger" data-action="cancel" data-gid="${gid}">Cancel</button>`;
+                addButton('Pause', 'pause', 'btn-warning');
+                addButton('Cancel', 'cancel', 'btn-danger');
                 break;
             case 'paused':
-                buttons += `<button class="btn btn-sm btn-success" data-action="resume" data-gid="${gid}">Resume</button>`;
-                buttons += `<button class="btn btn-sm btn-danger" data-action="cancel" data-gid="${gid}">Cancel</button>`;
+                addButton('Resume', 'resume', 'btn-success');
+                addButton('Cancel', 'cancel', 'btn-danger');
                 break;
             case 'complete':
-                 buttons += `<button class="btn btn-sm btn-info" data-action="clear" data-gid="${gid}">Clear</button>`;
+                addButton('Clear', 'clear', 'btn-info');
                 break;
             case 'error':
             case 'removed':
-                 buttons += `<button class="btn btn-sm btn-info" data-action="clear" data-gid="${gid}">Clear</button>`;
+                addButton('Clear', 'clear', 'btn-info');
                 break;
         }
         return buttons;
