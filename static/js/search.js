@@ -1,5 +1,5 @@
 import { getTemplateContent } from './template.js';
-import { createModalOverlay, bindModalClose } from './modal.js';
+import { createModalOverlay, bindModalClose, hideModalOverlay, showModalOverlay } from './modal.js';
 
 export class SearchHandler {
     constructor(fileManager) {
@@ -314,12 +314,16 @@ export class SearchHandler {
 
     hideSearchOptions() {
         document.querySelector('.search-container')?.classList.remove('expanded');
-        if (this.searchModal) this.searchModal.style.display = 'none';
+        if (this.searchModal) hideModalOverlay(this.searchModal);
     }
 
     toggleSearchOptions() {
         if (this.searchModal) {
-            this.searchModal.style.display = this.searchModal.style.display === 'none' ? 'flex' : 'none';
+            if (this.searchModal.style.display === 'none') {
+                showModalOverlay(this.searchModal);
+            } else {
+                hideModalOverlay(this.searchModal);
+            }
         }
     }
 
