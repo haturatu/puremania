@@ -17,12 +17,18 @@ const (
 
 // Handler はAPIハンドラーの依存関係を保持
 type Handler struct {
-	config      *types.Config
-	cache       *types.TTLCache
-	workerPool  *types.WorkerPool
-	logger      *slog.Logger
-	uploadLocks [256]sync.Mutex // fixed striped locks; serializes writes to one session without unbounded state
-	uploadGate  chan struct{}   // bounds concurrent disk writes across sessions
+	config       *types.Config
+	cache        *types.TTLCache
+	workerPool   *types.WorkerPool
+	logger       *slog.Logger
+	uploadLocks  [256]sync.Mutex // fixed striped locks; serializes writes to one session without unbounded state
+	uploadGate   chan struct{}   // bounds concurrent disk writes across sessions
+	zipDownloads sync.Map        // token -> preparedZip; entries expire after download preparation
+}
+
+type preparedZip struct {
+	path      string
+	expiresAt time.Time
 }
 
 func (h *Handler) sessionMutex(id string) *sync.Mutex {

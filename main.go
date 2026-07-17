@@ -178,6 +178,7 @@ func main() {
 	api.HandleFunc("/files/download", handler.DownloadFile).Methods("GET")
 	api.HandleFunc("/files/content", handler.GetFileContent).Methods("GET")
 	api.HandleFunc("/files/download-zip", handler.DownloadZip).Methods("POST")
+	api.HandleFunc("/files/download-zip/{token}", handler.DownloadPreparedZip).Methods("GET")
 	api.HandleFunc("/files/save", handler.SaveFile).Methods("POST")
 	api.HandleFunc("/files/delete", handler.DeleteMultipleFiles).Methods("POST")
 	api.HandleFunc("/files/mkdir", handler.CreateDirectory).Methods("POST")

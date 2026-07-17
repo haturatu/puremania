@@ -3,6 +3,7 @@ package handlers
 import (
 	"archive/zip"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -21,6 +22,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/gorilla/mux"
 
 	"github.com/mholt/archives"
 )
@@ -768,7 +771,7 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// DownloadZip - 並列処理でZIPストリーミング配信
+// DownloadZip prepares a validated archive before returning a normal download URL.
 func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 	var req types.BatchPathsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -782,27 +785,80 @@ func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", "attachment; filename=\"files.zip\"")
-	w.Header().Set("Transfer-Encoding", "chunked")
-
-	// io.Pipeでストリーミング
-	pr, pw := io.Pipe()
-
-	// zip.Writer is inherently serial. Keeping this work out of the shared
-	// worker pool avoids parent tasks waiting on child tasks in that same pool.
-	go func() {
-		ctx, cancel := context.WithTimeout(r.Context(), time.Duration(h.config.ZipTimeout)*time.Second)
-		defer cancel()
-		if err := h.createZipArchive(ctx, pw, req.Paths); err != nil {
-			_ = pw.CloseWithError(err)
-			return
+	tmp, err := os.CreateTemp("", "puremania-download-*.zip")
+	if err != nil {
+		h.respondError(w, "Cannot prepare archive", http.StatusInternalServerError)
+		return
+	}
+	tmpPath := tmp.Name()
+	removeTemp := true
+	defer func() {
+		if closeErr := tmp.Close(); closeErr != nil {
+			h.logger.Warn("Failed to close prepared zip", "error", closeErr)
 		}
-		_ = pw.Close()
+		if removeTemp {
+			_ = os.Remove(tmpPath)
+		}
 	}()
 
-	// ストリーミング出力
-	_, _ = io.Copy(w, pr)
+	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(h.config.ZipTimeout)*time.Second)
+	defer cancel()
+	if err := h.createZipArchive(ctx, tmp, req.Paths); err != nil {
+		h.logger.Error("Failed to prepare zip", "error", err)
+		h.respondError(w, "Cannot create archive", http.StatusInternalServerError)
+		return
+	}
+	if err := tmp.Sync(); err != nil {
+		h.respondError(w, "Cannot finalize archive", http.StatusInternalServerError)
+		return
+	}
+
+	tokenBytes := make([]byte, 24)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		h.respondError(w, "Cannot create download token", http.StatusInternalServerError)
+		return
+	}
+	token := hex.EncodeToString(tokenBytes)
+	expiresAt := time.Now().Add(time.Hour)
+	h.zipDownloads.Store(token, preparedZip{path: tmpPath, expiresAt: expiresAt})
+	removeTemp = false
+	time.AfterFunc(time.Until(expiresAt), func() {
+		if value, loaded := h.zipDownloads.LoadAndDelete(token); loaded {
+			_ = os.Remove(value.(preparedZip).path)
+		}
+	})
+	h.respondSuccess(w, map[string]string{"downloadUrl": "/api/files/download-zip/" + token})
+}
+
+func (h *Handler) DownloadPreparedZip(w http.ResponseWriter, r *http.Request) {
+	token := mux.Vars(r)["token"]
+	value, ok := h.zipDownloads.Load(token)
+	if !ok {
+		h.respondError(w, "Download not found or expired", http.StatusNotFound)
+		return
+	}
+	prepared := value.(preparedZip)
+	if time.Now().After(prepared.expiresAt) {
+		h.zipDownloads.Delete(token)
+		_ = os.Remove(prepared.path)
+		h.respondError(w, "Download expired", http.StatusGone)
+		return
+	}
+	file, err := os.Open(prepared.path)
+	if err != nil {
+		h.respondError(w, "Cannot open archive", http.StatusInternalServerError)
+		return
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil {
+		h.respondError(w, "Cannot inspect archive", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"files.zip\"")
+	w.Header().Set("Cache-Control", "private, no-store")
+	http.ServeContent(w, r, "files.zip", info.ModTime(), file)
 }
 
 type maxBytesWriter struct {
