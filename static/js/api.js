@@ -499,75 +499,23 @@ export class ApiClient {
                     paths: Array.from(this.app.selectedFiles)
                 })
             });
-            
-            if (response.ok) {
-                const contentLength = response.headers.get('content-length');
-                const successfulFiles = parseInt(response.headers.get('X-Zip-Successful-Files') || '0');
-                const failedFiles = parseInt(response.headers.get('X-Zip-Failed-Files') || '0');
-                
-                const reader = response.body.getReader();
-                const chunks = [];
-                let receivedLength = 0;
-                
-                while (true) {
-                    const { done, value } = await reader.read();
-                    
-                    if (done) {
-                        break;
-                    }
-                    
-                    chunks.push(value);
-                    receivedLength += value.length;
-                    
-                    if (contentLength) {
-                        const percentage = (receivedLength / parseInt(contentLength)) * 100;
-                        this.app.progressManager.updateProgress({
-                            currentFile: 'Downloading archive...',
-                            percentage: percentage,
-                            processed: Math.floor((percentage / 100) * this.app.selectedFiles.size),
-                            total: this.app.selectedFiles.size,
-                            status: `${Math.round(percentage)}% downloaded`
-                        });
-                    }
-                }
-                
-                const blob = new Blob(chunks);
-                
-                this.app.progressManager.updateProgress({
-                    currentFile: 'Saving files...',
-                    percentage: 100,
-                    processed: this.app.selectedFiles.size,
-                    total: this.app.selectedFiles.size,
-                    status: 'Complete'
-                });
-                
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'files.zip';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                
-                // Delay revoking the object URL to allow iOS Safari time to process the download
-                setTimeout(() => {
-                    window.URL.revokeObjectURL(url);
-                }, 30000); // 30 seconds delay
-                
-                let message = `Downloaded ${successfulFiles} files successfully`;
-                if (failedFiles > 0) {
-                    message += `, ${failedFiles} files failed to be included.`;
-                }
-                this.app.ui.showToast('Success', message, 'success');
-                this.app.progressManager.hide();
-
-            } else {
-                const error = await response.json();
-                this.notifyApiError(this.getApiErrorMessage(error, 'Failed to create zip archive'));
-                this.app.progressManager.hide();
+            const result = await response.json().catch(() => null);
+            if (!response.ok || !result?.success || !result.data?.downloadUrl) {
+                throw new Error(this.getApiErrorMessage(result, 'Failed to create zip archive'));
             }
+
+            this.app.progressManager.updateProgress({
+                currentFile: 'Archive ready',
+                percentage: 100,
+                processed: this.app.selectedFiles.size,
+                total: this.app.selectedFiles.size,
+                status: 'Starting browser download'
+            });
+            this.app.ui.showToast('Archive ready', 'The download has started.', 'success');
+            this.app.progressManager.hide();
+            window.location.assign(result.data.downloadUrl);
         } catch (error) {
-            this.notifyApiError('Failed to download files', { error, context: 'downloading files' });
+            this.notifyApiError(this.getApiErrorMessage(error, 'Failed to download files'), { error, context: 'downloading files' });
             this.app.progressManager.hide();
         }
     }
