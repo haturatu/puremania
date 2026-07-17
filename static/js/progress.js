@@ -33,6 +33,9 @@ export class ProgressManager {
     }
 
     startTimer() {
+        if (this.timerInterval !== null) {
+            clearInterval(this.timerInterval);
+        }
         this.startTime = Date.now();
         this.timerInterval = setInterval(() => {
             if (!this.isCompleted) {
@@ -66,6 +69,8 @@ export class ProgressManager {
         const closeBtn = this.progressOverlay.querySelector('.progress-close');
 
         if (statusElement) {
+            statusElement.setAttribute('role', 'alert');
+            statusElement.setAttribute('aria-live', 'assertive');
             statusElement.replaceChildren();
             statusElement.append(document.createTextNode(`Error: ${message}`), document.createElement('br'));
             const dismissHint = document.createElement('strong');
@@ -95,6 +100,8 @@ export class ProgressManager {
         const closeBtn = this.progressOverlay.querySelector('.progress-close');
 
         if (statusElement) {
+            statusElement.setAttribute('role', 'status');
+            statusElement.setAttribute('aria-live', 'polite');
             statusElement.style.color = '';
         }
 
@@ -134,6 +141,7 @@ export class ProgressManager {
         const elements = {
             current: this.progressOverlay.querySelector('.progress-current'),
             barFill: this.progressOverlay.querySelector('.ui-progress__fill'),
+            progressBar: this.progressOverlay.querySelector('.ui-progress'),
             percentage: this.progressOverlay.querySelector('.progress-percentage'),
             stats: this.progressOverlay.querySelector('.progress-stats'),
             status: this.progressOverlay.querySelector('.progress-status')
@@ -141,6 +149,7 @@ export class ProgressManager {
 
         if (elements.current) elements.current.textContent = currentFile;
         if (elements.barFill) elements.barFill.style.width = percentageText;
+        if (elements.progressBar) elements.progressBar.setAttribute('aria-valuenow', String(Math.round(safePercentage)));
         if (elements.percentage) elements.percentage.textContent = percentageText;
         if (elements.stats) elements.stats.textContent = statsText;
         if (elements.status && status) elements.status.textContent = status;

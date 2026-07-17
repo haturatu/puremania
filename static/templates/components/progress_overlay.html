@@ -3,14 +3,14 @@
         <div class="progress-header">
             <div class="progress-title">Uploading Files</div>
             <div class="progress-actions">
-                <button class="progress-minimize" type="button" title="Minimize upload status">−</button>
-                <button class="progress-close" type="button" title="Close upload status">&times;</button>
+                <button class="progress-minimize" type="button" aria-label="Minimize upload status">−</button>
+                <button class="progress-close" type="button" aria-label="Close upload status">&times;</button>
             </div>
         </div>
         <div class="progress-info">
             <span class="progress-current">Preparing files...</span>
         </div>
-        <div class="ui-progress">
+        <div class="ui-progress" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <div class="ui-progress__fill"></div>
         </div>
         <div class="progress-details">
@@ -18,9 +18,9 @@
             <span class="progress-stats">0 files processed</span>
             <span class="progress-time">Elapsed: 0s</span>
         </div>
-        <div class="progress-status">Initializing...</div>
+        <div class="progress-status" role="status" aria-live="polite" aria-atomic="true">Initializing...</div>
     </div>
     <div class="upload-minimized">
-        <button type="button" class="upload-restore">⇧ Uploads</button>
+        <button type="button" class="upload-restore" aria-label="Restore upload status">⇧ Uploads</button>
     </div>
 </template>
