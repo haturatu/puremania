@@ -1,5 +1,5 @@
 import { getTemplateContent } from './template.js';
-import { createModalOverlay, bindModalClose } from './modal.js';
+import { createModalOverlay, bindModalClose, hideModalOverlay, showModalOverlay } from './modal.js';
 import { buildApiUrl } from './util.js';
 import { ImageLoader } from './image-loader.js';
 
@@ -74,14 +74,14 @@ export class ImageViewer {
         }
         
         this.showImage(this.currentImageIndex);
-        this.viewerElement.style.display = 'flex';
+        showModalOverlay(this.viewerElement, { initialFocus: this.viewerElement.querySelector('.modal-close') });
         this.isOpen = true;
         document.body.style.overflow = 'hidden';
         this.showNavButtons();
     }
     
     close() {
-        this.viewerElement.style.display = 'none';
+        hideModalOverlay(this.viewerElement);
         this.isOpen = false;
         document.body.style.overflow = '';
         clearTimeout(this.navTimeout);

@@ -1,4 +1,4 @@
-import { createModalOverlay, bindModalClose } from './modal.js';
+import { createModalOverlay, bindModalClose, hideModalOverlay, showModalOverlay } from './modal.js';
 import { buildApiUrl } from './util.js';
 
 export class MediaPlayer {
@@ -583,6 +583,7 @@ export class MediaPlayer {
         });
         this.videoModal = modal;
         this.isVideoModalOpen = true;
+        showModalOverlay(modal, { initialFocus: video });
         document.addEventListener('keydown', this.boundVideoModalKeydown);
         video.focus();
         video.addEventListener('loadedmetadata', () => this.updateProgress());
@@ -603,6 +604,7 @@ export class MediaPlayer {
             this.modalVideoElement.pause();
             this.modalVideoElement.src = '';
         }
+        hideModalOverlay(this.videoModal);
         this.videoModal.remove();
         this.videoModal = null;
         this.modalVideoElement = null;

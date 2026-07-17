@@ -18,7 +18,7 @@ import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
 import { xml } from "@codemirror/lang-xml";
 import { markdown } from "@codemirror/lang-markdown";
-import { createModalOverlay } from "./modal.js";
+import { createModalOverlay, hideModalOverlay, showModalOverlay } from "./modal.js";
 
 const getLanguageName = (filePath) => {
     const extension = filePath.split('.').pop().toLowerCase();
@@ -234,7 +234,7 @@ export class FileEditor {
             parent: this.editorContainer
         });
 
-        this.editorElement.style.display = 'flex';
+        showModalOverlay(this.editorElement);
         this.editorView.focus();
         document.body.style.overflow = 'hidden';
 
@@ -266,7 +266,7 @@ export class FileEditor {
             return;
         }
         if (this.editorView && this.editorView.state.doc.toString() !== this.savedContent && !window.confirm('Discard unsaved changes?')) return;
-        this.editorElement.style.display = 'none';
+        hideModalOverlay(this.editorElement);
         this.currentFile = null;
         if (this.editorView) {
             this.editorView.destroy();
