@@ -158,7 +158,7 @@ export class SearchHandler {
     async navigateToFolder(path) {
         try {
             const normalizedPath = this.fileManager.util.normalizePath(path);
-            const result = await this.fileManager.api.getFiles(normalizedPath, false); // Don't use cache
+            const result = await this.fileManager.api.getFiles(normalizedPath, { useCache: false });
             if (result) {
                 this.exitSearchMode(true);
                 const searchInput = document.querySelector('.search-input');

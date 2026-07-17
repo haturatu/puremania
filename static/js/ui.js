@@ -130,6 +130,46 @@ export class UIManager {
         container.appendChild(noFiles);
     }
 
+    setDirectoryStatus(status, message = '') {
+        const header = document.querySelector('.header');
+        if (!header) return;
+        let indicator = header.querySelector('.directory-status');
+        if (status === 'ready') {
+            indicator?.remove();
+            return;
+        }
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.className = 'directory-status';
+            indicator.setAttribute('role', 'status');
+            indicator.setAttribute('aria-live', 'polite');
+            header.appendChild(indicator);
+        }
+        indicator.dataset.status = status;
+        indicator.textContent = message;
+    }
+
+    displayDirectoryError(path, message) {
+        const container = document.querySelector('.file-browser');
+        if (!container) return;
+        container.replaceChildren();
+        const panel = document.createElement('section');
+        panel.className = 'directory-error';
+        panel.setAttribute('role', 'alert');
+        const title = document.createElement('h2');
+        title.textContent = 'Folder could not be loaded';
+        const description = document.createElement('p');
+        description.textContent = message;
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'btn btn-primary';
+        retry.textContent = 'Retry';
+        retry.addEventListener('click', () => this.app.loadFiles(path));
+        panel.append(title, description, retry);
+        container.appendChild(panel);
+        this.setDirectoryStatus('error', 'Directory refresh failed');
+    }
+
     createViewToggle(hasMasonrySupport = false, hasVideoSupport = false) {
         const viewToggle = document.createElement('div');
         viewToggle.className = 'view-toggle';
