@@ -265,30 +265,30 @@ func runHealthcheckURL(url string, stderr io.Writer) int {
 	}
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "puremania-healthcheck")
 	response, err := client.Do(req)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
-		fmt.Fprintf(stderr, "unexpected HTTP status: %s\n", response.Status)
+		_, _ = fmt.Fprintf(stderr, "unexpected HTTP status: %s\n", response.Status)
 		return 1
 	}
 	var health struct {
 		Status string `json:"status"`
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, 4<<10)).Decode(&health); err != nil {
-		fmt.Fprintf(stderr, "invalid health response: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "invalid health response: %v\n", err)
 		return 1
 	}
 	if health.Status != "ok" {
-		fmt.Fprintf(stderr, "unhealthy status: %q\n", health.Status)
+		_, _ = fmt.Fprintf(stderr, "unhealthy status: %q\n", health.Status)
 		return 1
 	}
 	return 0

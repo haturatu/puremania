@@ -194,13 +194,6 @@ func (h *Handler) invalidateFileCache(filePath string) {
 	cache.InvalidateByPrefix(h.cache, "list:"+filepath.Dir(virtualPath))
 }
 
-// 検索条件のハッシュ化でキー生成
-func (h *Handler) generateSearchCacheKey(term, path, scope string, useRegex, caseSensitive bool, maxResults int) string {
-	data := fmt.Sprintf("search:%s:%s:%s:%t:%t:%d", term, path, scope, useRegex, caseSensitive, maxResults)
-	hash := md5.Sum([]byte(data))
-	return "search:" + hex.EncodeToString(hash[:])
-}
-
 // 仮想パスを安全な物理パスに変換し、設定で許可されたディレクトリ内にあることを確認
 func (h *Handler) buildSafePath(virtualPath string) (string, error) {
 	if strings.Contains(virtualPath, "..") {
@@ -332,13 +325,16 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if err := tmp.Chmod(perm); err == nil {
-		_, err = tmp.Write(data)
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
 	}
-	if err == nil {
-		err = tmp.Sync()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
 	}
+	err = tmp.Sync()
 	if closeErr := tmp.Close(); err == nil {
 		err = closeErr
 	}
@@ -352,7 +348,7 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	return d.Sync()
 }
 
