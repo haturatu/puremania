@@ -1,3 +1,8 @@
+import { PollingPageController } from './polling-page-controller.js';
+import { getTemplateContent } from './template.js';
+
+const template = name => getTemplateContent(`/static/templates/components/upload_page_${name}.html`);
+
 // Uploads page deliberately shares aria2c's table classes: transfers have the
 // same lifecycle (active, paused, complete) even though their transport differs.
 export class UploadPageHandler {
@@ -41,22 +46,23 @@ export class UploadPageHandler {
         container.innerHTML = '';
         const header = document.createElement('div');
         header.className = 'aria2c-header';
-        header.innerHTML = '<div class="aria2c-title">Uploads</div><div class="aria2c-controls"><button class="btn upload-back-btn">Back</button></div>';
+        header.appendChild(template('header'));
         header.querySelector('.upload-back-btn').addEventListener('click', () => this.app.router.navigate('/'));
         container.appendChild(header);
         if (!jobs.length) {
             const empty = document.createElement('div');
             empty.className = 'no-search-results';
-            empty.innerHTML = '<div class="no-search-results-title">No resumable uploads</div><div class="no-search-results-subtext">Interrupted uploads will appear here and can be resumed by selecting the original file.</div>';
+            empty.appendChild(template('empty'));
             container.appendChild(empty);
             return;
         }
         const section = document.createElement('div');
         section.className = 'aria2c-section';
-        section.innerHTML = `<h3>Resumable Uploads (${jobs.length})</h3><div class="upload-bulk-actions"><button class="btn btn-sm bulk-resume">Resume selected</button><button class="btn btn-sm btn-danger bulk-discard">Discard selected</button><button class="btn btn-sm btn-danger bulk-discard-all">Discard all</button></div>`;
+        section.appendChild(template('section'));
+        section.querySelector('.upload-page-count').textContent = `Resumable Uploads (${jobs.length})`;
         const table = document.createElement('table');
         table.className = 'table-view aria2c-table upload-jobs-table';
-        table.innerHTML = '<thead><tr><th><input type="checkbox" class="upload-select-all" aria-label="Select all uploads"></th><th>Name</th><th>Size</th><th>Progress</th><th>Status</th><th>Destination</th><th>Actions</th></tr></thead><tbody></tbody>';
+        table.appendChild(template('table'));
         const body = table.querySelector('tbody');
         jobs.forEach(job => body.appendChild(this.row(job)));
         const selected = () => jobs.filter(job => this.selectedKeys.has(job.key));
@@ -83,7 +89,7 @@ export class UploadPageHandler {
         const uploaded = Math.min(job.uploadedBytes || 0, total);
         const progress = total ? uploaded / total * 100 : 100;
         const name = job.relativePath.split('/').pop();
-        row.innerHTML = `<td><input type="checkbox" class="upload-select" aria-label="Select upload"></td><td class="file-name"></td><td class="file-size"></td><td class="upload-progress-cell"><div class="ui-progress"><div class="ui-progress__fill"></div><span class="progress-text"></span></div></td><td class="status"></td><td class="upload-destination"></td><td class="actions"></td>`;
+        row.appendChild(template('row'));
         const checkbox = row.querySelector('.upload-select');
         checkbox.checked = this.selectedKeys.has(job.key);
         checkbox.addEventListener('change', () => { checkbox.checked ? this.selectedKeys.add(job.key) : this.selectedKeys.delete(job.key); });
@@ -120,4 +126,3 @@ export class UploadPageHandler {
         await this.refresh();
     }
 }
-import { PollingPageController } from './polling-page-controller.js';
