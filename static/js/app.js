@@ -13,6 +13,7 @@ import { Aria2cPageHandler } from './aria2c-page.js';
 import { UploadPageHandler } from './upload-page.js';
 import { loadTemplates } from './template.js';
 import { AppStateStore } from './state.js';
+import { ALL_TEMPLATES } from './template-registry.js';
 
 class FileManagerApp {
     constructor() {
@@ -197,38 +198,7 @@ class FileManagerApp {
 }
 
 async function main() {
-    const templatePaths = [
-        '/static/templates/components/toolbar.html',
-        '/static/templates/components/upload_area.html',
-        '/static/templates/components/empty_state.html',
-        '/static/templates/components/view_toggle.html',
-        '/static/templates/components/list_view_header.html',
-        '/static/templates/components/list_view_item.html',
-        '/static/templates/components/grid_view_item.html',
-        '/static/templates/components/file_actions.html',
-        '/static/templates/components/folder_actions.html',
-        '/static/templates/components/toast.html',
-        '/static/templates/components/nav_item.html',
-        '/static/templates/components/masonry_item.html',
-        '/static/templates/components/progress_overlay.html',
-        '/static/templates/components/aria2c_header.html',
-        '/static/templates/components/aria2c_no_downloads.html',
-        '/static/templates/components/aria2c_table.html',
-        '/static/templates/components/aria2c_table_row.html',
-        '/static/templates/components/upload_page_header.html',
-        '/static/templates/components/upload_page_empty.html',
-        '/static/templates/components/upload_page_section.html',
-        '/static/templates/components/upload_page_table.html',
-        '/static/templates/components/upload_page_row.html',
-        '/static/templates/components/image_viewer.html',
-        '/static/templates/components/completion_dropdown.html',
-        '/static/templates/components/completion_item.html',
-        '/static/templates/components/search_modal.html',
-        '/static/templates/components/search_results_header.html',
-        '/static/templates/components/search_no_results.html',
-        '/static/templates/components/video_view_item.html'
-    ];
-    await loadTemplates(templatePaths);
+    await loadTemplates(ALL_TEMPLATES);
 
     const app = new FileManagerApp();
     await app.init();

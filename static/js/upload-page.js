@@ -1,7 +1,15 @@
 import { PollingPageController } from './polling-page-controller.js';
 import { getTemplateContent } from './template.js';
+import { TEMPLATES } from './template-registry.js';
 
-const template = name => getTemplateContent(`/static/templates/components/upload_page_${name}.html`);
+const uploadTemplates = {
+    header: TEMPLATES.uploadHeader,
+    empty: TEMPLATES.uploadEmpty,
+    section: TEMPLATES.uploadSection,
+    table: TEMPLATES.uploadTable,
+    row: TEMPLATES.uploadRow
+};
+const template = name => getTemplateContent(uploadTemplates[name]);
 
 // Uploads page deliberately shares aria2c's table classes: transfers have the
 // same lifecycle (active, paused, complete) even though their transport differs.
