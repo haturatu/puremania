@@ -4,8 +4,6 @@ export class Aria2cPageHandler {
     constructor(fileManager) {
         this.fileManager = fileManager;
         this.pollEnabled = false;
-        this.updateInterval = null;
-        this.lastStatus = null;
         this.previousPath = '/'; // Store the path before entering this page
         this.torrentsToCancel = new Set(); // Track torrents scheduled for cancellation
         this.polling = false;
@@ -40,8 +38,6 @@ export class Aria2cPageHandler {
         if (!this.pollEnabled) return;
         this.pollEnabled = false;
         clearTimeout(this.pollTimer);
-        this.updateInterval = null;
-        this.lastStatus = null;
 
         const breadcrumbs = document.querySelector('.breadcrumbs');
         if (breadcrumbs) breadcrumbs.style.display = '';
@@ -55,7 +51,6 @@ export class Aria2cPageHandler {
         try {
             const status = await this.fileManager.api.getAria2cStatus();
             if (status) {
-                this.lastStatus = status;
                 if (this.isInAria2cMode && this.fileManager.router.getCurrentPath() === '/system/aria2c') this.render(status);
             } else {
                 // API method failed and should have shown a toast.
