@@ -3,7 +3,7 @@ import { getTemplateContent } from './template.js';
 export class Aria2cPageHandler {
     constructor(fileManager) {
         this.fileManager = fileManager;
-        this.isInAria2cMode = false;
+        this.pollEnabled = false;
         this.updateInterval = null;
         this.lastStatus = null;
         this.previousPath = '/'; // Store the path before entering this page
@@ -12,19 +12,23 @@ export class Aria2cPageHandler {
         this.pollTimer = null;
     }
 
+    get isInAria2cMode() {
+        return this.fileManager.store.getState().route.page === 'aria2c';
+    }
+
     init() {
         // No initial event binding needed, will be triggered by router
     }
 
     enterAria2cMode() {
-        if (this.isInAria2cMode) return;
+        if (this.pollEnabled) return;
 
         const currentPath = this.fileManager.router.getCurrentPath();
         if (currentPath !== '/system/aria2c') {
             this.previousPath = currentPath;
         }
 
-        this.isInAria2cMode = true;
+        this.pollEnabled = true;
         this.fileManager.ui.showLoading();
         this.loadAria2cStatus();
         
@@ -33,8 +37,8 @@ export class Aria2cPageHandler {
     }
 
     exitAria2cMode(navigate = true) {
-        if (!this.isInAria2cMode) return;
-        this.isInAria2cMode = false;
+        if (!this.pollEnabled) return;
+        this.pollEnabled = false;
         clearTimeout(this.pollTimer);
         this.updateInterval = null;
         this.lastStatus = null;
@@ -46,7 +50,7 @@ export class Aria2cPageHandler {
     }
 
     async loadAria2cStatus() {
-        if (!this.isInAria2cMode || this.polling) return;
+        if (!this.pollEnabled || !this.isInAria2cMode || this.polling) return;
         this.polling = true;
         try {
             const status = await this.fileManager.api.getAria2cStatus();
@@ -56,12 +60,12 @@ export class Aria2cPageHandler {
             } else {
                 // API method failed and should have shown a toast.
                 // Stop polling.
-                this.isInAria2cMode = false;
+                this.pollEnabled = false;
             }
         } finally {
             this.polling = false;
             this.fileManager.ui.hideLoading();
-            if (this.isInAria2cMode) this.pollTimer = setTimeout(() => this.loadAria2cStatus(), 2000);
+            if (this.pollEnabled && this.isInAria2cMode) this.pollTimer = setTimeout(() => this.loadAria2cStatus(), 2000);
         }
     }
 

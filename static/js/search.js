@@ -10,8 +10,6 @@ export class SearchHandler {
         this.lastSearchResults = null;
         this.currentPage = 0;
         this.pageSize = 100;
-        this.totalResults = 0;
-        this.searchRequestId = 0;
         this.searchController = null;
         this.cursorHistory = [''];
         this.nextCursor = '';
@@ -27,6 +25,31 @@ export class SearchHandler {
         this.selectedCompletionIndex = -1;
         this.isShowingCompletions = false;
     }
+
+    get isInSearchMode() { return this.fileManager.store.getState().search.active; }
+    set isInSearchMode(active) { this.fileManager.store.update('search', { active }, 'SEARCH_MODE_CHANGED'); }
+    get isCdMode() { return this.fileManager.store.getState().search.commandMode === 'cd'; }
+    set isCdMode(active) {
+        const current = this.fileManager.store.getState().search.commandMode;
+        this.fileManager.store.update('search', { commandMode: active ? 'cd' : current === 'cd' ? null : current }, 'SEARCH_COMMAND_MODE_CHANGED');
+    }
+    get isAria2cMode() { return this.fileManager.store.getState().search.commandMode === 'aria2c'; }
+    set isAria2cMode(active) {
+        const current = this.fileManager.store.getState().search.commandMode;
+        this.fileManager.store.update('search', { commandMode: active ? 'aria2c' : current === 'aria2c' ? null : current }, 'SEARCH_COMMAND_MODE_CHANGED');
+    }
+    get lastSearchTerm() { return this.fileManager.store.getState().search.query; }
+    set lastSearchTerm(query) { this.fileManager.store.update('search', { query }, 'SEARCH_QUERY_CHANGED'); }
+    get lastSearchResults() { return this.fileManager.store.getState().search.results; }
+    set lastSearchResults(results) { this.fileManager.store.update('search', { results }, 'SEARCH_RESULTS_CHANGED'); }
+    get currentPage() { return this.fileManager.store.getState().search.page; }
+    set currentPage(page) { this.fileManager.store.update('search', { page }, 'SEARCH_PAGE_CHANGED'); }
+    get cursorHistory() { return this.fileManager.store.getState().search.cursorHistory; }
+    set cursorHistory(cursorHistory) { this.fileManager.store.update('search', { cursorHistory }, 'SEARCH_CURSORS_CHANGED'); }
+    get nextCursor() { return this.fileManager.store.getState().search.nextCursor; }
+    set nextCursor(nextCursor) { this.fileManager.store.update('search', { nextCursor }, 'SEARCH_CURSOR_CHANGED'); }
+    get hasMore() { return this.fileManager.store.getState().search.hasMore; }
+    set hasMore(hasMore) { this.fileManager.store.update('search', { hasMore }, 'SEARCH_CURSOR_CHANGED'); }
 
     init() {
         this.bindEvents();
@@ -367,31 +390,35 @@ export class SearchHandler {
         this.currentPage = page;
         if (page === 0) this.cursorHistory = [''];
         const cursor = this.cursorHistory[page] ?? '';
-        const requestId = ++this.searchRequestId;
+        const requestId = this.fileManager.store.getState().search.requestId + 1;
+        this.fileManager.store.update('search', { requestId, query: searchTerm, status: 'loading' }, 'SEARCH_STARTED');
         this.searchController?.abort();
         const controller = new AbortController();
         this.searchController = controller;
         this.fileManager.ui.showLoading();
         try {
             const result = await this.fileManager.api.search(searchTerm, this.fileManager.router.getCurrentPath(), this.searchOptions, this.pageSize, cursor, controller.signal);
-            if (requestId !== this.searchRequestId || controller.signal.aborted) return;
+            if (requestId !== this.fileManager.store.getState().search.requestId || controller.signal.aborted) return;
             if (result && result.success) {
                 const searchPage = result.data || {};
                 this.lastSearchResults = this.sortResults(searchPage.data || [], this.sortField, this.sortDirection);
                 this.nextCursor = searchPage.nextCursor || '';
                 this.hasMore = Boolean(searchPage.hasMore);
-                if (this.hasMore) this.cursorHistory[page + 1] = this.nextCursor;
-                this.cursorHistory.length = this.hasMore ? page + 2 : page + 1;
+                const cursorHistory = this.cursorHistory.slice(0, page + 1);
+                if (this.hasMore) cursorHistory[page + 1] = this.nextCursor;
+                this.cursorHistory = cursorHistory;
                 if (this.fileManager.ui.viewMode === 'masonry') {
                     this.fileManager.ui.viewMode = 'grid';
                 }
                 this.displaySearchResults(this.lastSearchResults, searchTerm, page);
+                this.fileManager.store.update('search', { status: this.lastSearchResults.length ? 'ready' : 'empty' }, 'SEARCH_COMPLETED');
             } else {
                 this.fileManager.ui.showToast('Search Error', result ? result.message : 'Unknown error', 'error');
             }
         } catch (error) {
             if (error.name === 'AbortError') return;
-            if (requestId !== this.searchRequestId) return;
+            if (requestId !== this.fileManager.store.getState().search.requestId) return;
+            this.fileManager.store.update('search', { status: 'error' }, 'SEARCH_FAILED');
             this.fileManager.ui.showToast('Search Error', 'Failed to perform search', 'error');
         } finally {
             this.fileManager.ui.hideLoading();
@@ -469,6 +496,7 @@ export class SearchHandler {
         this.lastSearchResults = null;
         this.lastSearchTerm = '';
         this.currentPage = 0;
+        this.fileManager.store.update('search', { active: false, query: '', status: 'idle', commandMode: null }, 'SEARCH_EXITED');
         this.searchController?.abort();
         this.searchController = null;
         this.cursorHistory = [''];

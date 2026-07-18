@@ -12,20 +12,18 @@ import { Util } from './util.js';
 import { Aria2cPageHandler } from './aria2c-page.js';
 import { UploadPageHandler } from './upload-page.js';
 import { loadTemplates } from './template.js';
+import { AppStateStore } from './state.js';
 
 class FileManagerApp {
     constructor() {
-        this.selectedFiles = new Set();
-        this.selectionAnchorPath = null;
+        this.store = new AppStateStore();
         this.config = {};
         this.directoryScrollPositions = new Map();
-        this.renderedDirectoryPath = null;
-        this.editRequestId = 0;
         this.isPC = !/Mobi|Android/i.test(navigator.userAgent);
         this.eventBus = new EventTarget();
 
         // Initialize modules that don't depend on templates in their constructor
-        this.router = new Router();
+        this.router = new Router(this.store);
         this.util = new Util(this);
         this.api = new ApiClient(this);
         this.uploader = new Uploader(this);
@@ -47,6 +45,9 @@ class FileManagerApp {
         this.eventBus.dispatchEvent(event);
         return event;
     }
+
+    get selectedFiles() { return this.store.getState().selection.paths; }
+    get selectionAnchorPath() { return this.store.getState().selection.anchorPath; }
 
     async init() {
         // Initialize modules that need templates
@@ -84,7 +85,7 @@ class FileManagerApp {
         // Setup router
         this.router.onChange((path, { navigationType = 'initial' } = {}) => {
             if (path === '/system/uploads') {
-                if (this.aria2cPageHandler.isInAria2cMode) this.aria2cPageHandler.exitAria2cMode(false);
+                this.aria2cPageHandler.exitAria2cMode(false);
                 this.uploadPageHandler.enter();
             } else if (path === '/system/aria2c') {
                 this.uploadPageHandler.exit();
@@ -99,9 +100,7 @@ class FileManagerApp {
                 this.aria2cPageHandler.enterAria2cMode();
             } else {
                 this.uploadPageHandler.exit();
-                if (this.aria2cPageHandler.isInAria2cMode) {
-                    this.aria2cPageHandler.exitAria2cMode(false);
-                }
+                this.aria2cPageHandler.exitAria2cMode(false);
                 this.navigateToPath(path, { restoreScroll: navigationType === 'pop' });
             }
         });
@@ -114,8 +113,9 @@ class FileManagerApp {
 
     async navigateToPath(path, { restoreScroll = false } = {}) {
         const browser = document.querySelector('.file-browser');
-        if (browser && this.renderedDirectoryPath && this.renderedDirectoryPath !== path) {
-            this.directoryScrollPositions.set(this.renderedDirectoryPath, browser.scrollTop);
+        const renderedPath = this.store.getState().directory.renderedPath;
+        if (browser && renderedPath && renderedPath !== path) {
+            this.directoryScrollPositions.set(renderedPath, browser.scrollTop);
         }
         await this.loadFiles(path);
         const restorePosition = restoreScroll ? (this.directoryScrollPositions.get(path) ?? 0) : 0;
@@ -127,7 +127,6 @@ class FileManagerApp {
                 if (currentBrowser && this.router.getCurrentPath() === path) currentBrowser.scrollTop = restorePosition;
             });
         });
-        this.renderedDirectoryPath = path;
         this.clearSelection();
     }
 
@@ -139,10 +138,13 @@ class FileManagerApp {
     }
 
     async editFile(path) {
-        const requestId = ++this.editRequestId;
+        const requestId = this.store.getState().editor.loadRequestId + 1;
+        this.store.update('editor', { loadRequestId: requestId, status: 'loading', path }, 'EDITOR_LOAD_STARTED');
         const content = await this.api.fetchFileContent(path);
-        if (requestId === this.editRequestId && content !== null) {
+        if (requestId === this.store.getState().editor.loadRequestId && content !== null) {
             this.editor.open(path, content);
+        } else if (requestId === this.store.getState().editor.loadRequestId) {
+            this.store.update('editor', { status: 'closed', path: null }, 'EDITOR_LOAD_FAILED');
         }
     }
 
@@ -168,8 +170,7 @@ class FileManagerApp {
     }
 
     setSelection(paths, anchorPath = this.selectionAnchorPath) {
-        this.selectedFiles = new Set(paths);
-        this.selectionAnchorPath = anchorPath;
+        this.store.update('selection', { paths: new Set(paths), anchorPath }, 'SELECTION_CHANGED');
         this.ui.syncSelectionClasses();
         this.ui.updateToolbar();
     }

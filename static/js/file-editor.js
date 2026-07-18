@@ -75,9 +75,7 @@ const getLanguageExtension = (filePath) => {
 export class FileEditor {
     constructor(app) {
         this.app = app;
-        this.currentFile = null;
         this.editorView = null;
-        this.saving = false;
         this.isPC = !/Mobi|Android/i.test(navigator.userAgent);
         this.vimCompartment = new Compartment();
 
@@ -89,6 +87,11 @@ export class FileEditor {
             this.defineVimCommands();
         }
     }
+
+    get currentFile() { return this.app.store.getState().editor.path; }
+    set currentFile(path) { this.app.store.update('editor', { path }, 'EDITOR_PATH_CHANGED'); }
+    get saving() { return this.app.store.getState().editor.status === 'saving'; }
+    set saving(saving) { this.app.store.update('editor', { status: saving ? 'saving' : this.currentFile ? 'editing' : 'closed' }, 'EDITOR_STATUS_CHANGED'); }
 
     defineVimCommands() {
         Vim.defineEx("w", "w", () => { this.save(); });
@@ -181,6 +184,10 @@ export class FileEditor {
             if (update.docChanged || update.selectionSet) {
                 this.updateStatusBar();
             }
+            if (update.docChanged) {
+                const currentContent = update.state.doc.toString();
+                this.app.store.update('editor', { currentContent, dirty: currentContent !== this.savedContent }, 'EDITOR_CONTENT_CHANGED');
+            }
         });
 
         return [
@@ -210,6 +217,7 @@ export class FileEditor {
     open(filePath, content) {
         this.currentFile = filePath;
         this.savedContent = content;
+        this.app.store.update('editor', { status: 'editing', originalContent: content, currentContent: content, dirty: false, error: null }, 'EDITOR_OPENED');
         this.filenameElement.textContent = filePath.split('/').pop();
 
         if (this.editorView) {
@@ -268,6 +276,7 @@ export class FileEditor {
         if (this.editorView && this.editorView.state.doc.toString() !== this.savedContent && !window.confirm('Discard unsaved changes?')) return;
         hideModalOverlay(this.editorElement);
         this.currentFile = null;
+        this.app.store.update('editor', { status: 'closed', originalContent: '', currentContent: '', dirty: false }, 'EDITOR_CLOSED');
         if (this.editorView) {
             this.editorView.destroy();
             this.editorView = null;
@@ -280,6 +289,8 @@ export class FileEditor {
 
         const content = this.editorView.state.doc.toString();
         const filePath = this.currentFile;
+        const saveRevision = this.app.store.getState().editor.saveRevision + 1;
+        this.app.store.update('editor', { saveRevision }, 'EDITOR_SAVE_STARTED');
         this.saving = true;
 
         try {
@@ -294,12 +305,14 @@ export class FileEditor {
             if (result.success) {
                 this.showToast('File saved successfully', 'success');
                 this.savedContent = content;
+                this.app.store.update('editor', { originalContent: content, currentContent: this.editorView?.state.doc.toString() || content, dirty: this.editorView?.state.doc.toString() !== content, error: null }, 'EDITOR_SAVED');
                 // Do not discard edits made while the request was in flight.
                 if (this.currentFile === filePath && this.editorView?.state.doc.toString() === content) this.close();
             } else {
                 this.showToast(result.message, 'error');
             }
         } catch (error) {
+            this.app.store.update('editor', { error: error.message }, 'EDITOR_SAVE_FAILED');
             this.showToast('Failed to save file', 'error');
             console.error('Error saving file:', error);
         } finally {
