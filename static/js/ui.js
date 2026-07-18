@@ -3,6 +3,12 @@ import { buildApiUrl } from './util.js';
 import { ImageLoader } from './image-loader.js';
 import { TEMPLATES } from './template-registry.js';
 
+export const VIRTUAL_RENDER_THRESHOLD = 500;
+
+export function shouldUseVirtualRendering(itemCount) {
+    return itemCount > VIRTUAL_RENDER_THRESHOLD;
+}
+
 export class UIManager {
     constructor(app) {
         this.app = app;
@@ -323,7 +329,7 @@ export class UIManager {
     }
 
     renderGridView(files, container) {
-        if (files.length > 80) {
+        if (shouldUseVirtualRendering(files.length)) {
             this.renderVirtualGrid(files, container);
             return;
         }
@@ -356,7 +362,7 @@ export class UIManager {
     }
 
     renderListView(files, container) {
-        if (files.length > 80) {
+        if (shouldUseVirtualRendering(files.length)) {
             this.renderVirtualList(files, container);
             return;
         }
