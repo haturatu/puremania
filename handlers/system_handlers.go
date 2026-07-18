@@ -83,7 +83,7 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Storage is unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	defer dir.Close()
+	defer func() { _ = dir.Close() }()
 	if _, err := dir.Stat(); err != nil {
 		h.respondError(w, "Storage is unavailable", http.StatusServiceUnavailable)
 		return

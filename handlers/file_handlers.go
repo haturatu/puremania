@@ -102,7 +102,7 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 		if err := tmp.Close(); err != nil {
 			return err
 		}
-		defer os.Remove(tmpPath)
+		defer func() { _ = os.Remove(tmpPath) }()
 		if err := h.generateThumbnail(fullPath, tmpPath); err != nil {
 			return err
 		}
@@ -167,7 +167,7 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return fmt.Errorf("cannot create extraction staging directory: %w", err)
 		}
-		defer os.RemoveAll(tempPath)
+		defer func() { _ = os.RemoveAll(tempPath) }()
 		var extractedBytes int64
 		var extractedFiles int
 		maxBytes := h.config.MaxZipSize << 20

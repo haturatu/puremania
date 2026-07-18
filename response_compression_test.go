@@ -55,7 +55,7 @@ func TestResponseCompressionHonorsGzipQuality(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open gzip response: %v", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	if _, err := io.ReadAll(reader); err != nil {
 		t.Fatalf("decode gzip response: %v", err)
 	}

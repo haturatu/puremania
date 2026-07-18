@@ -212,7 +212,7 @@ func (h *Handler) resumeFingerprint(session *uploadSession) (string, int64) {
 	if err != nil {
 		return "", 0
 	}
-	defer part.Close()
+	defer func() { _ = part.Close() }()
 	hash := sha256.New()
 	if _, err := io.Copy(hash, io.NewSectionReader(part, offset, length)); err != nil {
 		return "", 0
@@ -273,7 +273,7 @@ func (h *Handler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Cannot open upload data", http.StatusInternalServerError)
 		return
 	}
-	defer part.Close()
+	defer func() { _ = part.Close() }()
 	if err := part.Truncate(start); err != nil {
 		h.respondError(w, "Cannot reset upload data", http.StatusInternalServerError)
 		return
@@ -386,11 +386,13 @@ func (h *Handler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Cannot finalize upload", http.StatusInternalServerError)
 		return
 	}
-	if err := part.Truncate(session.TotalBytes); err == nil {
-		err = part.Sync()
+	truncateErr := part.Truncate(session.TotalBytes)
+	var syncErr error
+	if truncateErr == nil {
+		syncErr = part.Sync()
 	}
 	closeErr := part.Close()
-	if err != nil || closeErr != nil {
+	if truncateErr != nil || syncErr != nil || closeErr != nil {
 		h.respondError(w, "Cannot finalize upload", http.StatusInternalServerError)
 		return
 	}
