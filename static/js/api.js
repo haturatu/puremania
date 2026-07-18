@@ -63,10 +63,11 @@ export class ApiClient {
         context = url,
         fallbackMessage = 'Request failed',
         toastOnError = true,
-        validateSuccess = false
+        validateSuccess = false,
+        signal
     } = {}) {
         try {
-            const response = await fetch(url);
+            const response = await fetch(url, { signal });
             if (!response.ok) {
                 let apiError = null;
                 try {
@@ -83,6 +84,7 @@ export class ApiClient {
             }
             return result;
         } catch (error) {
+            if (error.name === 'AbortError') return null;
             if (toastOnError) {
                 this.notifyApiError(error.message || fallbackMessage, { error, context });
             } else {
@@ -601,11 +603,12 @@ export class ApiClient {
         return result.data;
     }
 
-    async getAria2cStatus() {
+    async getAria2cStatus(signal) {
         const result = await this.requestJson('/api/system/aria2c/status', {
             context: 'fetching aria2c status',
             fallbackMessage: 'Failed to fetch aria2c status',
-            validateSuccess: true
+            validateSuccess: true,
+            signal
         });
         if (!result) {
             return null;

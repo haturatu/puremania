@@ -3,11 +3,14 @@
 export class UploadPageHandler {
     constructor(app) {
         this.app = app;
-        this.pollEnabled = false;
         this.selectedKeys = new Set();
-        this.polling = false;
-        this.timer = null;
-        this.refreshController = null;
+        this.poller = new PollingPageController({
+            interval: 3000,
+            isCurrentPage: () => this.isActive,
+            fetchData: signal => this.app.uploader.listJobs(signal),
+            render: jobs => this.render(jobs),
+            onError: error => console.error('Failed to refresh uploads', error)
+        });
         this.onJobsChanged = () => this.refresh();
     }
 
@@ -16,38 +19,19 @@ export class UploadPageHandler {
     }
 
     enter() {
-        if (this.pollEnabled) return;
-        this.pollEnabled = true;
+        if (!this.poller.start()) return;
         window.addEventListener('puremania:upload-jobs-changed', this.onJobsChanged);
-        this.refresh();
         document.querySelector('.breadcrumbs')?.style.setProperty('display', 'none');
     }
 
     exit() {
-        if (!this.pollEnabled) return;
-        this.pollEnabled = false;
-        clearTimeout(this.timer);
-        this.refreshController?.abort();
-        this.refreshController = null;
+        if (!this.poller.stop()) return;
         window.removeEventListener('puremania:upload-jobs-changed', this.onJobsChanged);
         document.querySelector('.breadcrumbs')?.style.removeProperty('display');
     }
 
     async refresh() {
-        if (!this.pollEnabled || !this.isActive || this.polling) return;
-        this.polling = true;
-        const controller = new AbortController();
-        this.refreshController = controller;
-        try {
-            const jobs = await this.app.uploader.listJobs(controller.signal);
-            if (this.pollEnabled && this.isActive && !controller.signal.aborted) this.render(jobs);
-        } catch (error) {
-            if (error.name !== 'AbortError') console.error('Failed to refresh uploads', error);
-        } finally {
-            if (this.refreshController === controller) this.refreshController = null;
-            this.polling = false;
-            if (this.pollEnabled && this.isActive) this.timer = setTimeout(() => this.refresh(), 3000);
-        }
+        await this.poller.refresh();
     }
 
     render(jobs) {
@@ -136,3 +120,4 @@ export class UploadPageHandler {
         await this.refresh();
     }
 }
+import { PollingPageController } from './polling-page-controller.js';
