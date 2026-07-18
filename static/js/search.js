@@ -1,6 +1,7 @@
 import { getTemplateContent } from './template.js';
 import { createModalOverlay, bindModalClose, hideModalOverlay, showModalOverlay } from './modal.js';
 import { TEMPLATES } from './template-registry.js';
+import { getParentPath, normalizePath } from './util.js';
 
 export class SearchHandler {
     constructor(fileManager) {
@@ -143,14 +144,14 @@ export class SearchHandler {
         try {
             let targetPath = '/';
             if (path && path !== '') {
-                if (path === '..') targetPath = this.fileManager.util.getParentPath(this.fileManager.router.getCurrentPath());
+                if (path === '..') targetPath = getParentPath(this.fileManager.router.getCurrentPath());
                 else if (path.startsWith('/')) targetPath = path;
                 else {
                     const basePath = this.fileManager.router.getCurrentPath();
                     targetPath = basePath.endsWith('/') ? basePath + path : `${basePath}/${path}`;
                 }
             }
-            await this.navigateToFolder(this.fileManager.util.normalizePath(targetPath));
+            await this.navigateToFolder(normalizePath(targetPath));
         } catch (error) {
             this.fileManager.ui.showToast('cd Error', `Cannot change directory: ${error.message}`, 'error');
         }
@@ -181,7 +182,7 @@ export class SearchHandler {
 
     async navigateToFolder(path) {
         try {
-            const normalizedPath = this.fileManager.util.normalizePath(path);
+            const normalizedPath = normalizePath(path);
             const result = await this.fileManager.api.getFiles(normalizedPath, { useCache: false });
             if (result) {
                 this.exitSearchMode(true);

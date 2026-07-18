@@ -52,34 +52,24 @@ export function buildApiUrl(path, query = {}) {
     return buildUrl(path, query).toString();
 }
 
-export class Util {
-    constructor(app) {
-        this.app = app;
-    }
+export function isValidPath(path) {
+    return Boolean(path && path.length > 0 && !path.includes('..'));
+}
 
-    isValidPath(path) {
-        return path && path.length > 0 && !path.includes('..');
-    }
-    
-    getParentPath(path) {
-        const parts = path.split('/').filter(part => part !== '');
-        if (parts.length <= 1) return '/';
-        parts.pop();
-        return '/' + parts.join('/');
-    }
-    
-    getBaseName(path) {
-        const parts = path.split('/').filter(part => part !== '');
-        return parts.length > 0 ? parts[parts.length - 1] : '';
-    }
+export function getParentPath(path) {
+    const parts = path.split('/').filter(part => part !== '');
+    if (parts.length <= 1) return '/';
+    parts.pop();
+    return '/' + parts.join('/');
+}
 
-    isEditableFile(path) {
-        const ext = path.split('.').pop().toLowerCase();
-        const editableExts = ['txt', 'md', 'json', 'xml', 'html', 'css', 'js', 'py', 'go', 'java', 'c', 'cpp', 'h', 'sh', 'bat', 'yaml', 'yml', 'toml', 'ini', 'conf', 'env'];
-        return editableExts.includes(ext);
-    }
+export function getBaseName(path) {
+    const parts = path.split('/').filter(part => part !== '');
+    return parts.length > 0 ? parts[parts.length - 1] : '';
+}
 
-    normalizePath(path) {
-        return normalizePath(path);
-    }
+export function isEditableFile(path) {
+    const ext = path.split('.').pop().toLowerCase();
+    const editableExts = ['txt', 'md', 'json', 'xml', 'html', 'css', 'js', 'py', 'go', 'java', 'c', 'cpp', 'h', 'sh', 'bat', 'yaml', 'yml', 'toml', 'ini', 'conf', 'env'];
+    return editableExts.includes(ext);
 }

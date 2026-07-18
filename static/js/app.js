@@ -8,7 +8,6 @@ import { UIManager } from './ui.js';
 import { ApiClient } from './api.js';
 import { EventHandler } from './events.js';
 import { Uploader } from './uploader.js';
-import { Util } from './util.js';
 import { Aria2cPageHandler } from './aria2c-page.js';
 import { UploadPageHandler } from './upload-page.js';
 import { loadTemplates } from './template.js';
@@ -25,7 +24,6 @@ class FileManagerApp {
 
         // Initialize modules that don't depend on templates in their constructor
         this.router = new Router(this.store);
-        this.util = new Util(this);
         this.api = new ApiClient(this);
         this.uploader = new Uploader(this);
         this.events = new EventHandler(this);

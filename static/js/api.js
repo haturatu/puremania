@@ -1,5 +1,5 @@
 import { showConfirmDialog, showPromptDialog } from './modal.js';
-import { buildApiUrl } from './util.js';
+import { buildApiUrl, getBaseName, getParentPath, isEditableFile, isValidPath } from './util.js';
 
 const MAX_CACHED_DIRECTORIES = 20;
 const MAX_CACHED_ENTRIES = 100000;
@@ -265,12 +265,12 @@ export class ApiClient {
         const newName = await showPromptDialog({
             title: 'Rename File',
             message: 'Enter a new name.',
-            defaultValue: this.app.util.getBaseName(path),
+            defaultValue: getBaseName(path),
             confirmLabel: 'Rename'
         });
         if (!newName) return;
         
-        const newPath = this.app.util.getParentPath(path) + '/' + newName;
+        const newPath = getParentPath(path) + '/' + newName;
 
         await this.runMutation({
             endpoint: '/api/files/move',
@@ -284,9 +284,9 @@ export class ApiClient {
     }
 
     async moveFile(sourcePath) {
-        const fileName = this.app.util.getBaseName(sourcePath);
+        const fileName = getBaseName(sourcePath);
         const currentPath = this.app.router.getCurrentPath();
-        const suggestedPath = currentPath !== '/' ? currentPath : this.app.util.getParentPath(sourcePath);
+        const suggestedPath = currentPath !== '/' ? currentPath : getParentPath(sourcePath);
         
         const targetDir = await showPromptDialog({
             title: 'Move File',
@@ -296,7 +296,7 @@ export class ApiClient {
         });
         if (!targetDir) return;
         
-        if (!this.app.util.isValidPath(targetDir)) {
+        if (!isValidPath(targetDir)) {
             this.app.ui.showToast('Error', 'Invalid target path', 'error');
             return;
         }
@@ -317,7 +317,7 @@ export class ApiClient {
             errorMessage: 'Failed to move file',
             showLoading: true,
             onSuccess: async () => {
-                await this.refreshCurrentDirectory([this.app.util.getParentPath(sourcePath), targetDir]);
+                await this.refreshCurrentDirectory([getParentPath(sourcePath), targetDir]);
             },
             logContext: 'moving file'
         });
@@ -337,7 +337,7 @@ export class ApiClient {
     async moveMultipleFiles() {
         const firstFile = Array.from(this.app.selectedFiles)[0];
         const currentPath = this.app.router.getCurrentPath();
-        const suggestedPath = currentPath !== '/' ? currentPath : this.app.util.getParentPath(firstFile);
+        const suggestedPath = currentPath !== '/' ? currentPath : getParentPath(firstFile);
         
         const targetDir = await showPromptDialog({
             title: 'Move Selected Items',
@@ -347,7 +347,7 @@ export class ApiClient {
         });
         if (!targetDir) return;
         
-        if (!this.app.util.isValidPath(targetDir)) {
+        if (!isValidPath(targetDir)) {
             this.app.ui.showToast('Error', 'Invalid target path', 'error');
             return;
         }
@@ -358,7 +358,7 @@ export class ApiClient {
             let failCount = 0;
             
             for (const sourcePath of this.app.selectedFiles) {
-                const fileName = this.app.util.getBaseName(sourcePath);
+                const fileName = getBaseName(sourcePath);
                 const targetPath = targetDir.endsWith('/') ? 
                     targetDir + fileName : 
                     targetDir + '/' + fileName;
@@ -435,7 +435,7 @@ export class ApiClient {
             errorMessage: 'Failed to create file',
             onSuccess: async (result) => {
                 await this.refreshCurrentDirectory();
-                if (this.app.util.isEditableFile(result.data.path)) {
+                if (isEditableFile(result.data.path)) {
                     setTimeout(() => {
                         this.app.editFile(result.data.path);
                     }, 500);
@@ -448,7 +448,7 @@ export class ApiClient {
     async extractFile(path) {
         const confirmed = await showConfirmDialog({
             title: 'Extract Archive',
-            message: `Are you sure you want to extract "${this.app.util.getBaseName(path)}"?`,
+            message: `Are you sure you want to extract "${getBaseName(path)}"?`,
             confirmLabel: 'Extract'
         });
         if (!confirmed) return;
@@ -467,7 +467,7 @@ export class ApiClient {
     async deleteFile(path) {
         const confirmed = await showConfirmDialog({
             title: 'Delete File',
-            message: `Are you sure you want to delete "${this.app.util.getBaseName(path)}"?`,
+            message: `Are you sure you want to delete "${getBaseName(path)}"?`,
             confirmLabel: 'Delete',
             danger: true
         });
