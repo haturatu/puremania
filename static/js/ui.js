@@ -24,6 +24,7 @@ export class UIManager {
         this.directoryPageNumber = 0;
         this.removeVirtualScroll = null;
         this.nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+        this.unsubscribeStore = null;
     }
 
     get currentFiles() { return this.app.store.getState().directory.files; }
@@ -748,17 +749,26 @@ export class UIManager {
     showLoading() {
         const pendingOperations = this.app.store.getState().ui.pendingOperations + 1;
         this.app.store.update('ui', { pendingOperations }, 'OPERATION_STARTED');
-        const overlay = document.getElementById('loading-overlay');
-        if (overlay) overlay.style.display = 'flex';
     }
 
     hideLoading() {
         const pendingOperations = Math.max(0, this.app.store.getState().ui.pendingOperations - 1);
         this.app.store.update('ui', { pendingOperations }, 'OPERATION_FINISHED');
-        if (pendingOperations === 0) {
+    }
+
+    bindStore() {
+        this.unsubscribeStore?.();
+        const renderLoading = state => {
             const overlay = document.getElementById('loading-overlay');
-            if (overlay) overlay.style.display = 'none';
-        }
+            if (!overlay) return;
+            const loading = state.ui.pendingOperations > 0;
+            overlay.style.display = loading ? 'flex' : 'none';
+            overlay.setAttribute('aria-hidden', String(!loading));
+        };
+        renderLoading(this.app.store.getState());
+        this.unsubscribeStore = this.app.store.subscribe((state, previous) => {
+            if (state.ui.pendingOperations !== previous.ui.pendingOperations) renderLoading(state);
+        });
     }
 
     updateSpecificDirs(dirs) {
