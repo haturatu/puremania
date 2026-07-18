@@ -1,18 +1,9 @@
-import { Router } from './router.js';
-import { ProgressManager } from './progress.js';
-import { FileEditor } from './file-editor.js';
-import { MediaPlayer } from './media-player.js';
-import { ImageViewer } from './gallery.js';
-import { SearchHandler } from './search.js';
-import { UIManager } from './ui.js';
-import { ApiClient } from './api.js';
-import { EventHandler } from './events.js';
-import { Uploader } from './uploader.js';
-import { Aria2cPageHandler } from './aria2c-page.js';
-import { UploadPageHandler } from './upload-page.js';
 import { loadTemplates } from './template.js';
 import { AppStateStore } from './state.js';
 import { ALL_TEMPLATES } from './template-registry.js';
+import { createAppServices } from './app-services.js';
+import { initializeApp } from './app-initializer.js';
+import { getParentPath, isEditableFile } from './util.js';
 
 class FileManagerApp {
     constructor() {
@@ -22,21 +13,7 @@ class FileManagerApp {
         this.isPC = !/Mobi|Android/i.test(navigator.userAgent);
         this.eventBus = new EventTarget();
 
-        // Initialize modules that don't depend on templates in their constructor
-        this.router = new Router(this.store);
-        this.api = new ApiClient(this);
-        this.uploader = new Uploader(this);
-        this.events = new EventHandler(this);
-        this.ui = new UIManager(this);
-        
-        // These will be initialized properly in the init method
-        this.progressManager = new ProgressManager();
-        this.editor = new FileEditor(this);
-        this.mediaPlayer = new MediaPlayer(this);
-        this.imageViewer = new ImageViewer(this);
-        this.searchHandler = new SearchHandler(this);
-        this.aria2cPageHandler = new Aria2cPageHandler(this);
-        this.uploadPageHandler = new UploadPageHandler(this);
+        createAppServices(this);
     }
 
     emit(type, detail = {}, { cancelable = false } = {}) {
@@ -49,60 +26,7 @@ class FileManagerApp {
     get selectionAnchorPath() { return this.store.getState().selection.anchorPath; }
 
     async init() {
-        // Initialize modules that need templates
-        this.progressManager.init();
-        this.imageViewer.init();
-        this.searchHandler.init();
-        
-        // These might not have been converted to templates, but it's good practice
-        // to have an init method for consistency. Let's assume they have one.
-        // We need to check their implementation and add init() if it's missing.
-        if(typeof this.editor.init === 'function') this.editor.init();
-        if(typeof this.mediaPlayer.init === 'function') this.mediaPlayer.init();
-
-
-        // Fetch config first
-        this.config = await this.api.getConfig();
-        if (!this.config) {
-            throw new Error('Failed to load the application configuration.');
-        }
-
-        // Update UI based on config
-        this.ui.updateAria2cVisibility(this.config.Aria2cEnabled);
-
-        this.events.bindEvents();
-        this.aria2cPageHandler.init();
-
-        const [specificDirs, storageResult] = await Promise.all([
-            this.api.getSpecificDirs(),
-            this.api.getStorageInfo()
-        ]);
-
-        this.ui.updateSpecificDirs(specificDirs);
-        this.updateStorageInfo(storageResult);
-
-        // Setup router
-        this.router.onChange((path, { navigationType = 'initial' } = {}) => {
-            if (path === '/system/uploads') {
-                this.aria2cPageHandler.exitAria2cMode(false);
-                this.uploadPageHandler.enter();
-            } else if (path === '/system/aria2c') {
-                this.uploadPageHandler.exit();
-                if (!this.config.Aria2cEnabled) {
-                    this.ui.showToast('Info', 'Aria2c feature is not enabled.', 'info');
-                    this.router.navigate('/');
-                    return;
-                }
-                if (this.searchHandler.isInSearchMode) {
-                    this.searchHandler.exitSearchMode(true);
-                }
-                this.aria2cPageHandler.enterAria2cMode();
-            } else {
-                this.uploadPageHandler.exit();
-                this.aria2cPageHandler.exitAria2cMode(false);
-                this.navigateToPath(path, { restoreScroll: navigationType === 'pop' });
-            }
-        });
+        await initializeApp(this);
     }
 
     async loadFiles(path, options = {}) {
@@ -132,7 +56,7 @@ class FileManagerApp {
     navigateToParent() {
         const currentPath = this.router.getCurrentPath();
         if (currentPath === '/') return;
-        const parentPath = this.util.getParentPath(currentPath);
+        const parentPath = getParentPath(currentPath);
         this.router.navigate(parentPath);
     }
 
@@ -161,7 +85,7 @@ class FileManagerApp {
             this.mediaPlayer.playAudio(path);
         } else if (mimeType && mimeType.startsWith('video/')) {
             this.mediaPlayer.playVideo(path);
-        } else if (this.util.isEditableFile(path)) {
+        } else if (isEditableFile(path)) {
             this.editFile(path);
         } else {
             this.api.downloadFile(path);
