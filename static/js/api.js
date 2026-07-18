@@ -38,13 +38,34 @@ export class ApiClient {
         return count;
     }
 
-    async postJson(url, payload) {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        return await response.json();
+    async request(url, {
+        method = 'GET',
+        payload,
+        headers = {},
+        signal,
+        validateSuccess = false,
+        fallbackMessage = 'Request failed'
+    } = {}) {
+        const requestHeaders = { ...headers };
+        const options = { method, headers: requestHeaders, signal };
+        if (payload !== undefined) {
+            requestHeaders['Content-Type'] ||= 'application/json';
+            options.body = JSON.stringify(payload);
+        }
+
+        const response = await fetch(url, options);
+        const result = await response.json().catch(() => null);
+        if (!response.ok) {
+            throw new Error(this.getApiErrorMessage(result, `${fallbackMessage} (status: ${response.status})`));
+        }
+        if (validateSuccess && !result?.success) {
+            throw new Error(this.getApiErrorMessage(result, fallbackMessage));
+        }
+        return result;
+    }
+
+    async postJson(url, payload, options = {}) {
+        return await this.request(url, { ...options, method: 'POST', payload });
     }
 
     getApiErrorMessage(result, fallbackMessage = 'Request failed') {
@@ -67,22 +88,7 @@ export class ApiClient {
         signal
     } = {}) {
         try {
-            const response = await fetch(url, { signal });
-            if (!response.ok) {
-                let apiError = null;
-                try {
-                    apiError = await response.json();
-                } catch (_) {
-                    // ignore parse errors for non-JSON error bodies
-                }
-                throw new Error(this.getApiErrorMessage(apiError, `${fallbackMessage} (status: ${response.status})`));
-            }
-
-            const result = await response.json();
-            if (validateSuccess && !result.success) {
-                throw new Error(this.getApiErrorMessage(result, fallbackMessage));
-            }
-            return result;
+            return await this.request(url, { signal, validateSuccess, fallbackMessage });
         } catch (error) {
             if (error.name === 'AbortError') return null;
             if (toastOnError) {
@@ -128,12 +134,10 @@ export class ApiClient {
     }) {
         try {
             if (showLoading) this.app.ui.showLoading();
-            const result = await this.postJson(endpoint, payload);
-
-            if (!result.success) {
-                this.notifyApiError(this.getApiErrorMessage(result, errorMessage));
-                return { success: false, result };
-            }
+            const result = await this.postJson(endpoint, payload, {
+                validateSuccess: true,
+                fallbackMessage: errorMessage
+            });
 
             if (successMessage) {
                 this.app.ui.showToast('Success', successMessage, 'success');
@@ -145,7 +149,7 @@ export class ApiClient {
             this.app.emit('files-mutated', { endpoint, payload });
             return { success: true, result };
         } catch (error) {
-            this.notifyApiError(errorMessage, { error, context: logContext });
+            this.notifyApiError(this.getApiErrorMessage(error, errorMessage), { error, context: logContext });
             return { success: false, error };
         } finally {
             if (showLoading) this.app.ui.hideLoading();
@@ -540,17 +544,13 @@ export class ApiClient {
                 status: 'Initializing'
             });
             
-            const response = await fetch('/api/files/download-zip', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    paths: Array.from(this.app.selectedFiles)
-                })
+            const result = await this.postJson('/api/files/download-zip', {
+                paths: Array.from(this.app.selectedFiles)
+            }, {
+                validateSuccess: true,
+                fallbackMessage: 'Failed to create zip archive'
             });
-            const result = await response.json().catch(() => null);
-            if (!response.ok || !result?.success || !result.data?.downloadUrl) {
+            if (!result.data?.downloadUrl) {
                 throw new Error(this.getApiErrorMessage(result, 'Failed to create zip archive'));
             }
 
@@ -574,15 +574,11 @@ export class ApiClient {
         try {
             this.app.ui.showLoading();
             
-            const response = await fetch(buildApiUrl('/api/files/content', { path }));
-            const result = await response.json();
-            
-            if (result.success) {
-                return result.data.content;
-            } else {
-                this.notifyApiError(this.getApiErrorMessage(result, 'Failed to load file for editing'));
-                return null;
-            }
+            const result = await this.request(buildApiUrl('/api/files/content', { path }), {
+                validateSuccess: true,
+                fallbackMessage: 'Failed to load file for editing'
+            });
+            return result.data.content;
         } catch (error) {
             this.notifyApiError('Failed to load file for editing', { error, context: 'loading file' });
             return null;
@@ -618,20 +614,12 @@ export class ApiClient {
 
     async controlAria2cDownload(gid, action) {
         try {
-            const response = await fetch('/api/system/aria2c/control', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ gid, action })
+            const result = await this.postJson('/api/system/aria2c/control', { gid, action }, {
+                validateSuccess: true,
+                fallbackMessage: `Failed to ${action} download`
             });
-            const result = await response.json();
-            if (result.success) {
-                this.app.ui.showToast('Success', result.data.message || `Action ${action} successful`, 'success');
-                return true;
-            } else {
-                throw new Error(result.message || `Failed to ${action} download`);
-            }
+            this.app.ui.showToast('Success', result.data.message || `Action ${action} successful`, 'success');
+            return true;
         } catch (error) {
             this.notifyApiError(error.message, { error, context: `${action} download` });
             return false;
@@ -661,30 +649,11 @@ export class ApiClient {
             limit
         };
 
-        const response = await fetch('/api/search', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(body),
-            signal
-        });
-        
-        return await response.json();
+        return await this.postJson('/api/search', body, { signal });
     }
 
     async startAria2cDownload(url, path) {
-        const response = await fetch('/api/system/aria2c/download', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                url: url,
-                path: path
-            })
-        });
-        return await response.json();
+        return await this.postJson('/api/system/aria2c/download', { url, path });
     }
 
     async getStorageInfo() {
