@@ -17,7 +17,7 @@ export function createModalOverlay({ className = '', hidden = false, content = n
 
     const title = modal.querySelector('.modal-title, .editor-title, h1, h2');
     if (title) {
-        title.id ||= `modal-title-${crypto.randomUUID()}`;
+        title.id ||= `modal-title-${createUniqueId()}`;
         modal.setAttribute('aria-labelledby', title.id);
     } else {
         modal.setAttribute('aria-label', 'Dialog');
@@ -120,7 +120,7 @@ function createDialogShell({ title = '', description = '' } = {}) {
     header.className = 'app-dialog__header';
 
     const titleElement = document.createElement('h2');
-    titleElement.id = `dialog-title-${crypto.randomUUID()}`;
+    titleElement.id = `dialog-title-${createUniqueId()}`;
     titleElement.className = 'app-dialog__title';
     titleElement.textContent = title;
     header.appendChild(titleElement);
@@ -130,7 +130,7 @@ function createDialogShell({ title = '', description = '' } = {}) {
 
     if (description) {
         const descriptionElement = document.createElement('p');
-        descriptionElement.id = `dialog-description-${crypto.randomUUID()}`;
+        descriptionElement.id = `dialog-description-${createUniqueId()}`;
         descriptionElement.className = 'app-dialog__description';
         descriptionElement.textContent = description;
         form.appendChild(descriptionElement);
@@ -237,3 +237,4 @@ export function showPromptDialog({
         input.select();
     });
 }
+import { createUniqueId } from './util.js';

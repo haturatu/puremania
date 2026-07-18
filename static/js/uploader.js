@@ -121,7 +121,7 @@ export class Uploader {
             this.app.store.update('uploads', { activeBatchId: null, batches: new Map(), status: 'idle' }, 'UPLOAD_BATCH_CHANGED');
             return;
         }
-        const id = crypto.randomUUID();
+        const id = createUniqueId();
         const batch = { id, session, progress: new Map(), stats: null, status: 'running' };
         this.app.store.update('uploads', { activeBatchId: id, batches: new Map([[id, batch]]), status: 'running' }, 'UPLOAD_BATCH_CHANGED');
     }
@@ -557,3 +557,4 @@ export class Uploader {
         this.app.ui.showToast('Upload error', message, 'error');
     }
 }
+import { createUniqueId } from './util.js';
