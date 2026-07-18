@@ -1,4 +1,5 @@
 import { getTemplateContent } from './template.js';
+import { TEMPLATES } from './template-registry.js';
 import { createModalOverlay, bindModalClose, hideModalOverlay, showModalOverlay } from './modal.js';
 import { buildApiUrl } from './util.js';
 import { ImageLoader } from './image-loader.js';
@@ -18,7 +19,7 @@ export class ImageViewer {
     }
     
     createViewerElement() {
-        const template = getTemplateContent('/static/templates/components/image_viewer.html');
+        const template = getTemplateContent(TEMPLATES.imageViewer);
         const viewer = createModalOverlay({ className: 'image-viewer', hidden: true, content: template });
         this.viewerElement = viewer;
         this.imageElement = viewer.querySelector('img');

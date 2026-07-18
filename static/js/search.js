@@ -1,5 +1,6 @@
 import { getTemplateContent } from './template.js';
 import { createModalOverlay, bindModalClose, hideModalOverlay, showModalOverlay } from './modal.js';
+import { TEMPLATES } from './template-registry.js';
 
 export class SearchHandler {
     constructor(fileManager) {
@@ -62,7 +63,7 @@ export class SearchHandler {
         const dropdown = document.createElement('div');
         dropdown.className = 'cd-completion-dropdown';
         dropdown.style.display = 'none';
-        const template = getTemplateContent('/static/templates/components/completion_dropdown.html');
+        const template = getTemplateContent(TEMPLATES.completionDropdown);
         dropdown.appendChild(template);
         document.querySelector('.search-container')?.appendChild(dropdown);
         this.completionDropdown = dropdown;
@@ -249,7 +250,7 @@ export class SearchHandler {
         completions.forEach((completion, index) => {
             const li = document.createElement('li');
             li.className = 'completion-item';
-            const template = getTemplateContent('/static/templates/components/completion_item.html');
+            const template = getTemplateContent(TEMPLATES.completionItem);
             template.querySelector('.completion-name').textContent = completion.name;
             template.querySelector('.completion-path').textContent = completion.fullPath;
             li.appendChild(template);
@@ -305,7 +306,7 @@ export class SearchHandler {
     }
 
     createSearchModal() {
-        const template = getTemplateContent('/static/templates/components/search_modal.html');
+        const template = getTemplateContent(TEMPLATES.searchModal);
         const modal = createModalOverlay({ className: 'search-modal', hidden: true, content: template });
         this.searchModal = modal;
 
@@ -444,7 +445,7 @@ export class SearchHandler {
 
         const header = document.createElement('div');
         header.className = 'search-results-header';
-        const headerTemplate = getTemplateContent('/static/templates/components/search_results_header.html');
+        const headerTemplate = getTemplateContent(TEMPLATES.searchResultsHeader);
         headerTemplate.querySelector('.search-results-count div').textContent = `Search Results for "${searchTerm}"`;
         headerTemplate.querySelector('.pagination-info').textContent = results.length
             ? `Page ${page + 1} · Showing ${startIndex + 1}-${endIndex}${this.hasMore ? '+' : ''}`
@@ -467,7 +468,7 @@ export class SearchHandler {
         if (results.length === 0) {
             const noResults = document.createElement('div');
             noResults.className = 'no-search-results';
-            const noResultsTemplate = getTemplateContent('/static/templates/components/search_no_results.html');
+            const noResultsTemplate = getTemplateContent(TEMPLATES.searchNoResults);
             noResultsTemplate.querySelector('.no-search-results-text').textContent = `No files found matching "${searchTerm}"`;
             noResults.appendChild(noResultsTemplate);
             container.appendChild(noResults);

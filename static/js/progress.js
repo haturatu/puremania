@@ -1,4 +1,5 @@
 import { getTemplateContent } from './template.js';
+import { TEMPLATES } from './template-registry.js';
 
 export class ProgressManager {
     constructor() {
@@ -18,7 +19,7 @@ export class ProgressManager {
     createProgressOverlay() {
         const overlay = document.createElement('div');
         overlay.className = 'progress-overlay';
-        const template = getTemplateContent('/static/templates/components/progress_overlay.html');
+        const template = getTemplateContent(TEMPLATES.progressOverlay);
         overlay.appendChild(template);
 
         document.body.appendChild(overlay);

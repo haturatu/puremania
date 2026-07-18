@@ -1,6 +1,7 @@
 import { getTemplateContent } from './template.js';
 import { buildApiUrl } from './util.js';
 import { ImageLoader } from './image-loader.js';
+import { TEMPLATES } from './template-registry.js';
 
 export class UIManager {
     constructor(app) {
@@ -106,7 +107,7 @@ export class UIManager {
         if (!this.fileBrowserExtensionsVisible) {
             toolbar.classList.add('hidden');
         }
-        const template = getTemplateContent('/static/templates/components/toolbar.html');
+        const template = getTemplateContent(TEMPLATES.toolbar);
         toolbar.appendChild(template);
         container.appendChild(toolbar);
     }
@@ -117,7 +118,7 @@ export class UIManager {
         if (!this.fileBrowserExtensionsVisible) {
             uploadArea.classList.add('hidden');
         }
-        const template = getTemplateContent('/static/templates/components/upload_area.html');
+        const template = getTemplateContent(TEMPLATES.uploadArea);
         template.querySelector('.upload-path').textContent = this.app.router.getCurrentPath();
         uploadArea.appendChild(template);
         container.appendChild(uploadArea);
@@ -126,7 +127,7 @@ export class UIManager {
     renderEmptyState(container) {
         const noFiles = document.createElement('div');
         noFiles.className = 'no-files';
-        const template = getTemplateContent('/static/templates/components/empty_state.html');
+        const template = getTemplateContent(TEMPLATES.emptyState);
         noFiles.appendChild(template);
         container.appendChild(noFiles);
     }
@@ -174,7 +175,7 @@ export class UIManager {
     createViewToggle(hasMasonrySupport = false, hasVideoSupport = false) {
         const viewToggle = document.createElement('div');
         viewToggle.className = 'view-toggle';
-        const template = getTemplateContent('/static/templates/components/view_toggle.html');
+        const template = getTemplateContent(TEMPLATES.viewToggle);
         
         const activeBtn = template.querySelector(`[data-view="${this.viewMode}"]`);
         if (activeBtn) {
@@ -230,7 +231,7 @@ export class UIManager {
     }
 
     createVideoItem(file) {
-        const template = getTemplateContent('/static/templates/components/video_view_item.html');
+        const template = getTemplateContent(TEMPLATES.videoViewItem);
         const videoItem = template.querySelector('.video-card');
         this.setFileItemData(videoItem, file);
 
@@ -385,7 +386,7 @@ export class UIManager {
 
     createListViewHeader(sortField, sortDirection) {
         const thead = document.createElement('thead');
-        const headerTemplate = getTemplateContent('/static/templates/components/list_view_header.html');
+        const headerTemplate = getTemplateContent(TEMPLATES.listViewHeader);
         const headerRow = headerTemplate.querySelector('tr');
         
         const sortableHeader = headerRow.querySelector(`[data-sort="${sortField}"]`);
@@ -542,7 +543,7 @@ export class UIManager {
         tr.className = 'file-item';
         this.setFileItemData(tr, file);
 
-        const template = getTemplateContent('/static/templates/components/list_view_item.html');
+        const template = getTemplateContent(TEMPLATES.listViewItem);
         template.querySelector('.file-icon').className = `file-icon ${this.getFileIconClass(file)}`;
         template.querySelector('.file-name').textContent = file.name;
         template.querySelector('.file-size').textContent = file.is_dir ? '-' : this.formatFileSize(file.size);
@@ -561,7 +562,7 @@ export class UIManager {
         item.className = 'masonry-item';
         this.setFileItemData(item, file);
 
-        const template = getTemplateContent('/static/templates/components/masonry_item.html');
+        const template = getTemplateContent(TEMPLATES.masonryItem);
         const img = template.querySelector('.masonry-image');
         
         img.alt = file.name;
@@ -606,7 +607,7 @@ export class UIManager {
         fileItem.className = 'file-item';
         this.setFileItemData(fileItem, file);
 
-        const template = getTemplateContent('/static/templates/components/grid_view_item.html');
+        const template = getTemplateContent(TEMPLATES.gridViewItem);
         template.querySelector('.file-icon').className = `file-icon ${this.getFileIconClass(file)}`;
         template.querySelector('.file-name').textContent = file.name;
         template.querySelector('.file-info').textContent = file.is_dir ? 'Folder' : this.formatFileSize(file.size);
@@ -619,7 +620,7 @@ export class UIManager {
     }
     
     renderFileActions(container, file) {
-        const templateFile = file.is_dir ? '/static/templates/components/folder_actions.html' : '/static/templates/components/file_actions.html';
+        const templateFile = file.is_dir ? TEMPLATES.folderActions : TEMPLATES.fileActions;
         const template = getTemplateContent(templateFile);
 
         if (!file.is_dir) {
@@ -723,7 +724,7 @@ export class UIManager {
         toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
         toast.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
         toast.setAttribute('aria-atomic', 'true');
-        const template = getTemplateContent('/static/templates/components/toast.html');
+        const template = getTemplateContent(TEMPLATES.toast);
         template.querySelector('.toast-title').textContent = title;
         template.querySelector('.toast-message').textContent = message;
         toast.appendChild(template);
@@ -766,7 +767,7 @@ export class UIManager {
             navItem.className = 'nav-item';
             navItem.dataset.path = dir.path;
             
-            const template = getTemplateContent('/static/templates/components/nav_item.html');
+            const template = getTemplateContent(TEMPLATES.navItem);
             template.querySelector('i').textContent = iconMap[dir.name] || iconMap['default'];
             template.querySelector('span').textContent = dir.name;
             navItem.appendChild(template);

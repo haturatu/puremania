@@ -1,5 +1,6 @@
 import { getTemplateContent } from './template.js';
 import { PollingPageController } from './polling-page-controller.js';
+import { TEMPLATES } from './template-registry.js';
 
 export class Aria2cPageHandler {
     constructor(fileManager) {
@@ -113,7 +114,7 @@ export class Aria2cPageHandler {
     createHeader() {
         const header = document.createElement('div');
         header.className = 'aria2c-header';
-        const template = getTemplateContent('/static/templates/components/aria2c_header.html');
+        const template = getTemplateContent(TEMPLATES.aria2Header);
         header.appendChild(template);
         header.querySelector('.aria2c-back-btn').addEventListener('click', () => this.exitAria2cMode());
         return header;
@@ -122,7 +123,7 @@ export class Aria2cPageHandler {
     createNoDownloadsMessage() {
         const noResults = document.createElement('div');
         noResults.className = 'no-search-results';
-        const template = getTemplateContent('/static/templates/components/aria2c_no_downloads.html');
+        const template = getTemplateContent(TEMPLATES.aria2Empty);
         noResults.appendChild(template);
         return noResults;
     }
@@ -146,7 +147,7 @@ export class Aria2cPageHandler {
     createTable(downloads, isActive) {
         const table = document.createElement('table');
         table.className = 'table-view aria2c-table';
-        const template = getTemplateContent('/static/templates/components/aria2c_table.html');
+        const template = getTemplateContent(TEMPLATES.aria2Table);
         table.appendChild(template);
         
         const tbody = table.querySelector('tbody');
@@ -161,7 +162,7 @@ export class Aria2cPageHandler {
         const tr = document.createElement('tr');
         tr.dataset.gid = item.gid;
 
-        const template = getTemplateContent('/static/templates/components/aria2c_table_row.html');
+        const template = getTemplateContent(TEMPLATES.aria2Row);
         const fileName = item.files && item.files.length > 0 ? this.getFileName(item.files[0].path) : 'N/A';
         const totalLength = parseInt(item.totalLength, 10);
         const completedLength = parseInt(item.completedLength, 10);
