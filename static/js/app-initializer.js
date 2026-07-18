@@ -25,6 +25,7 @@ function bindRoutes(app) {
 }
 
 export async function initializeApp(app) {
+    app.ui.bindStore();
     app.progressManager.init();
     app.imageViewer.init();
     app.searchHandler.init();
