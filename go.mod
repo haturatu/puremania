@@ -1,8 +1,6 @@
 module puremania
 
-go 1.24.0
-
-toolchain go1.24.7
+go 1.25.0
 
 require (
 	github.com/gorilla/mux v1.8.1
@@ -28,6 +26,6 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
-	golang.org/x/sys v0.37.0
+	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.29.0 // indirect
 )
