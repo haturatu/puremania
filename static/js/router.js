@@ -1,16 +1,21 @@
 import { normalizePath } from './util.js';
 
 export class Router {
-    constructor() {
+    constructor(store) {
+        this.store = store;
         this.routes = {};
-        this.currentPath = '';
         this.navigationType = 'initial';
-        this.route = { page: 'files', path: '/' };
         this.isInitialized = false;
         this.onRouteChange = null;
         
         this._setupEventListeners();
         this._initializeWhenReady();
+    }
+
+    get currentPath() { return this.store.getState().route.path; }
+    set currentPath(path) {
+        const page = path === '/system/uploads' ? 'uploads' : path === '/system/aria2c' ? 'aria2c' : 'files';
+        this.store.update('route', { page, path }, 'NAVIGATE');
     }
 
     /**
@@ -57,10 +62,6 @@ export class Router {
         console.log('Initial route:', currentPath);
         
         this.currentPath = currentPath;
-        this.route = {
-            page: currentPath === '/system/uploads' ? 'uploads' : currentPath === '/system/aria2c' ? 'aria2c' : 'files',
-            path: currentPath
-        };
         
         if (this.onRouteChange) {
             // FileManagerAppの初期化を待つための遅延
@@ -175,10 +176,6 @@ export class Router {
         }
         
         this.currentPath = path;
-        this.route = {
-            page: path === '/system/uploads' ? 'uploads' : path === '/system/aria2c' ? 'aria2c' : 'files',
-            path
-        };
         const navigationType = this.navigationType;
         this.navigationType = 'unknown';
         

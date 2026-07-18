@@ -3,7 +3,7 @@
 export class UploadPageHandler {
     constructor(app) {
         this.app = app;
-        this.active = false;
+        this.pollEnabled = false;
         this.selectedKeys = new Set();
         this.polling = false;
         this.timer = null;
@@ -11,17 +11,21 @@ export class UploadPageHandler {
         this.onJobsChanged = () => this.refresh();
     }
 
+    get isActive() {
+        return this.app.store.getState().route.page === 'uploads';
+    }
+
     enter() {
-        if (this.active) return;
-        this.active = true;
+        if (this.pollEnabled) return;
+        this.pollEnabled = true;
         window.addEventListener('puremania:upload-jobs-changed', this.onJobsChanged);
         this.refresh();
         document.querySelector('.breadcrumbs')?.style.setProperty('display', 'none');
     }
 
     exit() {
-        if (!this.active) return;
-        this.active = false;
+        if (!this.pollEnabled) return;
+        this.pollEnabled = false;
         clearTimeout(this.timer);
         this.refreshController?.abort();
         this.refreshController = null;
@@ -30,19 +34,19 @@ export class UploadPageHandler {
     }
 
     async refresh() {
-        if (!this.active || this.polling) return;
+        if (!this.pollEnabled || !this.isActive || this.polling) return;
         this.polling = true;
         const controller = new AbortController();
         this.refreshController = controller;
         try {
             const jobs = await this.app.uploader.listJobs(controller.signal);
-            if (this.active && !controller.signal.aborted) this.render(jobs);
+            if (this.pollEnabled && this.isActive && !controller.signal.aborted) this.render(jobs);
         } catch (error) {
             if (error.name !== 'AbortError') console.error('Failed to refresh uploads', error);
         } finally {
             if (this.refreshController === controller) this.refreshController = null;
             this.polling = false;
-            if (this.active) this.timer = setTimeout(() => this.refresh(), 3000);
+            if (this.pollEnabled && this.isActive) this.timer = setTimeout(() => this.refresh(), 3000);
         }
     }
 

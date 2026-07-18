@@ -6,8 +6,6 @@ export class UIManager {
     constructor(app) {
         this.app = app;
         this.viewMode = 'grid';
-        this.previousPath = null;
-        this.currentFiles = [];
         this.sortState = {
             field: 'name',
             direction: 'asc'
@@ -15,15 +13,15 @@ export class UIManager {
         this.fileBrowserExtensionsVisible = false;
         this.lazyImageObserver = null;
         this.imageLoader = new ImageLoader();
-        this.pendingOperations = 0;
         this.directoryPage = null;
         this.directoryPageNumber = 0;
         this.removeVirtualScroll = null;
         this.nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
     }
 
+    get currentFiles() { return this.app.store.getState().directory.files; }
+
     displayFiles(files, { page = null, pageNumber = 0 } = {}) {
-        this.currentFiles = files;
         this.directoryPage = page;
         this.directoryPageNumber = pageNumber;
         this.removeVirtualScroll?.();
@@ -33,8 +31,8 @@ export class UIManager {
         this.resetLazyImageObserver();
 
         const currentPath = this.app.router.getCurrentPath();
-        const isNewFolder = currentPath !== this.previousPath;
-        this.previousPath = currentPath;
+        const isNewFolder = currentPath !== this.app.store.getState().directory.renderedPath;
+        this.app.store.update('directory', { renderedPath: currentPath, files, page }, 'DIRECTORY_RENDERED');
 
         container.innerHTML = '';
         this.renderHeaderToggle();
@@ -741,14 +739,16 @@ export class UIManager {
     }
 
     showLoading() {
-        this.pendingOperations++;
+        const pendingOperations = this.app.store.getState().ui.pendingOperations + 1;
+        this.app.store.update('ui', { pendingOperations }, 'OPERATION_STARTED');
         const overlay = document.getElementById('loading-overlay');
         if (overlay) overlay.style.display = 'flex';
     }
 
     hideLoading() {
-        this.pendingOperations = Math.max(0, this.pendingOperations - 1);
-        if (this.pendingOperations === 0) {
+        const pendingOperations = Math.max(0, this.app.store.getState().ui.pendingOperations - 1);
+        this.app.store.update('ui', { pendingOperations }, 'OPERATION_FINISHED');
+        if (pendingOperations === 0) {
             const overlay = document.getElementById('loading-overlay');
             if (overlay) overlay.style.display = 'none';
         }

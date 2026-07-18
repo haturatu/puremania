@@ -25,6 +25,9 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      - name: Run frontend tests
+        run: npm test
+
       - name: Run go vet
         run: go vet ./...
 

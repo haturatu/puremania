@@ -9,7 +9,6 @@ export class ApiClient {
         this.app = app;
         this.directoryEtags = new Map();
         this.directoryCache = new Map();
-        this.directoryRequestId = 0;
         this.directoryAbortController = null;
     }
 
@@ -197,7 +196,8 @@ export class ApiClient {
     }
 
     async loadFiles(path, { cursor = '', pageNumber = 0 } = {}) {
-        const requestId = ++this.directoryRequestId;
+        const requestId = this.app.store.getState().directory.requestId + 1;
+        this.app.store.update('directory', { path, requestId, status: 'loading' }, 'DIRECTORY_LOAD_STARTED');
         this.directoryAbortController?.abort();
         const controller = new AbortController();
         this.directoryAbortController = controller;
@@ -208,6 +208,7 @@ export class ApiClient {
         let ownsLoadingOverlay = false;
         try {
             if (cached) {
+                this.app.store.update('directory', { status: 'refreshing' }, 'DIRECTORY_CACHE_SHOWN');
                 cached.usedAt = Date.now();
                 this.app.ui.displayFiles(cached.files, { page: cached.page, pageNumber });
                 this.app.ui.updateBreadcrumb(path);
@@ -219,7 +220,7 @@ export class ApiClient {
                 this.app.ui.setDirectoryStatus('loading', 'Loading directory…');
             }
             const response = await this.getFiles(path, { signal: controller.signal, detailed: true, ...pagination });
-            if (requestId !== this.directoryRequestId || this.app.router.getCurrentPath() !== path) return;
+            if (requestId !== this.app.store.getState().directory.requestId || this.app.store.getState().route.path !== path) return;
 
             if (response.files !== null) {
                 if (!response.notModified) this.app.ui.displayFiles(response.files, { page: response.page, pageNumber });
@@ -227,19 +228,30 @@ export class ApiClient {
                 this.app.ui.updateSidebarActiveState(path);
                 this.app.ui.updateToolbar();
                 this.app.ui.setDirectoryStatus('ready');
+                this.app.store.update('directory', { status: response.files.length ? 'ready' : 'empty' }, 'DIRECTORY_LOADED');
             } else {
                 const message = response.error?.message || `Failed to load directory: ${path}`;
                 this.notifyApiError(message);
-                if (usesCachedView) this.app.ui.setDirectoryStatus('stale', 'Showing saved results · refresh failed');
-                else this.app.ui.displayDirectoryError(path, message);
+                if (usesCachedView) {
+                    this.app.store.update('directory', { status: 'stale' }, 'DIRECTORY_REFRESH_FAILED');
+                    this.app.ui.setDirectoryStatus('stale', 'Showing saved results · refresh failed');
+                } else {
+                    this.app.store.update('directory', { status: 'error' }, 'DIRECTORY_LOAD_FAILED');
+                    this.app.ui.displayDirectoryError(path, message);
+                }
             }
         } catch (error) {
             if (error.name === 'AbortError') return;
-            if (requestId !== this.directoryRequestId || this.app.router.getCurrentPath() !== path) return;
+            if (requestId !== this.app.store.getState().directory.requestId || this.app.store.getState().route.path !== path) return;
             const message = 'An unexpected error occurred while loading files.';
             this.notifyApiError(message, { error, context: 'in loadFiles' });
-            if (usesCachedView) this.app.ui.setDirectoryStatus('stale', 'Showing saved results · refresh failed');
-            else this.app.ui.displayDirectoryError(path, message);
+            if (usesCachedView) {
+                this.app.store.update('directory', { status: 'stale' }, 'DIRECTORY_REFRESH_FAILED');
+                this.app.ui.setDirectoryStatus('stale', 'Showing saved results · refresh failed');
+            } else {
+                this.app.store.update('directory', { status: 'error' }, 'DIRECTORY_LOAD_FAILED');
+                this.app.ui.displayDirectoryError(path, message);
+            }
         } finally {
             // Every request owns one loading reference, including requests that
             // become stale or are aborted by a newer navigation.

@@ -106,12 +106,32 @@ export class Uploader {
     constructor(app) {
         this.app = app;
         this._processingDrop = false;
-        this.activeUploadSession = null;
         this.store = new UploadSessionStore();
-        this.progress = new Map();
-        this.uploadStats = null;
         this.resumeRequest = null;
         this.createResumeInputs();
+    }
+
+    get activeBatch() {
+        const uploads = this.app.store.getState().uploads;
+        return uploads.activeBatchId ? uploads.batches.get(uploads.activeBatchId) : null;
+    }
+    get activeUploadSession() { return this.activeBatch?.session || null; }
+    set activeUploadSession(session) {
+        if (!session) {
+            this.app.store.update('uploads', { activeBatchId: null, batches: new Map(), status: 'idle' }, 'UPLOAD_BATCH_CHANGED');
+            return;
+        }
+        const id = crypto.randomUUID();
+        const batch = { id, session, progress: new Map(), stats: null, status: 'running' };
+        this.app.store.update('uploads', { activeBatchId: id, batches: new Map([[id, batch]]), status: 'running' }, 'UPLOAD_BATCH_CHANGED');
+    }
+    get progress() { return this.activeBatch?.progress || new Map(); }
+    get uploadStats() { return this.activeBatch?.stats || null; }
+    set uploadStats(stats) {
+        const batch = this.activeBatch;
+        if (!batch) return;
+        const updated = { ...batch, stats };
+        this.app.store.update('uploads', { batches: new Map([[batch.id, updated]]) }, 'UPLOAD_STATS_CHANGED');
     }
 
     createUploadSession() {
