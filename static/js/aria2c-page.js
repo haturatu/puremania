@@ -1,13 +1,23 @@
 import { getTemplateContent } from './template.js';
+import { PollingPageController } from './polling-page-controller.js';
 
 export class Aria2cPageHandler {
     constructor(fileManager) {
         this.fileManager = fileManager;
-        this.pollEnabled = false;
         this.previousPath = '/'; // Store the path before entering this page
         this.torrentsToCancel = new Set(); // Track torrents scheduled for cancellation
-        this.polling = false;
-        this.pollTimer = null;
+        this.initialLoadPending = false;
+        this.poller = new PollingPageController({
+            interval: 2000,
+            isCurrentPage: () => this.isInAria2cMode,
+            fetchData: signal => this.fileManager.api.getAria2cStatus(signal),
+            render: status => this.render(status),
+            onSettled: () => {
+                if (!this.initialLoadPending) return;
+                this.initialLoadPending = false;
+                this.fileManager.ui.hideLoading();
+            }
+        });
     }
 
     get isInAria2cMode() {
@@ -19,25 +29,23 @@ export class Aria2cPageHandler {
     }
 
     enterAria2cMode() {
-        if (this.pollEnabled) return;
+        if (this.poller.active) return;
 
         const currentPath = this.fileManager.router.getCurrentPath();
         if (currentPath !== '/system/aria2c') {
             this.previousPath = currentPath;
         }
 
-        this.pollEnabled = true;
+        this.initialLoadPending = true;
         this.fileManager.ui.showLoading();
-        this.loadAria2cStatus();
+        this.poller.start();
         
         const breadcrumbs = document.querySelector('.breadcrumbs');
         if (breadcrumbs) breadcrumbs.style.display = 'none';
     }
 
     exitAria2cMode(navigate = true) {
-        if (!this.pollEnabled) return;
-        this.pollEnabled = false;
-        clearTimeout(this.pollTimer);
+        if (!this.poller.stop()) return;
 
         const breadcrumbs = document.querySelector('.breadcrumbs');
         if (breadcrumbs) breadcrumbs.style.display = '';
@@ -46,22 +54,7 @@ export class Aria2cPageHandler {
     }
 
     async loadAria2cStatus() {
-        if (!this.pollEnabled || !this.isInAria2cMode || this.polling) return;
-        this.polling = true;
-        try {
-            const status = await this.fileManager.api.getAria2cStatus();
-            if (status) {
-                if (this.isInAria2cMode && this.fileManager.router.getCurrentPath() === '/system/aria2c') this.render(status);
-            } else {
-                // API method failed and should have shown a toast.
-                // Stop polling.
-                this.pollEnabled = false;
-            }
-        } finally {
-            this.polling = false;
-            this.fileManager.ui.hideLoading();
-            if (this.pollEnabled && this.isInAria2cMode) this.pollTimer = setTimeout(() => this.loadAria2cStatus(), 2000);
-        }
+        await this.poller.refresh();
     }
 
     render(status) {
