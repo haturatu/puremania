@@ -131,7 +131,7 @@ func (h *Handler) CreateUpload(w http.ResponseWriter, r *http.Request) {
 	if req.Path == "" {
 		req.Path = "/"
 	}
-	if req.Size < 0 || req.Size > h.config.MaxFileSize<<20 || req.RelativePath == "" {
+	if req.Size < 0 || req.Size > h.config.MaxFileSize<<20 || req.RelativePath == "" || len(req.Path) > maxVirtualPathBytes || len(req.RelativePath) > maxRelativePathBytes {
 		h.respondError(w, "Invalid upload size or path", http.StatusBadRequest)
 		return
 	}

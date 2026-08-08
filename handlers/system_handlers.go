@@ -183,6 +183,10 @@ func (h *Handler) DownloadWithAria2c(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "URL and path are required", http.StatusBadRequest)
 		return
 	}
+	if len(req.URL) > maxAria2URLBytes || len(req.Path) > maxVirtualPathBytes {
+		h.respondError(w, "URL or path is too long", http.StatusBadRequest)
+		return
+	}
 
 	safePath, err := h.buildSafePath(req.Path)
 	if err != nil {
@@ -283,6 +287,10 @@ func (h *Handler) ControlAria2cDownload(w http.ResponseWriter, r *http.Request) 
 
 	if req.GID == "" || req.Action == "" {
 		h.respondError(w, "GID and action are required", http.StatusBadRequest)
+		return
+	}
+	if len(req.GID) > maxAria2GIDBytes {
+		h.respondError(w, "GID is too long", http.StatusBadRequest)
 		return
 	}
 

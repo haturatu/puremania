@@ -69,6 +69,9 @@ func (h *Handler) convertToVirtualPath(physicalPath string) string {
 
 // 仮想パスを物理パスに変換するメソッド
 func (h *Handler) convertToPhysicalPath(virtualPath string) (string, error) {
+	if len(virtualPath) > maxVirtualPathBytes {
+		return "", fmt.Errorf("path is too long")
+	}
 	var physicalPath string
 
 	if virtualPath == "" || virtualPath == "/" {
@@ -288,6 +291,9 @@ func (h *Handler) isProtectedRoot(path string) bool {
 }
 
 func secureJoin(basePath, relPath string) (string, error) {
+	if len(relPath) > maxRelativePathBytes {
+		return "", fmt.Errorf("relative path is too long")
+	}
 	absBasePath, err := filepath.Abs(basePath)
 	if err != nil {
 		return "", fmt.Errorf("could not get absolute base path: %w", err)
