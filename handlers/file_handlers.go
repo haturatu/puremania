@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"os/exec"
@@ -805,10 +806,17 @@ func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 
 	filename := filepath.Base(path)
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
+	w.Header().Set("Content-Disposition", contentDisposition(filename))
 
 	// http.ServeContentを使用してsendfile最適化とRange/If-Modified-Since自動処理
 	http.ServeContent(w, r, filename, stat.ModTime(), file)
+}
+
+func contentDisposition(filename string) string {
+	if formatted := mime.FormatMediaType("inline", map[string]string{"filename": filename}); formatted != "" {
+		return formatted
+	}
+	return `inline; filename="download"`
 }
 
 // GetFileContent - 画像はhttp.ServeFileで最適化、テキストはキャッシュ使用
