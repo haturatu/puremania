@@ -940,15 +940,16 @@ func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DownloadPreparedZip(w http.ResponseWriter, r *http.Request) {
 	token := mux.Vars(r)["token"]
-	value, ok := h.zipDownloads.Load(token)
+	// A prepared archive is a one-time capability. Consume the token before
+	// opening the file so concurrent requests cannot replay the same archive.
+	value, ok := h.zipDownloads.LoadAndDelete(token)
 	if !ok {
 		h.respondError(w, "Download not found or expired", http.StatusNotFound)
 		return
 	}
 	prepared := value.(preparedZip)
+	defer func() { _ = os.Remove(prepared.path) }()
 	if time.Now().After(prepared.expiresAt) {
-		h.zipDownloads.Delete(token)
-		_ = os.Remove(prepared.path)
 		h.respondError(w, "Download expired", http.StatusGone)
 		return
 	}

@@ -31,6 +31,12 @@ func TestDownloadPreparedZipServesStoredArchive(t *testing.T) {
 	if got := res.Header().Get("Content-Disposition"); got != "attachment; filename=\"files.zip\"" {
 		t.Fatalf("Content-Disposition = %q", got)
 	}
+	if _, ok := h.zipDownloads.Load("token"); ok {
+		t.Fatal("prepared ZIP token was not consumed")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("prepared ZIP was not removed, stat error = %v", err)
+	}
 }
 
 func TestDownloadPreparedZipRejectsExpiredToken(t *testing.T) {
@@ -46,5 +52,31 @@ func TestDownloadPreparedZipRejectsExpiredToken(t *testing.T) {
 	h.DownloadPreparedZip(res, req)
 	if res.Code != http.StatusGone {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusGone)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expired ZIP was not removed, stat error = %v", err)
+	}
+}
+
+func TestDownloadPreparedZipIsSingleUse(t *testing.T) {
+	h := NewHandler(&types.Config{StorageDir: t.TempDir()}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	path := t.TempDir() + "/prepared.zip"
+	if err := os.WriteFile(path, []byte("prepared archive"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	h.zipDownloads.Store("once", preparedZip{path: path, expiresAt: time.Now().Add(time.Minute)})
+
+	first := httptest.NewRecorder()
+	firstReq := mux.SetURLVars(httptest.NewRequest(http.MethodGet, "/api/files/download-zip/once", nil), map[string]string{"token": "once"})
+	h.DownloadPreparedZip(first, firstReq)
+	if first.Code != http.StatusOK {
+		t.Fatalf("first status = %d, want %d", first.Code, http.StatusOK)
+	}
+
+	second := httptest.NewRecorder()
+	secondReq := mux.SetURLVars(httptest.NewRequest(http.MethodGet, "/api/files/download-zip/once", nil), map[string]string{"token": "once"})
+	h.DownloadPreparedZip(second, secondReq)
+	if second.Code != http.StatusNotFound {
+		t.Fatalf("second status = %d, want %d", second.Code, http.StatusNotFound)
 	}
 }
