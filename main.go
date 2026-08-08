@@ -228,7 +228,7 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Handler:           responseCompressionMiddleware(r),
+		Handler:           requestBodyLimitMiddleware(responseCompressionMiddleware(r)),
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
