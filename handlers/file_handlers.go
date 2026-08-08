@@ -1054,12 +1054,13 @@ func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 	}
 	token := hex.EncodeToString(tokenBytes)
 	expiresAt := time.Now().Add(time.Hour)
-	h.zipDownloads.Store(token, preparedZip{path: tmpPath, expiresAt: expiresAt})
+	if !h.storePreparedZip(token, preparedZip{path: tmpPath, expiresAt: expiresAt}) {
+		h.respondError(w, "Too many prepared downloads", http.StatusTooManyRequests)
+		return
+	}
 	removeTemp = false
 	time.AfterFunc(time.Until(expiresAt), func() {
-		if value, loaded := h.zipDownloads.LoadAndDelete(token); loaded {
-			_ = os.Remove(value.(preparedZip).path)
-		}
+		h.expirePreparedZip(token)
 	})
 	h.respondSuccess(w, map[string]string{"downloadUrl": "/api/files/download-zip/" + token})
 }
@@ -1068,12 +1069,11 @@ func (h *Handler) DownloadPreparedZip(w http.ResponseWriter, r *http.Request) {
 	token := mux.Vars(r)["token"]
 	// A prepared archive is a one-time capability. Consume the token before
 	// opening the file so concurrent requests cannot replay the same archive.
-	value, ok := h.zipDownloads.LoadAndDelete(token)
+	prepared, ok := h.takePreparedZip(token)
 	if !ok {
 		h.respondError(w, "Download not found or expired", http.StatusNotFound)
 		return
 	}
-	prepared := value.(preparedZip)
 	defer func() { _ = os.Remove(prepared.path) }()
 	if time.Now().After(prepared.expiresAt) {
 		h.respondError(w, "Download expired", http.StatusGone)
