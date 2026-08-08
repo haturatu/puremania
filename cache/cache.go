@@ -72,8 +72,7 @@ func Set(c *types.TTLCache, key string, data interface{}, size int64, ttl time.D
 	c.Mu.Lock()
 	defer c.Mu.Unlock()
 
-	if existing, exists := c.Entries[key]; exists {
-		c.CurSize -= existing.Size
+	if _, exists := c.Entries[key]; exists {
 		evict(c, key)
 	}
 
