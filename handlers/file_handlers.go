@@ -33,11 +33,7 @@ const (
 	thumbnailDir = ".cache/thumbnails"
 )
 
-func (h *Handler) generateThumbnail(videoPath, thumbnailPath string) error {
-	// timeout context
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
+func (h *Handler) generateThumbnail(ctx context.Context, videoPath, thumbnailPath string) error {
 	// ffmpeg command to generate thumbnail
 	cmd := exec.CommandContext(ctx, "ffmpeg", "-i", videoPath, "-ss", "00:00:01", "-vframes", "1", "-vf", "thumbnail,scale=320:-1", "-y", thumbnailPath)
 	output, err := cmd.CombinedOutput()
@@ -107,7 +103,9 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		defer func() { _ = os.Remove(tmpPath) }()
-		if err := h.generateThumbnail(fullPath, tmpPath); err != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		if err := h.generateThumbnail(ctx, fullPath, tmpPath); err != nil {
 			return err
 		}
 		return os.Rename(tmpPath, thumbnailPath)
@@ -165,7 +163,7 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 
 	// 並列処理で解凍
 	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute) // 30分タイムアウト
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Minute) // 30分タイムアウト
 		defer cancel()
 		tempPath, err := os.MkdirTemp(filepath.Dir(destPath), ".puremania-extract-*")
 		if err != nil {
@@ -1020,7 +1018,7 @@ func (h *Handler) createZipArchive(ctx context.Context, w io.Writer, paths []str
 
 			if fileInfo.IsDir() {
 				// ディレクトリの場合は並列WalkDir
-				h.addDirectoryToZip(zipWriter, fullPath, &successfulFiles, &failedFiles, &mu)
+				h.addDirectoryToZip(ctx, zipWriter, fullPath, &successfulFiles, &failedFiles, &mu)
 			} else {
 				inputBytes += fileInfo.Size()
 				if inputBytes > h.config.MaxZipSize<<20 {
@@ -1028,7 +1026,7 @@ func (h *Handler) createZipArchive(ctx context.Context, w io.Writer, paths []str
 					return
 				}
 				// 単一ファイルの処理
-				if h.addFileToZip(zipWriter, fullPath, filepath.Base(userPath), &mu) {
+				if h.addFileToZip(ctx, zipWriter, fullPath, filepath.Base(userPath), &mu) {
 					atomic.AddInt64(&successfulFiles, 1)
 				} else {
 					atomic.AddInt64(&failedFiles, 1)
@@ -1047,10 +1045,13 @@ func (h *Handler) createZipArchive(ctx context.Context, w io.Writer, paths []str
 	return nil
 }
 
-func (h *Handler) addDirectoryToZip(zipWriter *zip.Writer, dirPath string, successfulFiles, failedFiles *int64, mu *sync.Mutex) {
+func (h *Handler) addDirectoryToZip(ctx context.Context, zipWriter *zip.Writer, dirPath string, successfulFiles, failedFiles *int64, mu *sync.Mutex) {
 	var wg sync.WaitGroup
 
 	err := filepath.WalkDir(dirPath, func(filePath string, d os.DirEntry, err error) error {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		if err != nil {
 			h.logger.Error("Error during directory walk for zipping", "path", filePath, "error", err)
 			return err
@@ -1091,7 +1092,7 @@ func (h *Handler) addDirectoryToZip(zipWriter *zip.Writer, dirPath string, succe
 		}
 
 		// zip.Writer must be written serially; addFileToZip already holds mu.
-		if h.addFileToZip(zipWriter, filePath, relPath, mu) {
+		if h.addFileToZip(ctx, zipWriter, filePath, relPath, mu) {
 			atomic.AddInt64(successfulFiles, 1)
 		} else {
 			atomic.AddInt64(failedFiles, 1)
@@ -1107,7 +1108,10 @@ func (h *Handler) addDirectoryToZip(zipWriter *zip.Writer, dirPath string, succe
 	wg.Wait()
 }
 
-func (h *Handler) addFileToZip(zipWriter *zip.Writer, filePath, zipPath string, mu *sync.Mutex) bool {
+func (h *Handler) addFileToZip(ctx context.Context, zipWriter *zip.Writer, filePath, zipPath string, mu *sync.Mutex) bool {
+	if ctx.Err() != nil {
+		return false
+	}
 	info, err := os.Stat(filePath)
 	if err != nil {
 		h.logger.Error("Failed to stat file for zipping", "path", filePath, "error", err)
@@ -1147,12 +1151,26 @@ func (h *Handler) addFileToZip(zipWriter *zip.Writer, filePath, zipPath string, 
 	bufferSize := getOptimalBufferSize(info.Size())
 	buffer := make([]byte, bufferSize)
 
-	_, err = io.CopyBuffer(writer, file, buffer)
+	_, err = io.CopyBuffer(writer, contextReader{ctx: ctx, reader: file}, buffer)
 	if err != nil {
 		h.logger.Error("Failed to copy file content to zip", "path", filePath, "error", err)
 	}
 
 	return err == nil
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	select {
+	case <-r.ctx.Done():
+		return 0, r.ctx.Err()
+	default:
+		return r.reader.Read(p)
+	}
 }
 
 func (h *Handler) SaveFile(w http.ResponseWriter, r *http.Request) {
