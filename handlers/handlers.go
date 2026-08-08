@@ -28,6 +28,8 @@ type Handler struct {
 	thumbnailGate        chan struct{}   // bounds concurrent ffmpeg work
 	searchGate           chan struct{}   // bounds concurrent recursive searches
 	zipDownloads         sync.Map        // token -> preparedZip; entries expire after download preparation
+	zipDownloadsMu       sync.Mutex
+	preparedZipCount     int
 	thumbnailCleanupMu   sync.Mutex
 	lastThumbnailCleanup time.Time
 }
