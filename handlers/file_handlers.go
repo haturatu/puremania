@@ -75,6 +75,11 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Cannot upload directly to a protected root", http.StatusBadRequest)
 		return
 	}
+	if !tryAcquire(h.thumbnailGate) {
+		respondBusy(w)
+		return
+	}
+	defer release(h.thumbnailGate)
 	info, err := os.Stat(fullPath)
 	if err != nil || info.IsDir() {
 		h.respondError(w, "Cannot inspect video", http.StatusBadRequest)
@@ -160,6 +165,11 @@ func (h *Handler) ExtractFile(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Cannot inspect extraction destination", http.StatusInternalServerError)
 		return
 	}
+	if !tryAcquire(h.extractGate) {
+		respondBusy(w)
+		return
+	}
+	defer release(h.extractGate)
 
 	// 並列処理で解凍
 	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
@@ -893,6 +903,11 @@ func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if !tryAcquire(h.zipGate) {
+		respondBusy(w)
+		return
+	}
+	defer release(h.zipGate)
 
 	tmp, err := os.CreateTemp("", "puremania-download-*.zip")
 	if err != nil {

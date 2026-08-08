@@ -17,13 +17,17 @@ const (
 
 // Handler はAPIハンドラーの依存関係を保持
 type Handler struct {
-	config       *types.Config
-	cache        *types.TTLCache
-	workerPool   *types.WorkerPool
-	logger       *slog.Logger
-	uploadLocks  [256]sync.Mutex // fixed striped locks; serializes writes to one session without unbounded state
-	uploadGate   chan struct{}   // bounds concurrent disk writes across sessions
-	zipDownloads sync.Map        // token -> preparedZip; entries expire after download preparation
+	config        *types.Config
+	cache         *types.TTLCache
+	workerPool    *types.WorkerPool
+	logger        *slog.Logger
+	uploadLocks   [256]sync.Mutex // fixed striped locks; serializes writes to one session without unbounded state
+	uploadGate    chan struct{}   // bounds concurrent disk writes across sessions
+	zipGate       chan struct{}   // bounds concurrent archive preparation
+	extractGate   chan struct{}   // bounds concurrent archive extraction
+	thumbnailGate chan struct{}   // bounds concurrent ffmpeg work
+	searchGate    chan struct{}   // bounds concurrent recursive searches
+	zipDownloads  sync.Map        // token -> preparedZip; entries expire after download preparation
 }
 
 type preparedZip struct {
@@ -49,11 +53,15 @@ func NewHandler(config *types.Config, logger *slog.Logger) *Handler {
 		writeSlots = 32
 	}
 	h := &Handler{
-		config:     config,
-		cache:      cache.NewTTLCache(250*1024*1024, 15000), // 250MB, 15K items
-		workerPool: worker.NewWorkerPool(),
-		logger:     logger,
-		uploadGate: make(chan struct{}, writeSlots),
+		config:        config,
+		cache:         cache.NewTTLCache(250*1024*1024, 15000), // 250MB, 15K items
+		workerPool:    worker.NewWorkerPool(),
+		logger:        logger,
+		uploadGate:    make(chan struct{}, writeSlots),
+		zipGate:       make(chan struct{}, 2),
+		extractGate:   make(chan struct{}, 2),
+		thumbnailGate: make(chan struct{}, 2),
+		searchGate:    make(chan struct{}, 4),
 	}
 	h.cleanupExpiredUploadSessions()
 	return h
