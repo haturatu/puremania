@@ -103,6 +103,7 @@ func LoadConfig(logger *slog.Logger) *types.Config {
 		PreallocateUploads:    getEnvAsBool("UPLOAD_PREALLOCATE", true),
 		// Aria2cEnabled は後で設定
 	}
+	validateConfig(logger, config)
 
 	// ARIA2C=enable かどうかを判定
 	config.Aria2cEnabled = strings.ToLower(getEnv("ARIA2C", "disable")) == "enable"
@@ -122,6 +123,42 @@ func LoadConfig(logger *slog.Logger) *types.Config {
 	}
 
 	return config
+}
+
+const (
+	defaultMaxFileSize           int64 = 102400
+	defaultPort                        = 8844
+	defaultZipTimeout                  = 300
+	defaultMaxZipSize            int64 = 1024
+	defaultUploadSessionTTLHours       = 168
+	maxConfigSizeMB              int64 = (1<<63 - 1) / (1 << 20)
+	maxDurationSeconds           int64 = (1<<63 - 1) / int64(time.Second)
+	maxDurationHours             int   = (1<<63 - 1) / int(time.Hour)
+)
+
+// validateConfig prevents invalid environment values from becoming negative
+// byte limits or overflowing duration conversions later in request handlers.
+func validateConfig(logger *slog.Logger, config *types.Config) {
+	if config.MaxFileSize <= 0 || config.MaxFileSize > maxConfigSizeMB {
+		logger.Warn("Invalid MAX_FILE_SIZE_MB; using fallback", "value", config.MaxFileSize, "fallback", defaultMaxFileSize)
+		config.MaxFileSize = defaultMaxFileSize
+	}
+	if config.MaxZipSize <= 0 || config.MaxZipSize > maxConfigSizeMB {
+		logger.Warn("Invalid MAX_ZIP_SIZE; using fallback", "value", config.MaxZipSize, "fallback", defaultMaxZipSize)
+		config.MaxZipSize = defaultMaxZipSize
+	}
+	if config.Port < 1 || config.Port > 65535 {
+		logger.Warn("Invalid PORT; using fallback", "value", config.Port, "fallback", defaultPort)
+		config.Port = defaultPort
+	}
+	if config.ZipTimeout <= 0 || int64(config.ZipTimeout) > maxDurationSeconds {
+		logger.Warn("Invalid ZIP_TIMEOUT; using fallback", "value", config.ZipTimeout, "fallback", defaultZipTimeout)
+		config.ZipTimeout = defaultZipTimeout
+	}
+	if config.UploadSessionTTLHours <= 0 || config.UploadSessionTTLHours > maxDurationHours {
+		logger.Warn("Invalid UPLOAD_SESSION_TTL_HOURS; using fallback", "value", config.UploadSessionTTLHours, "fallback", defaultUploadSessionTTLHours)
+		config.UploadSessionTTLHours = defaultUploadSessionTTLHours
+	}
 }
 
 func main() {
