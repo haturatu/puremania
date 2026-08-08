@@ -133,3 +133,15 @@ func TestMediaTypeByPathHasContainerIndependentVideoFallbacks(t *testing.T) {
 		}
 	}
 }
+
+func TestInputLimitsRejectOversizedPathAndBatch(t *testing.T) {
+	if _, err := secureJoin(t.TempDir(), strings.Repeat("a", maxRelativePathBytes+1)); err == nil {
+		t.Fatal("oversized relative path was accepted")
+	}
+	if err := validateBatchPaths(make([]string, maxBatchPaths+1)); err == nil {
+		t.Fatal("oversized batch was accepted")
+	}
+	if err := validateBatchPaths([]string{strings.Repeat("a", maxVirtualPathBytes+1)}); err == nil {
+		t.Fatal("oversized path in batch was accepted")
+	}
+}

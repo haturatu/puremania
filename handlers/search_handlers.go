@@ -44,6 +44,14 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Search term required", http.StatusBadRequest)
 		return
 	}
+	if len(req.Term) > maxSearchTermBytes || len(req.Cursor) > maxVirtualPathBytes {
+		h.respondError(w, "Search term or cursor is too long", http.StatusBadRequest)
+		return
+	}
+	if req.Scope != "" && req.Scope != "current" && req.Scope != "recursive" {
+		h.respondError(w, "Invalid search scope", http.StatusBadRequest)
+		return
+	}
 
 	if req.Limit <= 0 || req.Limit > 500 {
 		req.Limit = 100

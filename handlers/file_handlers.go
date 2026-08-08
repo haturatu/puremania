@@ -64,6 +64,10 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Path required", http.StatusBadRequest)
 		return
 	}
+	if len(path) > maxVirtualPathBytes {
+		h.respondError(w, "Path is too long", http.StatusBadRequest)
+		return
+	}
 
 	fullPath, err := h.convertToPhysicalPath(path)
 	if err != nil {
@@ -887,9 +891,8 @@ func (h *Handler) DownloadZip(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-
-	if len(req.Paths) == 0 {
-		h.respondError(w, "No paths provided", http.StatusBadRequest)
+	if err := validateBatchPaths(req.Paths); err != nil {
+		h.respondError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -1205,6 +1208,10 @@ func (h *Handler) DeleteMultipleFiles(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
+	if err := validateBatchPaths(req.Paths); err != nil {
+		h.respondError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// 並列処理で削除
 	var errors []string
@@ -1263,6 +1270,10 @@ func (h *Handler) CreateDirectory(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
+	if len(req.Path) > maxVirtualPathBytes || len(req.Name) > maxRelativePathBytes {
+		h.respondError(w, "Path or name is too long", http.StatusBadRequest)
+		return
+	}
 
 	parentPath, err := h.convertToPhysicalPath(req.Path)
 	if err != nil {
@@ -1315,6 +1326,10 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 
 	if req.SourcePath == "" || req.TargetPath == "" {
 		h.respondError(w, "Source and target paths required", http.StatusBadRequest)
+		return
+	}
+	if len(req.SourcePath) > maxVirtualPathBytes || len(req.TargetPath) > maxVirtualPathBytes {
+		h.respondError(w, "Path is too long", http.StatusBadRequest)
 		return
 	}
 
@@ -1384,6 +1399,10 @@ func (h *Handler) CreateFile(w http.ResponseWriter, r *http.Request) {
 
 	if req.Path == "" || req.Name == "" {
 		h.respondError(w, "Path and name required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Path) > maxVirtualPathBytes || len(req.Name) > maxRelativePathBytes {
+		h.respondError(w, "Path or name is too long", http.StatusBadRequest)
 		return
 	}
 
