@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -78,5 +80,18 @@ func TestDownloadPreparedZipIsSingleUse(t *testing.T) {
 	h.DownloadPreparedZip(second, secondReq)
 	if second.Code != http.StatusNotFound {
 		t.Fatalf("second status = %d, want %d", second.Code, http.StatusNotFound)
+	}
+}
+
+func TestCreateZipArchiveHonorsCanceledContext(t *testing.T) {
+	h := NewHandler(&types.Config{StorageDir: t.TempDir(), MaxZipSize: 1}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	path := filepath.Join(h.config.StorageDir, "file.txt")
+	if err := os.WriteFile(path, []byte("content"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := h.createZipArchive(ctx, io.Discard, []string{"/file.txt"}); err != context.Canceled {
+		t.Fatalf("error = %v, want %v", err, context.Canceled)
 	}
 }
