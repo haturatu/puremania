@@ -73,6 +73,14 @@ func (h *Handler) SearchFiles(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
+	if !contextStillActive(r.Context()) {
+		return
+	}
+	if !tryAcquire(h.searchGate) {
+		respondBusy(w)
+		return
+	}
+	defer release(h.searchGate)
 
 	results, searchErr := h.performSearchPage(r.Context(), req, basePath)
 	if searchErr == nil {
