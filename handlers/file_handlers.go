@@ -104,9 +104,10 @@ func (h *Handler) cleanupThumbnailCacheIfDue(dir string, force bool) error {
 	return cleanupThumbnailCache(dir, thumbnailMaxBytes, thumbnailMaxFiles)
 }
 
-func (h *Handler) generateThumbnail(ctx context.Context, videoPath, thumbnailPath string) error {
+func (h *Handler) generateThumbnail(ctx context.Context, videoPath, thumbnailPath string, extraFiles ...*os.File) error {
 	// ffmpeg command to generate thumbnail
 	cmd := exec.CommandContext(ctx, "ffmpeg", "-i", videoPath, "-ss", "00:00:01", "-vframes", "1", "-vf", "thumbnail,scale=320:-1", "-y", thumbnailPath)
+	cmd.ExtraFiles = extraFiles
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Check if the error is due to context timeout
@@ -154,7 +155,13 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release(h.thumbnailGate)
-	info, err := os.Stat(fullPath)
+	source, err := h.openAllowedPath(fullPath, os.O_RDONLY, 0)
+	if err != nil {
+		h.respondError(w, "Cannot inspect video", http.StatusBadRequest)
+		return
+	}
+	info, err := source.Stat()
+	_ = source.Close()
 	if err != nil || info.IsDir() {
 		h.respondError(w, "Cannot inspect video", http.StatusBadRequest)
 		return
@@ -173,6 +180,11 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 
 	// generate thumbnail
 	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
+		source, err := h.openAllowedPath(fullPath, os.O_RDONLY, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = source.Close() }()
 		tmp, err := os.CreateTemp(thumbnailDir, ".thumbnail-*.jpg")
 		if err != nil {
 			return err
@@ -184,7 +196,8 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 		defer func() { _ = os.Remove(tmpPath) }()
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
-		if err := h.generateThumbnail(ctx, fullPath, tmpPath); err != nil {
+		videoPath, extraFiles := childProcessFilePath(source, fullPath)
+		if err := h.generateThumbnail(ctx, videoPath, tmpPath, extraFiles...); err != nil {
 			return err
 		}
 		if err := os.Rename(tmpPath, thumbnailPath); err != nil {
@@ -856,7 +869,7 @@ func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := os.Open(fullPath)
+	file, err := h.openAllowedPath(fullPath, os.O_RDONLY, 0)
 	if err != nil {
 		h.logger.Warn("Cannot open file for download", "path", fullPath, "error", err)
 		h.respondError(w, "Cannot open file", http.StatusNotFound)
@@ -914,7 +927,14 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stat, err := os.Stat(fullPath)
+	file, err := h.openAllowedPath(fullPath, os.O_RDONLY, 0)
+	if err != nil {
+		h.logger.Warn("Cannot get file info for content", "path", fullPath, "error", err)
+		h.respondError(w, "Cannot get file info", http.StatusNotFound)
+		return
+	}
+	defer func() { _ = file.Close() }()
+	stat, err := file.Stat()
 	if err != nil {
 		h.logger.Warn("Cannot get file info for content", "path", fullPath, "error", err)
 		h.respondError(w, "Cannot get file info", http.StatusNotFound)
@@ -932,7 +952,7 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	// 画像ファイルの場合はhttp.ServeFileで最適化
 	if mimeType != "" && strings.HasPrefix(mimeType, "image/") {
 		w.Header().Set("Cache-Control", "max-age=3600")
-		http.ServeFile(w, r, fullPath)
+		http.ServeContent(w, r, filepath.Base(path), stat.ModTime(), file)
 		return
 	}
 
@@ -956,7 +976,10 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 
 	// 並列処理でファイル読み込み
 	resultChan := worker.SubmitWithResult(h.workerPool, func() interface{} {
-		content, err := os.ReadFile(fullPath)
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		content, err := io.ReadAll(file)
 		if err != nil {
 			h.logger.Error("Failed to read file content", "path", fullPath, "error", err)
 			return nil
@@ -1111,7 +1134,14 @@ func (h *Handler) createZipArchive(ctx context.Context, w io.Writer, paths []str
 				return
 			}
 
-			fileInfo, err := os.Stat(fullPath)
+			file, err := h.openAllowedPath(fullPath, os.O_RDONLY, 0)
+			if err != nil {
+				h.logger.Error("Failed to stat file for zipping", "path", fullPath, "error", err)
+				atomic.AddInt64(&failedFiles, 1)
+				return
+			}
+			fileInfo, err := file.Stat()
+			_ = file.Close()
 			if err != nil {
 				h.logger.Error("Failed to stat file for zipping", "path", fullPath, "error", err)
 				atomic.AddInt64(&failedFiles, 1)
@@ -1214,8 +1244,14 @@ func (h *Handler) addFileToZip(ctx context.Context, zipWriter *zip.Writer, fileP
 	if ctx.Err() != nil {
 		return false
 	}
-	info, err := os.Stat(filePath)
+	file, err := h.openAllowedPath(filePath, os.O_RDONLY, 0)
 	if err != nil {
+		h.logger.Error("Failed to stat file for zipping", "path", filePath, "error", err)
+		return false
+	}
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
 		h.logger.Error("Failed to stat file for zipping", "path", filePath, "error", err)
 		return false
 	}
@@ -1229,11 +1265,6 @@ func (h *Handler) addFileToZip(ctx context.Context, zipWriter *zip.Writer, fileP
 	header.Name = filepath.ToSlash(zipPath)
 	header.Method = zip.Deflate
 
-	file, err := os.Open(filePath)
-	if err != nil {
-		h.logger.Error("Failed to open file for zipping", "path", filePath, "error", err)
-		return false
-	}
 	defer func() {
 		if err := file.Close(); err != nil {
 			h.logger.Error("Failed to close file for zipping", "path", filePath, "error", err)
