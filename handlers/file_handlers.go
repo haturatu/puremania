@@ -31,8 +31,78 @@ import (
 )
 
 const (
-	thumbnailDir = ".cache/thumbnails"
+	thumbnailDir                   = ".cache/thumbnails"
+	thumbnailMaxBytes        int64 = 256 << 20
+	thumbnailMaxFiles              = 4096
+	thumbnailCleanupInterval       = 5 * time.Minute
+	thumbnailTempTTL               = 10 * time.Minute
 )
+
+type thumbnailCacheEntry struct {
+	path    string
+	size    int64
+	modTime time.Time
+}
+
+func cleanupThumbnailCache(dir string, maxBytes int64, maxFiles int) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	cacheEntries := make([]thumbnailCacheEntry, 0, len(entries))
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if strings.HasPrefix(entry.Name(), ".thumbnail-") {
+			if now.Sub(info.ModTime()) >= thumbnailTempTTL {
+				_ = os.Remove(filepath.Join(dir, entry.Name()))
+			}
+			continue
+		}
+		if !strings.HasSuffix(entry.Name(), ".jpg") || !info.Mode().IsRegular() {
+			continue
+		}
+		cacheEntries = append(cacheEntries, thumbnailCacheEntry{
+			path:    filepath.Join(dir, entry.Name()),
+			size:    info.Size(),
+			modTime: info.ModTime(),
+		})
+	}
+
+	sort.Slice(cacheEntries, func(i, j int) bool {
+		return cacheEntries[i].modTime.Before(cacheEntries[j].modTime)
+	})
+
+	var totalBytes int64
+	for _, entry := range cacheEntries {
+		totalBytes += entry.size
+	}
+	for len(cacheEntries) > 0 && (totalBytes > maxBytes || len(cacheEntries) > maxFiles) {
+		oldest := cacheEntries[0]
+		cacheEntries = cacheEntries[1:]
+		if err := os.Remove(oldest.path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		totalBytes -= oldest.size
+	}
+	return nil
+}
+
+func (h *Handler) cleanupThumbnailCacheIfDue(dir string, force bool) error {
+	h.thumbnailCleanupMu.Lock()
+	defer h.thumbnailCleanupMu.Unlock()
+
+	now := time.Now()
+	if !force && now.Sub(h.lastThumbnailCleanup) < thumbnailCleanupInterval {
+		return nil
+	}
+	h.lastThumbnailCleanup = now
+	return cleanupThumbnailCache(dir, thumbnailMaxBytes, thumbnailMaxFiles)
+}
 
 func (h *Handler) generateThumbnail(ctx context.Context, videoPath, thumbnailPath string) error {
 	// ffmpeg command to generate thumbnail
@@ -54,6 +124,9 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("Failed to create thumbnail directory", "path", thumbnailDir, "error", err)
 		h.respondError(w, "Cannot create thumbnail directory", http.StatusInternalServerError)
 		return
+	}
+	if err := h.cleanupThumbnailCacheIfDue(thumbnailDir, false); err != nil {
+		h.logger.Warn("Failed to clean thumbnail cache", "path", thumbnailDir, "error", err)
 	}
 
 	path := r.URL.Query().Get("path")
@@ -114,7 +187,13 @@ func (h *Handler) Thumbnail(w http.ResponseWriter, r *http.Request) {
 		if err := h.generateThumbnail(ctx, fullPath, tmpPath); err != nil {
 			return err
 		}
-		return os.Rename(tmpPath, thumbnailPath)
+		if err := os.Rename(tmpPath, thumbnailPath); err != nil {
+			return err
+		}
+		if err := h.cleanupThumbnailCacheIfDue(thumbnailDir, true); err != nil {
+			h.logger.Warn("Failed to enforce thumbnail cache limit", "path", thumbnailDir, "error", err)
+		}
+		return nil
 	})
 
 	result := <-resultChan

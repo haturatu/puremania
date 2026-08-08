@@ -17,17 +17,19 @@ const (
 
 // Handler はAPIハンドラーの依存関係を保持
 type Handler struct {
-	config        *types.Config
-	cache         *types.TTLCache
-	workerPool    *types.WorkerPool
-	logger        *slog.Logger
-	uploadLocks   [256]sync.Mutex // fixed striped locks; serializes writes to one session without unbounded state
-	uploadGate    chan struct{}   // bounds concurrent disk writes across sessions
-	zipGate       chan struct{}   // bounds concurrent archive preparation
-	extractGate   chan struct{}   // bounds concurrent archive extraction
-	thumbnailGate chan struct{}   // bounds concurrent ffmpeg work
-	searchGate    chan struct{}   // bounds concurrent recursive searches
-	zipDownloads  sync.Map        // token -> preparedZip; entries expire after download preparation
+	config               *types.Config
+	cache                *types.TTLCache
+	workerPool           *types.WorkerPool
+	logger               *slog.Logger
+	uploadLocks          [256]sync.Mutex // fixed striped locks; serializes writes to one session without unbounded state
+	uploadGate           chan struct{}   // bounds concurrent disk writes across sessions
+	zipGate              chan struct{}   // bounds concurrent archive preparation
+	extractGate          chan struct{}   // bounds concurrent archive extraction
+	thumbnailGate        chan struct{}   // bounds concurrent ffmpeg work
+	searchGate           chan struct{}   // bounds concurrent recursive searches
+	zipDownloads         sync.Map        // token -> preparedZip; entries expire after download preparation
+	thumbnailCleanupMu   sync.Mutex
+	lastThumbnailCleanup time.Time
 }
 
 type preparedZip struct {
