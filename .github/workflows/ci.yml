@@ -16,7 +16,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           cache-dependency-path: '**/go.sum'
 
       - name: Run build script
@@ -41,7 +41,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           cache-dependency-path: '**/go.sum'
 
       - name: Check formatting
@@ -67,3 +67,56 @@ jobs:
         with:
           version: latest
           skip-cache: true
+
+  security:
+    name: Security and resilience
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: '**/go.sum'
+
+      - name: Run race detector
+        run: go test -race ./...
+
+      - name: Run fuzz smoke test (handlers)
+        run: go test ./handlers -run=FuzzParseContentRange -fuzz=FuzzParseContentRange -fuzztime=10s
+
+      - name: Run fuzz smoke test (server)
+        run: go test . -run=FuzzSelectContentEncoding -fuzz=FuzzSelectContentEncoding -fuzztime=10s
+
+      - name: Run HTTP soak test
+        run: SOAK_DURATION=15s go test . -run='^TestHTTPSoak$' -count=1 -timeout=1m
+
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  container-scan:
+    name: Container scan
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build --tag puremania:ci .
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: puremania:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
