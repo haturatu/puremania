@@ -86,6 +86,27 @@
     position: relative;
 }
 
+progress.ui-progress {
+    appearance: none;
+    color: var(--accent-primary);
+}
+
+progress.ui-progress::-webkit-progress-bar {
+    background-color: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+progress.ui-progress::-webkit-progress-value {
+    background-color: var(--accent-primary);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+progress.ui-progress::-moz-progress-bar {
+    background-color: var(--accent-primary);
+    border-radius: 4px;
+}
+
 .ui-progress__fill {
     height: 100%;
     background-color: var(--accent-primary);

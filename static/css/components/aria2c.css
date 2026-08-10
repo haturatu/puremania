@@ -54,21 +54,16 @@
 
 .aria2c-table .ui-progress {
     height: 20px;
-}
-
-.aria2c-table .ui-progress__fill {
-    transition: width 0.3s ease-in-out;
+    display: inline-block;
+    width: min(100%, 220px);
+    vertical-align: middle;
 }
 
 .aria2c-table .progress-text {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: var(--text-primary);
+    margin-inline-start: 6px;
+    color: var(--text-secondary);
     font-size: 0.8em;
     font-weight: bold;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
 }
 
 .aria2c-table .actions {
@@ -111,7 +106,7 @@
 }
 .upload-jobs-table .file-size { width: 10%; white-space: nowrap; }
 .upload-jobs-table .upload-progress-cell { width: 18%; min-width: 150px; }
-.upload-jobs-table .upload-progress-cell .ui-progress { position: relative; min-width: 140px; }
+.upload-jobs-table .upload-progress-cell .ui-progress { min-width: 140px; }
 .upload-jobs-table .upload-destination { max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .upload-jobs-table .actions {
     min-width: 210px;
