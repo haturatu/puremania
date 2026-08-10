@@ -3,6 +3,7 @@
   flex: 1;
   padding: 20px;
   overflow-y: auto;
+  container: file-browser / inline-size;
 }
 
 .view-toggle {
@@ -77,6 +78,17 @@
 .file-item.selected {
   border-color: var(--accent-primary);
   background-color: rgba(0, 255, 65, 0.1);
+}
+
+.file-item:has(input[type="checkbox"]:checked) {
+  border-color: var(--accent-primary);
+  background-color: rgba(0, 255, 65, 0.1);
+}
+
+.file-grid > .file-item,
+.file-list > .file-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 190px;
 }
 
 .file-icon {
@@ -179,6 +191,8 @@ div.file-item:hover .file-actions {
 
 .table-view tbody tr {
   transition: background-color 0.3s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 48px;
 }
 
 .table-view tbody tr:hover {
@@ -223,4 +237,32 @@ div.file-item:hover .file-actions {
 /* テキストファイル: 白 */
 .file-item[data-mime-type="text/plain"] .file-name {
     color: #ffffff;
+}
+
+@container file-browser (width < 700px) {
+  .file-browser {
+    padding: 12px;
+  }
+
+  .file-grid,
+  .file-list {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+  }
+
+  .table-view th,
+  .table-view td {
+    padding-inline: 6px;
+  }
+
+  .table-view th[data-sort="type"],
+  .table-view td:nth-child(4) {
+    display: none;
+  }
+}
+
+@container file-browser (width >= 700px) {
+  .file-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
 }
