@@ -18,7 +18,7 @@ import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
 import { xml } from "@codemirror/lang-xml";
 import { markdown } from "@codemirror/lang-markdown";
-import { createModalOverlay, hideModalOverlay, showModalOverlay } from "./modal.js";
+import { bindModalClose, createModalOverlay, hideModalOverlay, showModalOverlay } from "./modal.js";
 
 const getLanguageName = (filePath) => {
     const extension = filePath.split('.').pop().toLowerCase();
@@ -116,18 +116,18 @@ export class FileEditor {
         ` : '';
 
         const editorMarkup = `
-            <div class="modal">
-                <div class="modal-header">
+            <div class="dialog-panel">
+                <div class="dialog-header">
                     <div class="editor-filename"></div>
                     <div class="editor-actions">
                         <button class="btn" id="editor-cancel">Close</button>
                         <button class="btn btn-primary" id="editor-save">Save</button>
                     </div>
                 </div>
-                <div class="modal-body">
+                <div class="dialog-body">
                     <div class="editor-container"></div>
                 </div>
-                <div class="modal-footer editor-status-bar">
+                <div class="dialog-footer editor-status-bar">
                     <div class="status-left">
                         <span id="status-cursor">Ln 1, Col 1</span>
                         <span id="status-selection"></span>
@@ -141,7 +141,7 @@ export class FileEditor {
             </div>
         `;
 
-        const editor = createModalOverlay({ className: 'editor-modal', hidden: true, content: editorMarkup });
+        const editor = createModalOverlay({ className: 'editor-modal', content: editorMarkup });
         this.editorElement = editor;
         this.editorContainer = editor.querySelector('.editor-container');
         this.filenameElement = editor.querySelector('.editor-filename');
@@ -156,6 +156,7 @@ export class FileEditor {
         }
 
         this.bindEvents();
+        this.unbindModalClose = bindModalClose(this.editorElement, { onClose: () => this.close() });
     }
 
     bindEvents() {
@@ -270,7 +271,7 @@ export class FileEditor {
     }
 
     close() {
-        if (this.editorElement.style.display === 'none') {
+        if (!this.editorElement.open) {
             return;
         }
         if (this.editorView && this.editorView.state.doc.toString() !== this.savedContent && !window.confirm('Discard unsaved changes?')) return;

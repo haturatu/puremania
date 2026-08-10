@@ -55,7 +55,7 @@
         margin-bottom: 5px;
     }
 
-    .image-viewer .modal {
+    .image-viewer .dialog-panel {
         max-width: 100vw;
         max-height: 100vh;
         margin: 0;
@@ -193,7 +193,7 @@
 }
 
 @media (max-width: 968px) {
-  .editor-modal .modal {
+  .editor-modal .dialog-panel {
     max-width: 95%;
     max-height: 95%;
   }

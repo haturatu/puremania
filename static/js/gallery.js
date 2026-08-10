@@ -20,10 +20,10 @@ export class ImageViewer {
     
     createViewerElement() {
         const template = getTemplateContent(TEMPLATES.imageViewer);
-        const viewer = createModalOverlay({ className: 'image-viewer', hidden: true, content: template });
+        const viewer = createModalOverlay({ className: 'image-viewer', content: template });
         this.viewerElement = viewer;
         this.imageElement = viewer.querySelector('img');
-        this.titleElement = viewer.querySelector('.modal-title');
+        this.titleElement = viewer.querySelector('.dialog-title');
         this.nameElement = viewer.querySelector('.image-name');
         this.sizeElement = viewer.querySelector('.image-size');
         this.prevButton = viewer.querySelector('.prev');
@@ -75,7 +75,7 @@ export class ImageViewer {
         }
         
         this.showImage(this.currentImageIndex);
-        showModalOverlay(this.viewerElement, { initialFocus: this.viewerElement.querySelector('.modal-close') });
+        showModalOverlay(this.viewerElement, { initialFocus: this.viewerElement.querySelector('.dialog-close') });
         this.isOpen = true;
         document.body.style.overflow = 'hidden';
         this.showNavButtons();

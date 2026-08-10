@@ -1,9 +1,9 @@
 /* Editor Modal */
 .editor-modal {
-    /* Uses .modal-overlay styles for backdrop */
+    /* Uses dialog::backdrop for the modal backdrop */
 }
 
-.editor-modal .modal {
+.editor-modal .dialog-panel {
     width: 90vw;
     height: 90vh;
     max-width: 1600px; /* Add a max-width for very large screens */
@@ -15,7 +15,7 @@
 }
 
 /* Editor Header */
-.editor-modal .modal-header {
+.editor-modal .dialog-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -37,7 +37,7 @@
 }
 
 /* Editor Body */
-.editor-modal .modal-body {
+.editor-modal .dialog-body {
     padding: 0;
     flex-grow: 1; /* Allow body to fill available space */
     overflow: hidden; /* CM scroller will handle scrolling */

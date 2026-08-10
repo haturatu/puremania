@@ -1,13 +1,7 @@
-export function createModalOverlay({ className = '', hidden = false, content = null } = {}) {
-    const modal = document.createElement('div');
-    modal.className = `modal-overlay${className ? ` ${className}` : ''}`;
-    modal.setAttribute('role', 'dialog');
-    modal.setAttribute('aria-modal', 'true');
+export function createModalOverlay({ className = '', content = null } = {}) {
+    const modal = document.createElement('dialog');
+    modal.className = `dialog-overlay${className ? ` ${className}` : ''}`;
     modal.tabIndex = -1;
-    if (hidden) {
-        modal.style.display = 'none';
-        modal.setAttribute('aria-hidden', 'true');
-    }
 
     if (typeof content === 'string') {
         modal.innerHTML = content;
@@ -15,9 +9,9 @@ export function createModalOverlay({ className = '', hidden = false, content = n
         modal.appendChild(content);
     }
 
-    const title = modal.querySelector('.modal-title, .editor-title, h1, h2');
+    const title = modal.querySelector('.dialog-title, .editor-title, h1, h2');
     if (title) {
-        title.id ||= `modal-title-${createUniqueId()}`;
+        title.id ||= `dialog-title-${createUniqueId()}`;
         modal.setAttribute('aria-labelledby', title.id);
     } else {
         modal.setAttribute('aria-label', 'Dialog');
@@ -36,16 +30,14 @@ const focusableSelector = [
 export function showModalOverlay(modal, { initialFocus = null } = {}) {
     if (!modal) return;
     modal._previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    modal.style.display = 'flex';
-    modal.setAttribute('aria-hidden', 'false');
+    if (!modal.open) modal.showModal();
     const target = initialFocus || modal.querySelector(focusableSelector) || modal;
     requestAnimationFrame(() => target.focus());
 }
 
 export function hideModalOverlay(modal) {
     if (!modal) return;
-    modal.style.display = 'none';
-    modal.setAttribute('aria-hidden', 'true');
+    if (modal.open) modal.close();
     const previousFocus = modal._previousFocus;
     modal._previousFocus = null;
     if (previousFocus?.isConnected) previousFocus.focus();
@@ -56,38 +48,19 @@ export function bindModalClose(modal, { onClose, closeOnBackdrop = false } = {})
         return () => {};
     }
 
-    const closeButtons = Array.from(modal.querySelectorAll('.modal-close'));
+    const closeButtons = Array.from(modal.querySelectorAll('.dialog-close'));
     const clickHandler = (e) => {
         e.preventDefault();
         onClose(e);
     };
 
-    const keydownHandler = (event) => {
-        if (event.key === 'Escape') {
-            event.preventDefault();
-            onClose(event);
-            return;
-        }
-        if (event.key !== 'Tab') return;
-        const focusable = [...modal.querySelectorAll(focusableSelector)];
-        if (!focusable.length) {
-            event.preventDefault();
-            modal.focus();
-            return;
-        }
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-            event.preventDefault();
-            last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault();
-            first.focus();
-        }
+    const cancelHandler = (event) => {
+        event.preventDefault();
+        onClose(event);
     };
 
     closeButtons.forEach(btn => btn.addEventListener('click', clickHandler));
-    modal.addEventListener('keydown', keydownHandler);
+    modal.addEventListener('cancel', cancelHandler);
 
     let backdropHandler = null;
     if (closeOnBackdrop) {
@@ -101,7 +74,7 @@ export function bindModalClose(modal, { onClose, closeOnBackdrop = false } = {})
 
     return () => {
         closeButtons.forEach(btn => btn.removeEventListener('click', clickHandler));
-        modal.removeEventListener('keydown', keydownHandler);
+        modal.removeEventListener('cancel', cancelHandler);
         if (backdropHandler) {
             modal.removeEventListener('click', backdropHandler);
         }
