@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { Uploader } from './uploader.js';
+import { AdaptiveUploadController, Uploader } from './uploader.js';
 
 function mockFile(contents) {
     const bytes = new TextEncoder().encode(contents);
@@ -28,4 +28,15 @@ test('file fingerprints work without Web Crypto', async () => {
     } finally {
         Object.defineProperty(globalThis, 'crypto', cryptoDescriptor);
     }
+});
+
+test('server concurrency capacity of one is not raised to the client minimum', () => {
+    const controller = new AdaptiveUploadController();
+    controller.target = 2;
+    controller.record({ bytes: 1, elapsed: 1, capacity: 1, active: 1 });
+    controller.lastDecisionAt = performance.now() - 2000;
+
+    assert.equal(controller.adjust(), 1);
+    assert.equal(controller.serverCap, 1);
+    assert.equal(controller.serverActive, 1);
 });

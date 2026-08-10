@@ -310,11 +310,12 @@ func (h *Handler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 	// network saturation without coupling correctness to a specific algorithm.
 	w.Header().Set("Upload-Queue-Delay", strconv.FormatInt(queueDelay.Milliseconds(), 10))
 	w.Header().Set("Upload-Write-Time", strconv.FormatInt(writeTime.Milliseconds(), 10))
-	available := cap(h.uploadGate) - len(h.uploadGate) + 1
-	if available < 1 {
-		available = 1
-	}
-	w.Header().Set("Upload-Recommend-Concurrency", strconv.Itoa(available))
+	// Report the gate's fixed capacity and the occupancy at this response's
+	// write point separately. The previous recommendation header mixed the two
+	// values, causing clients to mistake instantaneous free capacity for a
+	// server-wide concurrency limit.
+	w.Header().Set("Upload-Concurrency-Capacity", strconv.Itoa(cap(h.uploadGate)))
+	w.Header().Set("Upload-Concurrency-Active", strconv.Itoa(len(h.uploadGate)))
 	session.UploadedBytes += written
 	if err := h.writeUploadSession(session); err != nil {
 		h.respondError(w, "Cannot persist upload progress", http.StatusInternalServerError)
