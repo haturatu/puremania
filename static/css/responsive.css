@@ -69,11 +69,11 @@
     }
     
     .image-nav.prev {
-        left: 10px;
+        inset-inline-start: 10px;
     }
     
     .image-nav.next {
-        right: 10px;
+        inset-inline-end: 10px;
     }
     
     .image-info {
@@ -92,7 +92,7 @@
   
   .sidebar {
     width: 100%;
-    border-right: none;
+    border-inline-end: none;
     border-bottom: 1px solid var(--border-color);
   }
   
@@ -199,9 +199,9 @@
   }
 
   .editor-textarea {
-    min-height: 40rem;
-    min-width: 20rem;
-    font-size: 10px;
+    min-height: clamp(24rem, 70vh, 40rem);
+    min-width: clamp(16rem, 35vw, 20rem);
+    font-size: clamp(12px, 1vw + 9px, 15px);
   }
 
   .toolbar {

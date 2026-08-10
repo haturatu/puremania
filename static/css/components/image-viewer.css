@@ -72,11 +72,11 @@
 }
 
 .image-nav.prev {
-  left: 20px;
+  inset-inline-start: 20px;
 }
 
 .image-nav.next {
-  right: 20px;
+  inset-inline-end: 20px;
 }
 
 .image-info {
@@ -124,8 +124,8 @@
 /* ズーム機能のためのスタイル */
 .image-zoom-controls {
     position: absolute;
-    bottom: 20px;
-    right: 20px;
+    inset-block-end: 20px;
+    inset-inline-end: 20px;
     display: flex;
     gap: 10px;
     z-index: 10;
@@ -163,9 +163,8 @@
 
 .image-viewer.fullscreen .dialog-header {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
+    inset-block-start: 0;
+    inset-inline: 0;
     z-index: 100;
 }
 
@@ -175,9 +174,8 @@
 
 .image-viewer.fullscreen .image-info {
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    inset-block-end: 0;
+    inset-inline: 0;
     z-index: 100;
 }
 
