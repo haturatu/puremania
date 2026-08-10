@@ -23,13 +23,16 @@
 </div>
 <div id="toast-container"></div>
 <div id="loading-overlay" style="display: none;" aria-hidden="true"><div class="loading-spinner"></div></div>
-<div id="aria2c-status-modal" class="modal" style="display: none;">
-    <div class="modal-content">
-        <div class="modal-header"><h2>Aria2c Downloads</h2><span class="close-button">&times;</span></div>
-        <div class="modal-body">
-            <div id="aria2c-active-downloads"><h3>Active</h3><div class="download-list"></div></div>
-            <div id="aria2c-waiting-downloads"><h3>Waiting</h3><div class="download-list"></div></div>
-            <div id="aria2c-stopped-downloads"><h3>Stopped/Finished</h3><div class="download-list"></div></div>
-        </div>
+<dialog id="aria2cStatusDialog" class="aria2c-dialog" aria-labelledby="aria2c-status-title">
+    <header class="aria2c-dialog__header">
+        <h2 id="aria2c-status-title">Aria2c Downloads</h2>
+        <form method="dialog">
+            <button class="dialog-close" type="submit" aria-label="Close">&times;</button>
+        </form>
+    </header>
+    <div class="aria2c-dialog__body">
+        <div id="aria2c-active-downloads"><h3>Active</h3><div class="download-list"></div></div>
+        <div id="aria2c-waiting-downloads"><h3>Waiting</h3><div class="download-list"></div></div>
+        <div id="aria2c-stopped-downloads"><h3>Stopped/Finished</h3><div class="download-list"></div></div>
     </div>
-</div>
+</dialog>

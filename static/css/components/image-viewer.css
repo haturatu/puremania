@@ -5,7 +5,7 @@
   height: 100%;
 }
 
-.image-viewer .modal {
+.image-viewer .dialog-panel {
     max-width: 95vw;
     max-height: 95vh;
     width: auto;
@@ -14,14 +14,14 @@
     flex-direction: column;
 }
 
-.image-viewer .modal-header {
+.image-viewer .dialog-header {
     flex-shrink: 0;
     padding: 15px 20px;
     border-bottom: 1px solid var(--border-color);
     background-color: var(--bg-secondary);
 }
 
-.image-viewer .modal-body {
+.image-viewer .dialog-body {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -152,7 +152,7 @@
 }
 
 /* フルスクリーンモード */
-.image-viewer.fullscreen .modal {
+.image-viewer.fullscreen .dialog-panel {
     max-width: 100vw;
     max-height: 100vh;
     width: 100vw;
@@ -161,7 +161,7 @@
     border-radius: 0;
 }
 
-.image-viewer.fullscreen .modal-header {
+.image-viewer.fullscreen .dialog-header {
     position: fixed;
     top: 0;
     left: 0;
@@ -169,7 +169,7 @@
     z-index: 100;
 }
 
-.image-viewer.fullscreen .modal-body {
+.image-viewer.fullscreen .dialog-body {
     padding-top: 60px; /* ヘッダーの高さ分 */
 }
 
@@ -181,7 +181,7 @@
     z-index: 100;
 }
 
-.modal-header .modal-actions .zoom-btn {
+.dialog-header .dialog-actions .zoom-btn {
     display: none;
 }
 
@@ -206,7 +206,7 @@
 }
 
 /* フルスクリーン時のズームコントロールだけ右下に固定 */
-.modal-overlay.fullscreen .image-container > .image-zoom-controls {
+.dialog-overlay.fullscreen .image-container > .image-zoom-controls {
     position: absolute;
     bottom: 70px;   /* 下からの距離 */
     right: 20px;    /* 右からの距離 */
@@ -219,7 +219,7 @@
 }
 
 /* ボタン自体のサイズや見た目を微調整 */
-.modal-overlay.fullscreen .image-container > .image-zoom-controls .zoom-btn {
+.dialog-overlay.fullscreen .image-container > .image-zoom-controls .zoom-btn {
     font-size: 18px;
     color: #fff;
     background: none;

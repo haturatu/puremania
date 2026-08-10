@@ -619,21 +619,21 @@ export class MediaPlayer {
         const modal = createModalOverlay({
             className: 'video-modal',
             content: `
-            <div class="modal">
-                <div class="modal-header">
+            <div class="dialog-panel">
+                <div class="dialog-header">
                     <div class="video-modal-header-main">
-                        <div class="modal-title"></div>
+                        <div class="dialog-title"></div>
                         <div class="video-modal-meta">Esc: close / Space: play-pause / ← →: seek 5s</div>
                     </div>
-                    <button class="modal-close">&times;</button>
+                    <button class="dialog-close" type="button" aria-label="Close">&times;</button>
                 </div>
-                <div class="modal-body video-modal-body">
+                <div class="dialog-body video-modal-body">
                     <video class="video-modal-player" controls autoplay playsinline></video>
                 </div>
             </div>
         `
         });
-        const title = modal.querySelector('.modal-title');
+        const title = modal.querySelector('.dialog-title');
         title.textContent = fileName;
         title.title = fileName;
         const video = modal.querySelector('video');

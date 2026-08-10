@@ -308,7 +308,7 @@ export class SearchHandler {
 
     createSearchModal() {
         const template = getTemplateContent(TEMPLATES.searchModal);
-        const modal = createModalOverlay({ className: 'search-modal', hidden: true, content: template });
+        const modal = createModalOverlay({ className: 'search-modal', content: template });
         this.searchModal = modal;
 
         modal.querySelector('#search-apply').addEventListener('click', () => {
@@ -330,7 +330,7 @@ export class SearchHandler {
 
     toggleSearchOptions() {
         if (this.searchModal) {
-            if (this.searchModal.style.display === 'none') {
+            if (!this.searchModal.open) {
                 showModalOverlay(this.searchModal);
             } else {
                 hideModalOverlay(this.searchModal);

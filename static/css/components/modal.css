@@ -1,18 +1,30 @@
-/* Modal Styles */
-.modal-overlay {
+/* Native dialog styles */
+dialog.dialog-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
 }
 
-.modal {
+dialog.dialog-overlay:not([open]) {
+  display: none;
+}
+
+dialog.dialog-overlay::backdrop {
+  background: rgb(0 0 0 / 70%);
+  backdrop-filter: blur(2px);
+}
+
+.dialog-panel {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -22,7 +34,7 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
-.modal-header {
+.dialog-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -31,17 +43,17 @@
     color: white;
 }
 
-.modal-title {
+.dialog-title {
     font-size: 1rem;
     font-weight: bold;
 }
 
-.modal-actions {
+.dialog-actions {
     display: flex;
     gap: 8px; /* ボタン間のスペース */
 }
 
-.modal-actions > button {
+.dialog-actions > button {
     background-color: rgba(0,0,0,0.6);
     border: none;
     color: white;
@@ -56,12 +68,12 @@
     transition: all 0.2s ease;
 }
 
-.modal-actions > button:hover {
+.dialog-actions > button:hover {
     background-color: rgba(255,255,255,0.2);
     transform: scale(1.1);
 }
 
-.modal-close {
+.dialog-close {
   background: none;
   border: none;
   color: var(--text-secondary);
@@ -72,16 +84,16 @@
   height: 30px;
 }
 
-.modal-close:hover {
+.dialog-close:hover {
   color: var(--accent-primary);
 }
 
-.modal-body {
+.dialog-body {
   padding: 10px;
   overflow: auto;
 }
 
-.modal-footer {
+.dialog-footer {
   padding: 15px 20px;
   border-top: 1px solid var(--border-color);
   display: flex;
@@ -149,15 +161,44 @@
   gap: 10px;
 }
 
-/* Aria2c Download Modal */
-#aria2c-status-modal .modal-content {
-    width: 800px;
+.aria2c-dialog {
+    width: min(800px, calc(100vw - 32px));
     max-width: 95vw;
+    max-height: 90vh;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: 0 20px 40px rgb(0 0 0 / 35%);
 }
 
-#aria2c-status-modal .modal-body {
+.aria2c-dialog::backdrop {
+    background: rgb(0 0 0 / 65%);
+    backdrop-filter: blur(2px);
+}
+
+.aria2c-dialog__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.aria2c-dialog__header h2 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.aria2c-dialog__header form {
+    margin: 0;
+}
+
+.aria2c-dialog__body {
     max-height: 70vh;
     overflow-y: auto;
+    padding: 10px;
 }
 
 .download-list {
