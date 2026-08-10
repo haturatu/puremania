@@ -140,7 +140,6 @@ export class ProgressManager {
 
         const elements = {
             current: this.progressOverlay.querySelector('.progress-current'),
-            barFill: this.progressOverlay.querySelector('.ui-progress__fill'),
             progressBar: this.progressOverlay.querySelector('.ui-progress'),
             percentage: this.progressOverlay.querySelector('.progress-percentage'),
             stats: this.progressOverlay.querySelector('.progress-stats'),
@@ -148,8 +147,10 @@ export class ProgressManager {
         };
 
         if (elements.current) elements.current.textContent = currentFile;
-        if (elements.barFill) elements.barFill.style.width = percentageText;
-        if (elements.progressBar) elements.progressBar.setAttribute('aria-valuenow', String(Math.round(safePercentage)));
+        if (elements.progressBar) {
+            elements.progressBar.value = safePercentage;
+            elements.progressBar.textContent = percentageText;
+        }
         if (elements.percentage) elements.percentage.textContent = percentageText;
         if (elements.stats) elements.stats.textContent = statsText;
         if (elements.status && status) elements.status.textContent = status;

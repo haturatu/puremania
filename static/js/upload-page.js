@@ -104,7 +104,9 @@ export class UploadPageHandler {
         row.querySelector('.file-name').textContent = name;
         row.querySelector('.file-name').title = job.relativePath;
         row.querySelector('.file-size').textContent = this.app.ui.formatFileSize(total);
-        row.querySelector('.ui-progress__fill').style.width = `${progress.toFixed(2)}%`;
+        const progressBar = row.querySelector('.ui-progress');
+        progressBar.value = progress;
+        progressBar.textContent = `${progress.toFixed(2)}%`;
         row.querySelector('.progress-text').textContent = `${progress.toFixed(2)}%`;
         row.querySelector('.status').textContent = job.state;
         row.querySelector('.upload-destination').textContent = job.destination;
