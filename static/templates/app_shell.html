@@ -1,21 +1,40 @@
 <div class="app-container">
-    <div class="sidebar">
+    <aside class="sidebar">
         <div class="logo"><h1>Pure Mania</h1></div>
-        <div class="nav-item active" data-path="/"><i>📁</i><span>Home</span></div>
-        <div id="specific-dirs-container"></div>
-        <div class="nav-item" id="upload-status-btn" data-path="/system/uploads"><i>⇧</i><span>Uploads</span></div>
-        <div class="nav-item" id="aria2c-status-btn" data-path="/system/aria2c"><span>aria2c</span></div>
+        <nav class="file-navigation" aria-label="File manager">
+            <a href="/" class="nav-item active" data-path="/" aria-current="page">
+                <span class="nav-icon" aria-hidden="true">📁</span><span>Home</span>
+            </a>
+            <div id="specific-dirs-container"></div>
+            <a href="/system/uploads" class="nav-item" id="upload-status-btn" data-path="/system/uploads">
+                <span class="nav-icon" aria-hidden="true">⇧</span><span>Uploads</span>
+            </a>
+            <a href="/system/aria2c" class="nav-item" id="aria2c-status-btn" data-path="/system/aria2c">
+                <span class="nav-icon" aria-hidden="true">⇩</span><span>aria2c</span>
+            </a>
+        </nav>
         <div class="storage-info">
             <div class="storage-text"><span id="storage-used">0 B</span> / <span id="storage-total">0 B</span></div>
-            <div class="storage-progress"><div id="storage-progress-inner" style="width: 0%"></div></div>
+            <progress class="storage-progress" id="storage-progress" value="0" max="100" aria-label="Storage usage">0%</progress>
         </div>
-    </div>
+    </aside>
     <div class="main-content">
         <div class="header">
             <div class="breadcrumb"><span class="breadcrumb-item" data-path="/">Root</span></div>
             <div class="search-container">
-                <input type="text" class="search-input" placeholder="Search...">
-                <div class="search-options" title="Search options">⚙️</div>
+                <input
+                    type="search"
+                    class="search-input"
+                    placeholder="Search…"
+                    autocomplete="off"
+                    enterkeyhint="search"
+                    spellcheck="false"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-controls="cdCompletion"
+                    aria-expanded="false"
+                >
+                <button class="search-options" type="button" title="Search options" aria-label="Search options">⚙️</button>
             </div>
         </div>
         <div class="file-browser"></div>

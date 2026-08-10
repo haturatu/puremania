@@ -12,19 +12,36 @@
   border-radius: 4px;
   padding: 3px;
   width: fit-content;
+  border: 0;
 }
 
-.view-toggle-btn {
+.view-toggle-legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.view-toggle-option {
   padding: 5px 15px;
-  border: none;
-  background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   border-radius: 3px;
   font-family: 'Courier New', monospace;
 }
 
-.view-toggle-btn.active {
+.view-toggle-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.view-toggle-option:has(.view-toggle-input:checked) {
   background-color: var(--bg-tertiary);
   color: var(--accent-primary);
 }

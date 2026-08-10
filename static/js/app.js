@@ -106,10 +106,14 @@ class FileManagerApp {
         try {
             if (result.success) {
                 const info = result.data;
-                const usagePercentage = (info.used / info.total) * 100;
+                const usagePercentage = info.total > 0
+                    ? Math.min(100, Math.max(0, (info.used / info.total) * 100))
+                    : 0;
                 document.getElementById('storage-used').textContent = this.ui.formatFileSize(info.used);
                 document.getElementById('storage-total').textContent = this.ui.formatFileSize(info.total);
-                document.getElementById('storage-progress-inner').style.width = `${usagePercentage}%`;
+                const progress = document.getElementById('storage-progress');
+                progress.value = usagePercentage;
+                progress.textContent = `${Math.round(usagePercentage)}%`;
             } else {
                 console.error('Could not update storage info', result.message);
             }
