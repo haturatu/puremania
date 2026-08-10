@@ -7,6 +7,7 @@ export class EventHandler {
         document.addEventListener('click', (e) => this.handleClick(e));
         document.addEventListener('dblclick', (e) => this.handleDoubleClick(e));
         document.addEventListener('keydown', (e) => this.handleKeydown(e));
+        document.addEventListener('change', (e) => this.handleChange(e));
 
         const fileBrowser = document.querySelector('.file-browser');
         if (fileBrowser) {
@@ -56,12 +57,6 @@ export class EventHandler {
             return;
         }
         
-        // View toggle buttons
-        if (e.target.matches('.view-toggle-btn')) {
-            this.app.ui.setViewMode(e.target.dataset.view);
-            return;
-        }
-
         if (e.target.id === 'toggle-file-browser-extensions-btn') {
             this.app.ui.toggleFileBrowserExtensions();
             return;
@@ -71,6 +66,12 @@ export class EventHandler {
         if (e.target.matches('.toolbar-btn')) {
             this.handleToolbarClick(e.target);
             return;
+        }
+    }
+
+    handleChange(e) {
+        if (e.target.matches('.view-toggle-input')) {
+            this.app.ui.setViewMode(e.target.value);
         }
     }
 

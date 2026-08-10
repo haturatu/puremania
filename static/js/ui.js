@@ -180,30 +180,40 @@ export class UIManager {
     }
 
     createViewToggle(hasMasonrySupport = false, hasVideoSupport = false) {
-        const viewToggle = document.createElement('div');
+        const viewToggle = document.createElement('fieldset');
         viewToggle.className = 'view-toggle';
+        const legend = document.createElement('legend');
+        legend.className = 'view-toggle-legend';
+        legend.textContent = 'View mode';
+        viewToggle.appendChild(legend);
         const template = getTemplateContent(TEMPLATES.viewToggle);
         
-        const activeBtn = template.querySelector(`[data-view="${this.viewMode}"]`);
+        const activeBtn = template.querySelector(`input[value="${this.viewMode}"]`);
         if (activeBtn) {
-            activeBtn.classList.add('active');
+            activeBtn.checked = true;
         }
 
         if (hasMasonrySupport) {
-            const masonryBtn = document.createElement('button');
-            masonryBtn.className = 'view-toggle-btn';
-            masonryBtn.dataset.view = 'masonry';
-            masonryBtn.textContent = 'Masonry';
+            const masonryOption = document.createElement('label');
+            masonryOption.className = 'view-toggle-option';
+            const masonryInput = document.createElement('input');
+            masonryInput.className = 'view-toggle-input';
+            masonryInput.type = 'radio';
+            masonryInput.name = 'view-mode';
+            masonryInput.value = 'masonry';
+            const masonryLabel = document.createElement('span');
+            masonryLabel.textContent = 'Masonry';
+            masonryOption.append(masonryInput, masonryLabel);
             if (this.viewMode === 'masonry') {
-                masonryBtn.classList.add('active');
+                masonryInput.checked = true;
             }
-            template.appendChild(masonryBtn);
+            template.appendChild(masonryOption);
         }
 
         if (!hasVideoSupport) {
-            const videoBtn = template.querySelector('[data-view="video"]');
+            const videoBtn = template.querySelector('input[value="video"]');
             if (videoBtn) {
-                videoBtn.remove();
+                videoBtn.closest('.view-toggle-option')?.remove();
             }
         }
 
@@ -554,7 +564,10 @@ export class UIManager {
         template.querySelector('.file-icon').className = `file-icon ${this.getFileIconClass(file)}`;
         template.querySelector('.file-name').textContent = file.name;
         template.querySelector('.file-size').textContent = file.is_dir ? '-' : this.formatFileSize(file.size);
-        template.querySelector('.file-mod-time').textContent = new Date(file.mod_time).toLocaleString();
+        const modified = new Date(file.mod_time);
+        const modifiedTime = template.querySelector('.file-mod-time');
+        modifiedTime.textContent = modified.toLocaleString();
+        if (!Number.isNaN(modified.getTime())) modifiedTime.dateTime = modified.toISOString();
         template.querySelector('.file-mime-type').textContent = file.is_dir ? 'Folder' : (file.mime_type || 'Unknown');
         
         const actionsContainer = template.querySelector('.file-actions');
@@ -779,13 +792,14 @@ export class UIManager {
         const iconMap = { 'Documents': '📄', 'Images': '🖼️', 'Music': '🎵', 'Videos': '🎬', 'Downloads': '📥', 'default': '📂' };
 
         dirs.forEach(dir => {
-            const navItem = document.createElement('div');
+            const navItem = document.createElement('a');
             navItem.className = 'nav-item';
             navItem.dataset.path = dir.path;
+            navItem.href = dir.path;
             
             const template = getTemplateContent(TEMPLATES.navItem);
-            template.querySelector('i').textContent = iconMap[dir.name] || iconMap['default'];
-            template.querySelector('span').textContent = dir.name;
+            template.querySelector('.nav-icon').textContent = iconMap[dir.name] || iconMap['default'];
+            template.querySelector('.nav-label').textContent = dir.name;
             navItem.appendChild(template);
             
             container.appendChild(navItem);
@@ -793,9 +807,15 @@ export class UIManager {
     }
 
     updateSidebarActiveState(path) {
-        document.querySelectorAll('.sidebar .nav-item.active').forEach(item => item.classList.remove('active'));
+        document.querySelectorAll('.sidebar .nav-item').forEach(item => {
+            item.classList.remove('active');
+            item.removeAttribute('aria-current');
+        });
         const activeItem = [...document.querySelectorAll('.sidebar .nav-item')].find(item => item.dataset.path === path);
-        if (activeItem) activeItem.classList.add('active');
+        if (activeItem) {
+            activeItem.classList.add('active');
+            activeItem.setAttribute('aria-current', 'page');
+        }
     }
 
     updateAria2cVisibility(enabled) {
