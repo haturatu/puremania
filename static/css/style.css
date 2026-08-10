@@ -1,20 +1,22 @@
-@import url('base/variables.css');
-@import url('base/base.css');
+@layer reset, tokens, base, layout, components, utilities, responsive;
 
-@import url('layout/header.css');
-@import url('layout/sidebar.css');
+@import url('base/variables.css') layer(tokens);
+@import url('base/base.css') layer(base);
 
-@import url('components/buttons.css');
-@import url('components/modal.css');
-@import url('components/file-browser.css');
-@import url('components/media-player.css');
-@import url('components/image-viewer.css');
-@import url('components/search.css');
-@import url('components/toast.css');
-@import url('components/editor.css');
-@import url('components/context-menu.css');
-@import url('components/progress.css');
-@import url('components/upload.css');
-@import url('components/aria2c.css');
+@import url('layout/header.css') layer(layout);
+@import url('layout/sidebar.css') layer(layout);
 
-@import url('responsive.css');
+@import url('components/buttons.css') layer(components);
+@import url('components/modal.css') layer(components);
+@import url('components/file-browser.css') layer(components);
+@import url('components/media-player.css') layer(components);
+@import url('components/image-viewer.css') layer(components);
+@import url('components/search.css') layer(components);
+@import url('components/toast.css') layer(components);
+@import url('components/editor.css') layer(components);
+@import url('components/context-menu.css') layer(components);
+@import url('components/progress.css') layer(components);
+@import url('components/upload.css') layer(components);
+@import url('components/aria2c.css') layer(components);
+
+@import url('responsive.css') layer(responsive);
