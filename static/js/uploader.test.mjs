@@ -40,3 +40,23 @@ test('server concurrency capacity of one is not raised to the client minimum', (
     assert.equal(controller.serverCap, 1);
     assert.equal(controller.serverActive, 1);
 });
+
+test('AIMD increases through marginal throughput gains', () => {
+    const controller = new AdaptiveUploadController();
+    controller.record({ bytes: 100, elapsed: 1000 });
+    controller.lastDecisionAt = performance.now() - 2000;
+    assert.equal(controller.adjust(), 3);
+
+    controller.record({ bytes: 104, elapsed: 1000 });
+    controller.lastDecisionAt = performance.now() - 2000;
+    assert.equal(controller.adjust(), 4);
+});
+
+test('AIMD applies multiplicative decrease on congestion', () => {
+    const controller = new AdaptiveUploadController();
+    controller.target = 10;
+    controller.congested = true;
+    controller.lastDecisionAt = performance.now() - 2000;
+
+    assert.equal(controller.adjust(), 7);
+});

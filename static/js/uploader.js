@@ -2,6 +2,8 @@
 // request owns only one Blob slice. IndexedDB stores session metadata only.
 const CHUNK_SIZE = 8 * 1024 * 1024;
 const MIN_CONCURRENT_FILES = 2;
+const AIMD_DECISION_INTERVAL_MS = 1500;
+const AIMD_DECREASE_FACTOR = 0.7;
 // 1 Gbps / many 1 MiB objects benefits from overlapping request lifecycle
 // latency. AIMD normally settles below this ceiling when disk or network
 // contention appears.
@@ -103,7 +105,6 @@ class AdaptiveUploadController {
     constructor() {
         this.target = MIN_CONCURRENT_FILES;
         this.speedEWMA = 0;
-        this.lastDecisionSpeed = 0;
         this.lastDecisionAt = performance.now();
         this.serverCap = MAX_CONCURRENT_FILES;
         this.congested = false;
@@ -126,20 +127,21 @@ class AdaptiveUploadController {
 
     adjust() {
         const now = performance.now();
-        if (now - this.lastDecisionAt < 1500) return this.target;
+        if (now - this.lastDecisionAt < AIMD_DECISION_INTERVAL_MS) return this.target;
         const heap = performance.memory;
         const memoryPressure = heap && heap.jsHeapSizeLimit > 0 && heap.usedJSHeapSize / heap.jsHeapSizeLimit > 0.80;
         const ceiling = Math.min(MAX_CONCURRENT_FILES, this.serverCap);
         const floor = Math.min(MIN_CONCURRENT_FILES, ceiling);
         if (this.congested || memoryPressure) {
-            this.target = Math.max(floor, Math.floor(this.target * 0.7));
+            this.target = Math.max(floor, Math.floor(this.target * AIMD_DECREASE_FACTOR));
         } else if (this.target > ceiling) {
             this.target = ceiling;
-        } else if (this.target < ceiling &&
-                   (this.lastDecisionSpeed === 0 || this.speedEWMA >= this.lastDecisionSpeed * 1.07)) {
+        } else if (this.target < ceiling) {
+            // Canonical AIMD: increase additively whenever no congestion
+            // signal is present. The EWMA remains useful for telemetry, but
+            // it must not gate progress on an arbitrary 7% improvement.
             this.target++;
         }
-        this.lastDecisionSpeed = this.speedEWMA;
         this.lastDecisionAt = now;
         this.congested = false;
         return this.target;
