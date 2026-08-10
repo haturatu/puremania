@@ -10,27 +10,27 @@
   max-width: min(20rem, calc(100vw - 1rem));
   margin: 0;
   padding: 4px;
-}
 
-.context-menu-item {
-  display: block;
-  width: 100%;
-  padding: 10px 12px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: start;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-}
+  & .context-menu-item {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: start;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
 
-.context-menu-item:hover {
-  background-color: var(--accent-primary);
-  color: var(--bg-primary);
-}
+    &:hover {
+      background-color: var(--accent-primary);
+      color: var(--bg-primary);
+    }
+  }
 
-.context-menu-divider {
-  height: 1px;
-  background-color: var(--border-color);
-  margin-block: 5px;
+  & .context-menu-divider {
+    height: 1px;
+    background-color: var(--border-color);
+    margin-block: 5px;
+  }
 }

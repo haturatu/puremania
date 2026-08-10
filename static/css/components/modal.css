@@ -220,39 +220,39 @@ dialog.dialog-overlay::backdrop {
         "name controls"
         "status status"
         "progress progress";
-}
 
-.download-name {
-    grid-area: name;
-    font-weight: bold;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
+    .download-name {
+        grid-area: name;
+        font-weight: bold;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
 
-.download-status {
-    grid-area: status;
-    font-size: 0.8em;
-    color: var(--text-secondary);
-    display: flex;
-    justify-content: space-between;
-}
+    .download-status {
+        grid-area: status;
+        font-size: 0.8em;
+        color: var(--text-secondary);
+        display: flex;
+        justify-content: space-between;
+    }
 
-.download-item .ui-progress {
-    grid-area: progress;
-    height: 10px;
-}
+    .ui-progress {
+        grid-area: progress;
+        height: 10px;
 
-.download-item .ui-progress__fill {
-    transition: width 0.3s ease;
-}
+        .ui-progress__fill {
+            transition: width 0.3s ease;
+        }
+    }
 
-.download-controls {
-    grid-area: controls;
-    display: flex;
-    gap: 5px;
-}
+    .download-controls {
+        grid-area: controls;
+        display: flex;
+        gap: 5px;
 
-.download-controls .btn {
-    padding: 2px 6px;
+        .btn {
+            padding: 2px 6px;
+        }
+    }
 }
