@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"puremania/types"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -56,6 +57,17 @@ func TestUploadChunkOversizeRetryCannotLeaveTail(t *testing.T) {
 	h.UploadChunk(ok, retry)
 	if ok.Code != http.StatusOK {
 		t.Fatalf("retry status = %d, body = %s", ok.Code, ok.Body.String())
+	}
+	capacity, err := strconv.Atoi(ok.Header().Get("Upload-Concurrency-Capacity"))
+	if err != nil || capacity < 1 {
+		t.Fatalf("invalid upload concurrency capacity header: %q", ok.Header().Get("Upload-Concurrency-Capacity"))
+	}
+	active, err := strconv.Atoi(ok.Header().Get("Upload-Concurrency-Active"))
+	if err != nil || active < 1 || active > capacity {
+		t.Fatalf("invalid upload concurrency active header: %q (capacity=%d)", ok.Header().Get("Upload-Concurrency-Active"), capacity)
+	}
+	if legacy := ok.Header().Get("Upload-Recommend-Concurrency"); legacy != "" {
+		t.Fatalf("legacy ambiguous concurrency header is still present: %q", legacy)
 	}
 
 	complete := httptest.NewRecorder()

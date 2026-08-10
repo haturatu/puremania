@@ -109,10 +109,13 @@ class AdaptiveUploadController {
         this.congested = false;
     }
 
-    record({ bytes, elapsed, queueDelay = 0, writeTime = 0, recommendation }) {
+    record({ bytes, elapsed, queueDelay = 0, writeTime = 0, capacity = 0, active = 0 }) {
         const speed = elapsed > 0 ? bytes / elapsed * 1000 : 0;
         this.speedEWMA = this.speedEWMA ? this.speedEWMA * 0.75 + speed * 0.25 : speed;
-        if (recommendation > 0) this.serverCap = Math.max(MIN_CONCURRENT_FILES, Math.min(MAX_CONCURRENT_FILES, recommendation));
+        if (capacity > 0) {
+            this.serverCap = Math.max(1, Math.min(MAX_CONCURRENT_FILES, capacity));
+            this.serverActive = Math.max(0, active);
+        }
         // Queueing longer than the write itself is a server-side congestion signal.
         this.congested ||= queueDelay > 100 && queueDelay > writeTime;
     }
@@ -126,9 +129,13 @@ class AdaptiveUploadController {
         if (now - this.lastDecisionAt < 1500) return this.target;
         const heap = performance.memory;
         const memoryPressure = heap && heap.jsHeapSizeLimit > 0 && heap.usedJSHeapSize / heap.jsHeapSizeLimit > 0.80;
+        const ceiling = Math.min(MAX_CONCURRENT_FILES, this.serverCap);
+        const floor = Math.min(MIN_CONCURRENT_FILES, ceiling);
         if (this.congested || memoryPressure) {
-            this.target = Math.max(MIN_CONCURRENT_FILES, Math.floor(this.target * 0.7));
-        } else if (this.target < Math.min(MAX_CONCURRENT_FILES, this.serverCap) &&
+            this.target = Math.max(floor, Math.floor(this.target * 0.7));
+        } else if (this.target > ceiling) {
+            this.target = ceiling;
+        } else if (this.target < ceiling &&
                    (this.lastDecisionSpeed === 0 || this.speedEWMA >= this.lastDecisionSpeed * 1.07)) {
             this.target++;
         }
@@ -170,6 +177,8 @@ class UploadSessionStore {
         });
     }
 }
+
+export { AdaptiveUploadController };
 
 export class Uploader {
     constructor(app) {
@@ -454,7 +463,8 @@ export class Uploader {
                         elapsed: performance.now() - startedAt,
                         queueDelay: Number(xhr.getResponseHeader('Upload-Queue-Delay')) || 0,
                         writeTime: Number(xhr.getResponseHeader('Upload-Write-Time')) || 0,
-                        recommendation: Number(xhr.getResponseHeader('Upload-Recommend-Concurrency')) || 0
+                        capacity: Number(xhr.getResponseHeader('Upload-Concurrency-Capacity')) || 0,
+                        active: Number(xhr.getResponseHeader('Upload-Concurrency-Active')) || 0
                     });
                     try {
                         const result = JSON.parse(xhr.responseText);
