@@ -63,11 +63,21 @@ export class SearchHandler {
     createCompletionDropdown() {
         const dropdown = document.createElement('div');
         dropdown.className = 'cd-completion-dropdown';
-        dropdown.style.display = 'none';
+        dropdown.id = 'cdCompletion';
+        dropdown.setAttribute('popover', 'auto');
         const template = getTemplateContent(TEMPLATES.completionDropdown);
         dropdown.appendChild(template);
         document.querySelector('.search-container')?.appendChild(dropdown);
         this.completionDropdown = dropdown;
+
+        const searchInput = document.querySelector('.search-input');
+        searchInput?.setAttribute('aria-controls', dropdown.id);
+        dropdown.addEventListener('toggle', event => {
+            const open = event.newState === 'open';
+            this.isShowingCompletions = open;
+            searchInput?.setAttribute('aria-expanded', String(open));
+        });
+        if (typeof dropdown.showPopover !== 'function') dropdown.style.display = 'none';
     }
 
     setupFileOperationListeners() {
@@ -251,6 +261,8 @@ export class SearchHandler {
         completions.forEach((completion, index) => {
             const li = document.createElement('li');
             li.className = 'completion-item';
+            li.setAttribute('role', 'option');
+            li.setAttribute('aria-selected', 'false');
             const template = getTemplateContent(TEMPLATES.completionItem);
             template.querySelector('.completion-name').textContent = completion.name;
             template.querySelector('.completion-path').textContent = completion.fullPath;
@@ -275,7 +287,9 @@ export class SearchHandler {
 
     updateCompletionSelection() {
         this.completionDropdown.querySelectorAll('.completion-item').forEach((item, index) => {
-            item.classList.toggle('selected', index === this.selectedCompletionIndex);
+            const selected = index === this.selectedCompletionIndex;
+            item.classList.toggle('selected', selected);
+            item.setAttribute('aria-selected', String(selected));
         });
     }
 
@@ -293,14 +307,24 @@ export class SearchHandler {
 
     showCompletionsDropdown() {
         if (this.completionDropdown) {
-            this.completionDropdown.style.display = 'block';
+            if (typeof this.completionDropdown.showPopover === 'function') {
+                if (!this.completionDropdown.matches(':popover-open')) this.completionDropdown.showPopover();
+            } else {
+                this.completionDropdown.style.display = 'block';
+            }
+            document.querySelector('.search-input')?.setAttribute('aria-expanded', 'true');
             this.isShowingCompletions = true;
         }
     }
 
     hideCompletions() {
         if (this.completionDropdown) {
-            this.completionDropdown.style.display = 'none';
+            if (typeof this.completionDropdown.hidePopover === 'function') {
+                if (this.completionDropdown.matches(':popover-open')) this.completionDropdown.hidePopover();
+            } else {
+                this.completionDropdown.style.display = 'none';
+            }
+            document.querySelector('.search-input')?.setAttribute('aria-expanded', 'false');
             this.isShowingCompletions = false;
             this.selectedCompletionIndex = -1;
         }

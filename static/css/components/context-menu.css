@@ -1,16 +1,25 @@
-/* Context Menu */
+/* Popover-ready context menu component. */
 .context-menu {
   position: fixed;
+  inset: auto;
   background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  z-index: 1000;
-  min-width: 150px;
+  min-width: 200px;
+  max-width: min(20rem, calc(100vw - 1rem));
+  margin: 0;
+  padding: 4px;
 }
 
 .context-menu-item {
-  padding: 10px 15px;
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: start;
   cursor: pointer;
   transition: background-color 0.3s ease;
 }
@@ -23,16 +32,5 @@
 .context-menu-divider {
   height: 1px;
   background-color: var(--border-color);
-  margin: 5px 0;
-}
-
-/* コンテキストメニュー */
-.context-menu {
-  min-width: 200px;
-  display: none;
-}
-
-.context-menu-item {
-  padding: 12px 15px;
-  gap: 10px;
+  margin-block: 5px;
 }

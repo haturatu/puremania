@@ -223,9 +223,8 @@
 /* CD command completion dropdown */
 .cd-completion-dropdown {
     position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
+    inset-block-start: 100%;
+    inset-inline: 0;
     z-index: 1000;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -235,6 +234,31 @@
     overflow-y: auto;
     margin-top: 2px;
     animation: slideDown 0.15s ease-out;
+}
+
+@supports (anchor-name: --search-input) {
+    .search-input {
+        anchor-name: --search-input;
+    }
+}
+
+@supports (position-anchor: --search-input) {
+    .cd-completion-dropdown:popover-open {
+        position: fixed;
+        inset: auto;
+        position-anchor: --search-input;
+        inset-block-start: anchor(bottom);
+        inset-inline-start: anchor(left);
+        width: anchor-size(width);
+        max-width: calc(100vw - 2rem);
+    }
+}
+
+@supports (position-area: block-end) {
+    .cd-completion-dropdown:popover-open {
+        position-area: block-end span-inline-end;
+        inset: auto;
+    }
 }
 
 .completion-list {
