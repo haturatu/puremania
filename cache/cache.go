@@ -72,6 +72,13 @@ func Set(c *types.TTLCache, key string, data interface{}, size int64, ttl time.D
 	c.Mu.Lock()
 	defer c.Mu.Unlock()
 
+	// Entries larger than the cache cannot satisfy the cache's size
+	// invariant. Negative sizes would corrupt the accounting in the other
+	// direction, so reject both cases before evicting an existing value.
+	if size < 0 || size > c.MaxSize {
+		return
+	}
+
 	if _, exists := c.Entries[key]; exists {
 		evict(c, key)
 	}
