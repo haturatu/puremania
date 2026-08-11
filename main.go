@@ -54,7 +54,7 @@ func startAria2cDaemon(logger *slog.Logger) (rpcURL string, rpcToken string, err
 	cmd := exec.Command(
 		"aria2c",
 		"--enable-rpc",
-		"--rpc-listen-all=true",
+		"--rpc-listen-all=false",
 		"--rpc-listen-port", rpcPort,
 		"--rpc-secret", token,
 		"--no-conf",
