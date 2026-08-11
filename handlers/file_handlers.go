@@ -899,6 +899,11 @@ func (h *Handler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 	filename := filepath.Base(path)
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", contentDisposition(filename))
+	// User-controlled files may contain active content (SVG scripts, HTML, XML).
+	// Sandboxing the document makes it an opaque, script-free origin even when a
+	// browser navigates to the file directly, preventing stored XSS in the
+	// application's origin. The header is ignored by <img>/<video> embedding.
+	w.Header().Add("Content-Security-Policy", "sandbox")
 
 	// http.ServeContentを使用してsendfile最適化とRange/If-Modified-Since自動処理
 	http.ServeContent(w, r, filename, stat.ModTime(), file)
@@ -952,6 +957,9 @@ func (h *Handler) GetFileContent(w http.ResponseWriter, r *http.Request) {
 	// 画像ファイルの場合はhttp.ServeFileで最適化
 	if mimeType != "" && strings.HasPrefix(mimeType, "image/") {
 		w.Header().Set("Cache-Control", "max-age=3600")
+		// image/svg+xml is served here too; sandbox the document so inline
+		// scripts can never run in the application's origin.
+		w.Header().Add("Content-Security-Policy", "sandbox")
 		http.ServeContent(w, r, filepath.Base(path), stat.ModTime(), file)
 		return
 	}
