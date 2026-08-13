@@ -11,7 +11,7 @@ export class UploadMetadataStorage {
 
     async prepareOnce() {
         const storage = this.storageManager;
-        if (!storage) return { supported: false, persisted: false, usage: null, quota: null };
+        if (!storage) return { supported: false, persisted: false };
 
         let persisted = false;
         try {
@@ -23,18 +23,6 @@ export class UploadMetadataStorage {
             console.warn('Persistent upload metadata storage is unavailable', error);
         }
 
-        let estimate = {};
-        try {
-            if (typeof storage.estimate === 'function') estimate = await storage.estimate();
-        } catch (error) {
-            console.warn('Could not estimate browser storage', error);
-        }
-
-        return {
-            supported: true,
-            persisted,
-            usage: Number.isFinite(estimate.usage) ? estimate.usage : null,
-            quota: Number.isFinite(estimate.quota) ? estimate.quota : null
-        };
+        return { supported: true, persisted };
     }
 }

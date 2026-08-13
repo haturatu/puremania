@@ -548,7 +548,7 @@ export class Uploader {
         }
         // File bytes remain outside IndexedDB. Persistence only protects the
         // small session records needed to resume after a reload.
-        this.storageEstimate = await this.metadataStorage.prepare();
+        await this.metadataStorage.prepare();
         const session = this.createUploadSession();
         this.activeUploadSession = session;
         const destination = destinationOverride || this.app.router.getCurrentPath();
