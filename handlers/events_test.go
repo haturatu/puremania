@@ -35,8 +35,23 @@ func TestEventBrokerPublishesToSubscribers(t *testing.T) {
 	defer unsubscribe()
 	want := serverEvent{name: "upload", data: "changed"}
 	broker.publish(want)
-	if got := <-events; got.name != want.name || got.data != want.data {
+	<-events.ready
+	if got := events.drain()[0]; got.name != want.name || got.data != want.data {
 		t.Fatalf("unexpected event: %#v", got)
+	}
+}
+
+func TestEventBrokerCoalescesWithoutDroppingLatestInvalidations(t *testing.T) {
+	broker := newEventBroker()
+	events, unsubscribe := broker.subscribe()
+	defer unsubscribe()
+	for uploaded := 0; uploaded < 1000; uploaded++ {
+		broker.publish(serverEvent{name: "upload", key: "upload:id", data: uploaded})
+	}
+	<-events.ready
+	pending := events.drain()
+	if len(pending) != 1 || pending[0].data != 999 {
+		t.Fatalf("expected latest coalesced invalidation, got %#v", pending)
 	}
 }
 
@@ -67,12 +82,16 @@ func TestUploadEventDoesNotExposePaths(t *testing.T) {
 	events, unsubscribe := handler.events.subscribe()
 	defer unsubscribe()
 	handler.publishUploadState(&uploadSession{ID: "id", Destination: "/secret", RelativePath: "file.txt", UploadedBytes: 4, TotalBytes: 8}, false)
-	event := <-events
+	<-events.ready
+	event := events.drain()[0]
 	encoded, err := json.Marshal(event.data)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(encoded), "secret") || strings.Contains(string(encoded), "file.txt") {
 		t.Fatalf("upload event leaked a path: %s", encoded)
+	}
+	if string(encoded) != `{"uploadId":"id"}` {
+		t.Fatalf("upload event must be an invalidation only: %s", encoded)
 	}
 }

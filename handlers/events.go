@@ -10,26 +10,62 @@ import (
 
 type serverEvent struct {
 	name string
+	key  string
 	data interface{}
+}
+
+type eventSubscriber struct {
+	mu      sync.Mutex
+	pending map[string]serverEvent
+	ready   chan struct{}
+}
+
+func newEventSubscriber() *eventSubscriber {
+	return &eventSubscriber{pending: make(map[string]serverEvent), ready: make(chan struct{}, 1)}
+}
+
+func (s *eventSubscriber) enqueue(event serverEvent) {
+	key := event.key
+	if key == "" {
+		key = event.name
+	}
+	s.mu.Lock()
+	s.pending[key] = event
+	s.mu.Unlock()
+	select {
+	case s.ready <- struct{}{}:
+	default:
+	}
+}
+
+func (s *eventSubscriber) drain() []serverEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	events := make([]serverEvent, 0, len(s.pending))
+	for key, event := range s.pending {
+		events = append(events, event)
+		delete(s.pending, key)
+	}
+	return events
 }
 
 type eventBroker struct {
 	mu          sync.RWMutex
-	subscribers map[chan serverEvent]struct{}
+	subscribers map[*eventSubscriber]struct{}
 }
 
 func newEventBroker() *eventBroker {
-	return &eventBroker{subscribers: make(map[chan serverEvent]struct{})}
+	return &eventBroker{subscribers: make(map[*eventSubscriber]struct{})}
 }
 
-func (b *eventBroker) subscribe() (<-chan serverEvent, func()) {
-	ch := make(chan serverEvent, 32)
+func (b *eventBroker) subscribe() (*eventSubscriber, func()) {
+	subscriber := newEventSubscriber()
 	b.mu.Lock()
-	b.subscribers[ch] = struct{}{}
+	b.subscribers[subscriber] = struct{}{}
 	b.mu.Unlock()
-	return ch, func() {
+	return subscriber, func() {
 		b.mu.Lock()
-		delete(b.subscribers, ch)
+		delete(b.subscribers, subscriber)
 		b.mu.Unlock()
 	}
 }
@@ -38,12 +74,9 @@ func (b *eventBroker) publish(event serverEvent) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	for subscriber := range b.subscribers {
-		select {
-		case subscriber <- event:
-		default:
-			// A slow tab can recover from the next state snapshot. Never let it
-			// apply backpressure to upload writes or other request handlers.
-		}
+		// Per-subscriber mailboxes coalesce repeated invalidations by key. A
+		// slow connection receives the latest change without blocking uploads.
+		subscriber.enqueue(event)
 	}
 }
 
@@ -72,7 +105,7 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprint(w, ": connected\n\n")
 	flusher.Flush()
 
-	events, unsubscribe := h.events.subscribe()
+	subscriber, unsubscribe := h.events.subscribe()
 	defer unsubscribe()
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
@@ -82,7 +115,7 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 		aria2Ticker = time.NewTicker(2 * time.Second)
 		defer aria2Ticker.Stop()
 		aria2Tick = aria2Ticker.C
-		status, _ := h.collectAria2cStatus()
+		status := h.collectAria2Event()
 		if writeServerEvent(w, serverEvent{name: "aria2", data: status}) != nil {
 			return
 		}
@@ -93,13 +126,15 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			return
-		case event := <-events:
-			if writeServerEvent(w, event) != nil {
-				return
+		case <-subscriber.ready:
+			for _, event := range subscriber.drain() {
+				if writeServerEvent(w, event) != nil {
+					return
+				}
 			}
 			flusher.Flush()
 		case <-aria2Tick:
-			status, _ := h.collectAria2cStatus()
+			status := h.collectAria2Event()
 			if writeServerEvent(w, serverEvent{name: "aria2", data: status}) != nil {
 				return
 			}
@@ -113,12 +148,21 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) publishUploadState(session *uploadSession, deleted bool) {
-	h.events.publish(serverEvent{name: "upload", data: map[string]interface{}{
-		"uploadId":      session.ID,
-		"uploadedBytes": session.UploadedBytes,
-		"totalBytes":    session.TotalBytes,
-		"completed":     session.Completed,
-		"deleted":       deleted,
-	}})
+func (h *Handler) collectAria2Event() map[string]interface{} {
+	status, err := h.collectAria2cStatus()
+	if err != nil {
+		h.logger.Warn("Aria2c status stream is incomplete", "error", err)
+		status["error"] = err.Error()
+	}
+	return status
+}
+
+func (h *Handler) publishUploadState(session *uploadSession, _ bool) {
+	h.events.publish(serverEvent{
+		name: "upload",
+		key:  "upload:" + session.ID,
+		// SSE is an invalidation hint. The browser reloads authoritative state
+		// through the upload session REST endpoint before rendering it.
+		data: map[string]string{"uploadId": session.ID},
+	})
 }

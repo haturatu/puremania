@@ -21,7 +21,11 @@ export class UploadPageHandler {
         this.refreshController = null;
         this.refreshRequested = false;
         this.onJobsChanged = () => this.refresh();
-        this.onUploadState = event => this.applyUploadState(event.detail);
+        // Server events invalidate the view; REST/IndexedDB remain the source
+        // of truth so coalesced or reconnected streams cannot render stale data.
+        this.onUploadState = event => {
+            if (event.detail?.uploadId) void this.refresh();
+        };
     }
 
     get isActive() {
@@ -71,29 +75,6 @@ export class UploadPageHandler {
                 void this.refresh();
             }
         }
-    }
-
-    applyUploadState(state) {
-        if (!this.active || !state?.uploadId) return;
-        const index = this.jobs.findIndex(job => job.id === state.uploadId);
-        if (index < 0) {
-            void this.refresh();
-            return;
-        }
-        if (state.deleted) {
-            this.jobs.splice(index, 1);
-        } else {
-            const current = this.jobs[index];
-            const locallyActive = this.app.uploader.activeUploadSession && this.app.uploader.progress.has(current.key);
-            this.jobs[index] = {
-                ...current,
-                uploadedBytes: state.uploadedBytes,
-                totalBytes: state.totalBytes,
-                completed: state.completed,
-                state: state.completed ? 'completed' : locallyActive ? 'active' : 'paused'
-            };
-        }
-        this.render(this.jobs);
     }
 
     render(jobs) {
