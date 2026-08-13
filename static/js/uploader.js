@@ -1,5 +1,7 @@
 // Resumable uploader: file bytes stay in the browser File object and each
 // request owns only one Blob slice. IndexedDB stores session metadata only.
+import { UploadChangeChannel } from './upload-change-channel.js';
+
 const CHUNK_SIZE = 8 * 1024 * 1024;
 const MIN_CONCURRENT_FILES = 2;
 const AIMD_DECISION_INTERVAL_MS = 1500;
@@ -188,6 +190,7 @@ export class Uploader {
         this._processingDrop = false;
         this.store = new UploadSessionStore();
         this.resumeRequest = null;
+        this.jobChanges = new UploadChangeChannel(detail => this.app.emit('upload-jobs-changed', detail));
         this.createResumeInputs();
     }
 
@@ -241,7 +244,7 @@ export class Uploader {
 
     isAbortError(error) { return error?.name === 'AbortError'; }
 
-    notifyJobsChanged() { window.dispatchEvent(new CustomEvent('puremania:upload-jobs-changed')); }
+    notifyJobsChanged(uploadId = null) { this.jobChanges.notify(uploadId); }
 
     showUploadDialog() { document.querySelector('.upload-input-files')?.click(); }
 
@@ -396,7 +399,7 @@ export class Uploader {
     async discardJob(key) {
         const record = await this.store.get(key);
         if (!record) return;
-        try { await fetch(record.url, { method: 'DELETE' }); } finally { await this.store.remove(key); this.notifyJobsChanged(); }
+        try { await fetch(record.url, { method: 'DELETE' }); } finally { await this.store.remove(key); this.notifyJobsChanged(record.id); }
     }
 
     async discardWrongRouteDuplicates(items, destination) {
@@ -440,7 +443,7 @@ export class Uploader {
             body: JSON.stringify({ path: destination, relativePath: item.relativePath, size: item.file.size, fingerprint })
         });
         const record = { key, id: created.uploadId, url: created.uploadURL, destination, relativePath: item.relativePath, size: item.file.size, fingerprint, updatedAt: Date.now() };
-        try { await this.store.put(record); this.notifyJobsChanged(); } catch (_) { /* upload itself must still work */ }
+        try { await this.store.put(record); this.notifyJobsChanged(record.id); } catch (_) { /* upload itself must still work */ }
         return { ...record, uploadedBytes: created.uploadedBytes || 0 };
     }
 
@@ -511,10 +514,10 @@ export class Uploader {
                     await pause((2 ** attempt) * 1000 + Math.floor(Math.random() * 250), session.signal);
                 }
             }
-            try { await this.store.put({ ...record, uploadedBytes: offset, updatedAt: Date.now() }); this.notifyJobsChanged(); } catch (_) { /* optional */ }
+            try { await this.store.put({ ...record, uploadedBytes: offset, updatedAt: Date.now() }); this.notifyJobsChanged(record.id); } catch (_) { /* optional */ }
         }
         await this.apiJSON(`${record.url}/complete`, { method: 'POST', signal: session.signal });
-        try { await this.store.remove(record.key); this.notifyJobsChanged(); } catch (_) { /* optional */ }
+        try { await this.store.remove(record.key); this.notifyJobsChanged(record.id); } catch (_) { /* optional */ }
         this.setFileProgress(record.key, item, item.file.size, 'Completed');
         this.progress.delete(record.key);
     }
