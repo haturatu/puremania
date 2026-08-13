@@ -4,7 +4,8 @@
   "description": "Frontend dependencies for Pure Mania",
   "scripts": {
     "build": "node build.js",
-    "test": "node --test static/js/*.test.mjs"
+    "test": "node --test static/js/*.test.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.17.0",
@@ -27,6 +28,7 @@
     "codemirror": "^6.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "esbuild": "^0.28.1"
   }
 }

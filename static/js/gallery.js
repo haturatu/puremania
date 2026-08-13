@@ -109,7 +109,8 @@ export class ImageViewer {
         const candidates = [];
         for (let offset = 1; offset <= range; offset++) candidates.push(index + offset, index - offset);
         candidates.forEach((candidate, priority) => {
-            const image = this.images[(candidate + this.images.length) % this.images.length];
+            const imageIndex = ((candidate % this.images.length) + this.images.length) % this.images.length;
+            const image = this.images[imageIndex];
             this.imageLoader.enqueue({
                 key: `viewer:${image.path}`,
                 src: buildApiUrl('/api/files/content', { path: image.path }),

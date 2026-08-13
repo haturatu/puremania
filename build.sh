@@ -6,6 +6,11 @@ PROJECT_NAME="puremania"
 
 echo "Building Pure Mania..."
 
+# Build the browser bundle before compiling the server so a fresh checkout has
+# the same static assets as the container image and browser E2E job.
+echo "Building frontend..."
+npm run build
+
 # 依存関係の整理
 echo "Downloading Go dependencies..."
 go mod tidy
@@ -28,4 +33,3 @@ echo "  2. Create storage directories"
 echo "  3. Run the application:"
 echo "     ./${PROJECT_NAME}"
 echo "  4. Open browser: http://localhost:8844"
-

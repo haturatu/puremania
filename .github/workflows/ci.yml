@@ -17,7 +17,17 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
+          cache: true
           cache-dependency-path: '**/go.sum'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
 
       - name: Run build script
         run: bash build.sh
@@ -31,6 +41,61 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
+      - name: Upload Pure Mania build
+        uses: actions/upload-artifact@v4
+        with:
+          name: puremania-build
+          path: |
+            puremania
+            static/index.html
+            static/dist/
+          retention-days: 1
+
+  browser-e2e:
+    name: Chromium browser E2E
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Download Pure Mania build
+        uses: actions/download-artifact@v4
+        with:
+          name: puremania-build
+
+      - name: Make binary executable
+        run: chmod +x puremania
+
+      - name: Run browser E2E
+        run: npm run test:e2e
+        env:
+          CI: 'true'
+          E2E_STORAGE_DIR: /tmp/puremania-e2e
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -42,6 +107,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
+          cache: true
           cache-dependency-path: '**/go.sum'
 
       - name: Check formatting
@@ -81,6 +147,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
+          cache: true
           cache-dependency-path: '**/go.sum'
 
       - name: Run race detector

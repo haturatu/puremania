@@ -106,6 +106,7 @@ In general, as long as proper user and permission management is in place, any fi
 ### Prerequisites  
   
 - [Go](https://golang.org/doc/install) (version 1.24.0 or later)  
+- [Node.js](https://nodejs.org/) (version 22 or later, required for frontend builds)
 - `aria2c` (if you want to use the Aria2c integration feature)
 
 ### Installation & Building  
