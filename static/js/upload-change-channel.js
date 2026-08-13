@@ -1,6 +1,10 @@
 const CHANNEL_NAME = 'puremania';
 const MESSAGE_TYPE = 'upload-changed';
 
+// Cross-tab messages are invalidation hints, never transfer state. IndexedDB
+// caches resume metadata and the server upload-session endpoint remains the
+// authoritative source for received bytes. This matches the SSE contract when
+// both PRs are integrated: either hint causes UploadPage to reload state.
 export class UploadChangeChannel {
     constructor(onChange, BroadcastChannelClass = globalThis.BroadcastChannel) {
         this.onChange = onChange;

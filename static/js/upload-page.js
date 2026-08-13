@@ -20,6 +20,8 @@ export class UploadPageHandler {
         this.jobs = [];
         this.refreshController = null;
         this.refreshRequested = false;
+        // Local EventTarget and BroadcastChannel notifications share one
+        // invalidation path; refresh() resolves authoritative server state.
         this.onJobsChanged = () => this.refresh();
         // Server events invalidate the view; REST/IndexedDB remain the source
         // of truth so coalesced or reconnected streams cannot render stale data.
