@@ -118,6 +118,11 @@ test('Delete requires selection and focus inside the file browser', async ({ pag
     await expect(page.getByRole('dialog', { name: 'Delete Selected Items' })).toHaveCount(0);
 
     await item.click();
+    await expect(page.locator('.file-browser')).toBeFocused();
+    await page.keyboard.press('Delete');
+    await expect(page.getByRole('dialog', { name: 'Delete Selected Items' })).toBeVisible();
+    await page.getByRole('dialog', { name: 'Delete Selected Items' }).getByRole('button', { name: 'Cancel' }).click();
+
     await page.locator('.search-input').focus();
     await page.keyboard.press('Delete');
     await expect(item).toBeVisible();

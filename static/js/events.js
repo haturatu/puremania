@@ -256,6 +256,10 @@ export class EventHandler {
             nextAnchor = path;
         }
         this.app.setSelection(nextSelection, nextAnchor);
+        // File cards are non-form containers, so a pointer click otherwise
+        // leaves focus on <body>. Keep keyboard actions scoped to the browser
+        // while allowing Delete to work immediately after selecting an item.
+        fileItem.closest('.file-browser')?.focus({ preventScroll: true });
     }
 
     handleFileDoubleClick(fileItem) {
