@@ -60,3 +60,29 @@ test('AIMD applies multiplicative decrease on congestion', () => {
 
     assert.equal(controller.adjust(), 7);
 });
+
+test('native resume picker cancellation clears the pending request', async () => {
+    const uploader = Object.create(Uploader.prototype);
+    uploader.store = { get: async key => ({ key, destination: '/', relativePath: 'file.txt' }) };
+    uploader.showUploadDialog = async selector => {
+        assert.equal(selector, '.resume-upload-input-files');
+        return 'cancelled';
+    };
+
+    await uploader.requestResumeMany(['resume-key']);
+
+    assert.equal(uploader.resumeRequest, null);
+});
+
+test('input fallback retains the pending resume request until change or cancel', async () => {
+    const uploader = Object.create(Uploader.prototype);
+    uploader.store = { get: async key => ({ key, destination: '/', relativePath: 'folder/file.txt' }) };
+    uploader.showDirectoryDialog = async selector => {
+        assert.equal(selector, '.resume-upload-input-folders');
+        return 'fallback';
+    };
+
+    await uploader.requestResumeMany(['resume-key']);
+
+    assert.deepEqual([...uploader.resumeRequest.keys], ['resume-key']);
+});
