@@ -1,5 +1,7 @@
 // Resumable uploader: file bytes stay in the browser File object and each
 // request owns only one Blob slice. IndexedDB stores session metadata only.
+import { OriginUploadLock } from './upload-lock.js';
+
 const CHUNK_SIZE = 8 * 1024 * 1024;
 const MIN_CONCURRENT_FILES = 2;
 const AIMD_DECISION_INTERVAL_MS = 1500;
@@ -187,6 +189,7 @@ export class Uploader {
         this.app = app;
         this._processingDrop = false;
         this.store = new UploadSessionStore();
+        this.originUploadLock = new OriginUploadLock();
         this.resumeRequest = null;
         this.createResumeInputs();
     }
@@ -543,6 +546,21 @@ export class Uploader {
             this.app.ui.showToast('Upload in progress', 'Pause or finish the current upload first.', 'warning');
             return;
         }
+        const outcome = await this.originUploadLock.run(() => this.uploadBatch(items, destinationOverride));
+        if (!outcome.acquired) {
+            this.app.ui.showToast(
+                'Upload running in another tab',
+                'Finish or pause the other upload, then try again.',
+                'warning'
+            );
+        }
+        return outcome.result;
+    }
+
+    async uploadBatch(items, destinationOverride = null) {
+        // Recheck after obtaining the origin lock in case this tab started an
+        // upload through another interaction during lock acquisition.
+        if (this.activeUploadSession) return;
         const session = this.createUploadSession();
         this.activeUploadSession = session;
         const destination = destinationOverride || this.app.router.getCurrentPath();
