@@ -1,5 +1,5 @@
 function bindRoutes(app) {
-    app.router.onChange((path, { navigationType = 'initial' } = {}) => {
+    app.router.onChange(async (path, { navigationType = 'initial' } = {}) => {
         if (path === '/system/uploads') {
             app.aria2cPageHandler.exitAria2cMode(false);
             app.uploadPageHandler.enter();
@@ -20,7 +20,7 @@ function bindRoutes(app) {
 
         app.uploadPageHandler.exit();
         app.aria2cPageHandler.exitAria2cMode(false);
-        void app.navigateToPath(path, { restoreScroll: navigationType === 'pop' });
+        await app.navigateToPath(path, { restoreScroll: navigationType === 'pop' });
     });
 }
 

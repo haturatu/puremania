@@ -46,3 +46,16 @@ body {
 .hidden {
     display: none !important;
 }
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 100ms;
+  animation-timing-function: ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.01ms;
+  }
+}
