@@ -1,5 +1,6 @@
 // Resumable uploader: file bytes stay in the browser File object and each
 // request owns only one Blob slice. IndexedDB stores session metadata only.
+import { OriginUploadLock } from './upload-lock.js';
 import { UploadMetadataStorage } from './upload-storage.js';
 import { createRequestSignal, DEFAULT_REQUEST_TIMEOUT_MS } from './request-signal.js';
 import { UploadChangeChannel } from './upload-change-channel.js';
@@ -191,6 +192,7 @@ export class Uploader {
         this.app = app;
         this._processingDrop = false;
         this.store = new UploadSessionStore();
+        this.originUploadLock = new OriginUploadLock();
         this.metadataStorage = new UploadMetadataStorage();
         this.resumeRequest = null;
         this.jobChanges = new UploadChangeChannel(detail => this.app.emit('upload-jobs-changed', detail));
@@ -560,6 +562,21 @@ export class Uploader {
             this.app.ui.showToast('Upload in progress', 'Pause or finish the current upload first.', 'warning');
             return;
         }
+        const outcome = await this.originUploadLock.run(() => this.uploadBatch(items, destinationOverride));
+        if (!outcome.acquired) {
+            this.app.ui.showToast(
+                'Upload running in another tab',
+                'Finish or pause the other upload, then try again.',
+                'warning'
+            );
+        }
+        return outcome.result;
+    }
+
+    async uploadBatch(items, destinationOverride = null) {
+        // Recheck after obtaining the origin lock in case this tab started an
+        // upload through another interaction during lock acquisition.
+        if (this.activeUploadSession) return;
         // File bytes remain outside IndexedDB. Persistence only protects the
         // small session records needed to resume after a reload.
         await this.metadataStorage.prepare();
