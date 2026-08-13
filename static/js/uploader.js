@@ -1,5 +1,7 @@
 // Resumable uploader: file bytes stay in the browser File object and each
 // request owns only one Blob slice. IndexedDB stores session metadata only.
+import { FileSystemPicker } from './file-system-picker.js';
+
 const CHUNK_SIZE = 8 * 1024 * 1024;
 const MIN_CONCURRENT_FILES = 2;
 const AIMD_DECISION_INTERVAL_MS = 1500;
@@ -187,6 +189,7 @@ export class Uploader {
         this.app = app;
         this._processingDrop = false;
         this.store = new UploadSessionStore();
+        this.filePicker = new FileSystemPicker();
         this.resumeRequest = null;
         this.createResumeInputs();
     }
@@ -243,7 +246,34 @@ export class Uploader {
 
     notifyJobsChanged() { window.dispatchEvent(new CustomEvent('puremania:upload-jobs-changed')); }
 
-    showUploadDialog() { document.querySelector('.upload-input-files')?.click(); }
+    async showUploadDialog() {
+        await this.openPicker(
+            () => this.filePicker.pickFiles(),
+            () => document.querySelector('.upload-input-files')?.click()
+        );
+    }
+
+    async showDirectoryDialog() {
+        await this.openPicker(
+            () => this.filePicker.pickDirectory(),
+            () => document.querySelector('.upload-input-folders')?.click()
+        );
+    }
+
+    async openPicker(pick, fallback) {
+        try {
+            const items = await pick();
+            if (items === null) {
+                fallback();
+            } else if (items.length) {
+                await this.handleUploadItems(items);
+            }
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            console.warn('Native file picker unavailable; using the input fallback', error);
+            fallback();
+        }
+    }
 
     createResumeInputs() {
         const create = (className, directory) => {
@@ -264,6 +294,10 @@ export class Uploader {
         if (!input.files?.length) return;
         const files = await this.createUploadItems(input.files);
         input.value = '';
+        await this.handleUploadItems(files);
+    }
+
+    async handleUploadItems(files) {
         let destination = null;
         if (this.resumeRequest) {
             const request = this.resumeRequest;
@@ -294,8 +328,8 @@ export class Uploader {
         const selectFolders = area.querySelector('.btn-select-folders');
         filesInput.addEventListener('change', () => { void this.handleSelectedFileList(filesInput); });
         foldersInput.addEventListener('change', () => { void this.handleSelectedFileList(foldersInput); });
-        selectFiles.addEventListener('click', event => { event.preventDefault(); filesInput.click(); });
-        selectFolders.addEventListener('click', event => { event.preventDefault(); foldersInput.click(); });
+        selectFiles.addEventListener('click', event => { event.preventDefault(); void this.showUploadDialog(); });
+        selectFolders.addEventListener('click', event => { event.preventDefault(); void this.showDirectoryDialog(); });
         let dragDepth = 0;
         area.addEventListener('dragenter', event => { event.preventDefault(); dragDepth++; area.classList.add('dragover'); });
         area.addEventListener('dragover', event => event.preventDefault());
@@ -363,9 +397,11 @@ export class Uploader {
         if (destinations.size !== 1) throw new Error('Select uploads with the same destination to resume together');
         const hasFolderUpload = records.some(record => record.relativePath.includes('/'));
         this.resumeRequest = { keys: new Set(records.map(record => record.key)), destination: records[0].destination };
-        const input = document.querySelector(hasFolderUpload ? '.resume-upload-input-folders' : '.resume-upload-input-files');
-        if (!input) throw new Error('Upload file selector is unavailable');
-        input.click();
+        if (hasFolderUpload) {
+            await this.showDirectoryDialog();
+        } else {
+            await this.showUploadDialog();
+        }
     }
 
     async listJobs(signal) {
