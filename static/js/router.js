@@ -1,4 +1,5 @@
 import { normalizePath } from './util.js';
+import { ViewTransitionController } from './view-transition.js';
 
 export class Router {
     constructor(store) {
@@ -7,6 +8,7 @@ export class Router {
         this.navigationType = 'initial';
         this.isInitialized = false;
         this.onRouteChange = null;
+        this.viewTransitions = new ViewTransitionController();
         
         this._setupEventListeners();
         this._initializeWhenReady();
@@ -181,17 +183,18 @@ export class Router {
         
         // 登録されたルートのマッチングを試行
         const matchedRoute = this._findMatchingRoute(path);
-        if (matchedRoute) {
-            console.log('Route matched:', matchedRoute);
-            this.routes[matchedRoute](path, { navigationType });
-            return;
-        }
-        
-        // デフォルトハンドラーを呼び出し
-        if (this.onRouteChange) {
-            console.log('Calling onRouteChange with:', path);
-            this.onRouteChange(path, { navigationType });
-        }
+        const render = () => {
+            if (matchedRoute) {
+                console.log('Route matched:', matchedRoute);
+                return this.routes[matchedRoute](path, { navigationType });
+            }
+            if (this.onRouteChange) {
+                console.log('Calling onRouteChange with:', path);
+                return this.onRouteChange(path, { navigationType });
+            }
+        };
+        void this.viewTransitions.run(render, { animate: navigationType !== 'initial' })
+            .catch(error => console.error('Route rendering failed:', error));
     }
 
     /**
