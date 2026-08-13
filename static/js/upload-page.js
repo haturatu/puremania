@@ -20,6 +20,8 @@ export class UploadPageHandler {
         this.jobs = [];
         this.refreshController = null;
         this.refreshRequested = false;
+        // Local EventTarget and BroadcastChannel notifications share one
+        // invalidation path; refresh() resolves authoritative server state.
         this.onJobsChanged = () => this.refresh();
         // Server events invalidate the view; REST/IndexedDB remain the source
         // of truth so coalesced or reconnected streams cannot render stale data.
@@ -38,7 +40,7 @@ export class UploadPageHandler {
     enter() {
         if (this.active) return;
         this.active = true;
-        window.addEventListener('puremania:upload-jobs-changed', this.onJobsChanged);
+        this.app.eventBus.addEventListener('upload-jobs-changed', this.onJobsChanged);
         this.app.eventBus.addEventListener('server:upload', this.onUploadState);
         this.app.eventBus.addEventListener('server:sync', this.onServerSync);
         document.querySelector('.breadcrumbs')?.style.setProperty('display', 'none');
@@ -51,7 +53,7 @@ export class UploadPageHandler {
         this.refreshController?.abort();
         this.refreshController = null;
         this.refreshRequested = false;
-        window.removeEventListener('puremania:upload-jobs-changed', this.onJobsChanged);
+        this.app.eventBus.removeEventListener('upload-jobs-changed', this.onJobsChanged);
         this.app.eventBus.removeEventListener('server:upload', this.onUploadState);
         this.app.eventBus.removeEventListener('server:sync', this.onServerSync);
         document.querySelector('.breadcrumbs')?.style.removeProperty('display');
