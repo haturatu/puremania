@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -25,5 +26,11 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 		if got := res.Header().Get(header); got != expected {
 			t.Errorf("%s = %q, want %q", header, got, expected)
 		}
+	}
+}
+
+func TestContentSecurityPolicyAllowsESMShModules(t *testing.T) {
+	if !strings.Contains(contentSecurityPolicy, "script-src 'self' 'unsafe-inline' https://esm.sh") {
+		t.Fatalf("Content-Security-Policy does not allow esm.sh modules: %q", contentSecurityPolicy)
 	}
 }
