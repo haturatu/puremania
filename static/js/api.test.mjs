@@ -28,3 +28,33 @@ test('request exposes API errors with the server message', async t => {
 
     await assert.rejects(client().request('/endpoint'), /invalid input/);
 });
+
+test('request preserves TimeoutError with endpoint-specific guidance', async t => {
+    t.mock.method(globalThis, 'fetch', async () => {
+        throw new DOMException('Expired', 'TimeoutError');
+    });
+
+    await assert.rejects(
+        client().request('/endpoint', { fallbackMessage: 'Directory request' }),
+        error => error.name === 'TimeoutError' && error.message === 'Directory request timed out. Try again.'
+    );
+});
+
+test('requestJson keeps navigation aborts silent', async t => {
+    const toasts = [];
+    const api = new ApiClient({ ui: { showToast: (...args) => toasts.push(args) } });
+    t.mock.method(api, 'request', async () => { throw new DOMException('Stopped', 'AbortError'); });
+
+    assert.equal(await api.requestJson('/endpoint'), null);
+    assert.deepEqual(toasts, []);
+});
+
+test('requestJson reports timeouts with a retryable message', async t => {
+    const toasts = [];
+    const api = new ApiClient({ ui: { showToast: (...args) => toasts.push(args) } });
+    t.mock.method(console, 'error', () => {});
+    t.mock.method(api, 'request', async () => { throw new DOMException('Expired', 'TimeoutError'); });
+
+    assert.equal(await api.requestJson('/endpoint', { fallbackMessage: 'Directory request' }), null);
+    assert.equal(toasts[0][1], 'Directory request timed out. Try again.');
+});

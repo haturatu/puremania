@@ -35,6 +35,8 @@ export async function initializeApp(app) {
     app.config = await app.api.getConfig();
     if (!app.config) throw new Error('Failed to load the application configuration.');
 
+    app.realtimeEvents.start();
+
     app.ui.updateAria2cVisibility(app.config.Aria2cEnabled);
     app.events.bindEvents();
     app.aria2cPageHandler.init();

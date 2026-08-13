@@ -1,5 +1,11 @@
 // Resumable uploader: file bytes stay in the browser File object and each
 // request owns only one Blob slice. IndexedDB stores session metadata only.
+import { FileSystemPicker } from './file-system-picker.js';
+import { OriginUploadLock } from './upload-lock.js';
+import { UploadMetadataStorage } from './upload-storage.js';
+import { createRequestSignal, DEFAULT_REQUEST_TIMEOUT_MS } from './request-signal.js';
+import { UploadChangeChannel } from './upload-change-channel.js';
+
 const CHUNK_SIZE = 8 * 1024 * 1024;
 const MIN_CONCURRENT_FILES = 2;
 const AIMD_DECISION_INTERVAL_MS = 1500;
@@ -187,7 +193,11 @@ export class Uploader {
         this.app = app;
         this._processingDrop = false;
         this.store = new UploadSessionStore();
+        this.filePicker = new FileSystemPicker();
+        this.originUploadLock = new OriginUploadLock();
+        this.metadataStorage = new UploadMetadataStorage();
         this.resumeRequest = null;
+        this.jobChanges = new UploadChangeChannel(detail => this.app.emit('upload-jobs-changed', detail));
         this.createResumeInputs();
     }
 
@@ -241,9 +251,39 @@ export class Uploader {
 
     isAbortError(error) { return error?.name === 'AbortError'; }
 
-    notifyJobsChanged() { window.dispatchEvent(new CustomEvent('puremania:upload-jobs-changed')); }
+    notifyJobsChanged(uploadId = null) { this.jobChanges.notify(uploadId); }
 
-    showUploadDialog() { document.querySelector('.upload-input-files')?.click(); }
+    async showUploadDialog(fallbackSelector = '.upload-input-files') {
+        return this.openPicker(
+            () => this.filePicker.pickFiles(),
+            () => document.querySelector(fallbackSelector)?.click()
+        );
+    }
+
+    async showDirectoryDialog(fallbackSelector = '.upload-input-folders') {
+        return this.openPicker(
+            () => this.filePicker.pickDirectory(),
+            () => document.querySelector(fallbackSelector)?.click()
+        );
+    }
+
+    async openPicker(pick, fallback) {
+        try {
+            const items = await pick();
+            if (items === null) {
+                fallback();
+                return 'fallback';
+            } else if (items.length) {
+                await this.handleUploadItems(items);
+            }
+            return 'selected';
+        } catch (error) {
+            if (error.name === 'AbortError') return 'cancelled';
+            console.warn('Native file picker unavailable; using the input fallback', error);
+            fallback();
+            return 'fallback';
+        }
+    }
 
     createResumeInputs() {
         const create = (className, directory) => {
@@ -254,6 +294,7 @@ export class Uploader {
             input.className = className;
             if (directory) input.setAttribute('webkitdirectory', '');
             input.addEventListener('change', () => { void this.handleSelectedFileList(input); });
+            input.addEventListener('cancel', () => { this.resumeRequest = null; });
             document.body.appendChild(input);
         };
         create('resume-upload-input-files', false);
@@ -264,6 +305,10 @@ export class Uploader {
         if (!input.files?.length) return;
         const files = await this.createUploadItems(input.files);
         input.value = '';
+        await this.handleUploadItems(files);
+    }
+
+    async handleUploadItems(files) {
         let destination = null;
         if (this.resumeRequest) {
             const request = this.resumeRequest;
@@ -294,8 +339,10 @@ export class Uploader {
         const selectFolders = area.querySelector('.btn-select-folders');
         filesInput.addEventListener('change', () => { void this.handleSelectedFileList(filesInput); });
         foldersInput.addEventListener('change', () => { void this.handleSelectedFileList(foldersInput); });
-        selectFiles.addEventListener('click', event => { event.preventDefault(); filesInput.click(); });
-        selectFolders.addEventListener('click', event => { event.preventDefault(); foldersInput.click(); });
+        filesInput.addEventListener('cancel', () => { this.resumeRequest = null; });
+        foldersInput.addEventListener('cancel', () => { this.resumeRequest = null; });
+        selectFiles.addEventListener('click', event => { event.preventDefault(); void this.showUploadDialog(); });
+        selectFolders.addEventListener('click', event => { event.preventDefault(); void this.showDirectoryDialog(); });
         let dragDepth = 0;
         area.addEventListener('dragenter', event => { event.preventDefault(); dragDepth++; area.classList.add('dragover'); });
         area.addEventListener('dragover', event => event.preventDefault());
@@ -363,9 +410,13 @@ export class Uploader {
         if (destinations.size !== 1) throw new Error('Select uploads with the same destination to resume together');
         const hasFolderUpload = records.some(record => record.relativePath.includes('/'));
         this.resumeRequest = { keys: new Set(records.map(record => record.key)), destination: records[0].destination };
-        const input = document.querySelector(hasFolderUpload ? '.resume-upload-input-folders' : '.resume-upload-input-files');
-        if (!input) throw new Error('Upload file selector is unavailable');
-        input.click();
+        let result;
+        if (hasFolderUpload) {
+            result = await this.showDirectoryDialog('.resume-upload-input-folders');
+        } else {
+            result = await this.showUploadDialog('.resume-upload-input-files');
+        }
+        if (result === 'cancelled') this.resumeRequest = null;
     }
 
     async listJobs(signal) {
@@ -396,7 +447,7 @@ export class Uploader {
     async discardJob(key) {
         const record = await this.store.get(key);
         if (!record) return;
-        try { await fetch(record.url, { method: 'DELETE' }); } finally { await this.store.remove(key); this.notifyJobsChanged(); }
+        try { await this.apiJSON(record.url, { method: 'DELETE' }); } finally { await this.store.remove(key); this.notifyJobsChanged(record.id); }
     }
 
     async discardWrongRouteDuplicates(items, destination) {
@@ -409,13 +460,24 @@ export class Uploader {
     }
 
     async apiJSON(url, options = {}) {
-        const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
-        if (!response.ok) {
-            const error = new Error((await response.json().catch(() => ({}))).message || `Request failed (${response.status})`);
-            error.status = response.status;
-            throw error;
+        const { signal, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, ...fetchOptions } = options;
+        const requestSignal = createRequestSignal(signal, { timeoutMs });
+        try {
+            const response = await fetch(url, {
+                ...fetchOptions,
+                signal: requestSignal.signal,
+                headers: { 'Content-Type': 'application/json', ...(fetchOptions.headers || {}) }
+            });
+            if (!response.ok) {
+                const error = new Error((await response.json().catch(() => ({}))).message || `Request failed (${response.status})`);
+                error.status = response.status;
+                throw error;
+            }
+            if (response.status === 204) return null;
+            return await response.json();
+        } finally {
+            requestSignal.cleanup();
         }
-        return response.json();
     }
 
     async getOrCreateRemoteSession(item, destination, session) {
@@ -440,7 +502,7 @@ export class Uploader {
             body: JSON.stringify({ path: destination, relativePath: item.relativePath, size: item.file.size, fingerprint })
         });
         const record = { key, id: created.uploadId, url: created.uploadURL, destination, relativePath: item.relativePath, size: item.file.size, fingerprint, updatedAt: Date.now() };
-        try { await this.store.put(record); this.notifyJobsChanged(); } catch (_) { /* upload itself must still work */ }
+        try { await this.store.put(record); this.notifyJobsChanged(record.id); } catch (_) { /* upload itself must still work */ }
         return { ...record, uploadedBytes: created.uploadedBytes || 0 };
     }
 
@@ -511,10 +573,10 @@ export class Uploader {
                     await pause((2 ** attempt) * 1000 + Math.floor(Math.random() * 250), session.signal);
                 }
             }
-            try { await this.store.put({ ...record, uploadedBytes: offset, updatedAt: Date.now() }); this.notifyJobsChanged(); } catch (_) { /* optional */ }
+            try { await this.store.put({ ...record, uploadedBytes: offset, updatedAt: Date.now() }); this.notifyJobsChanged(record.id); } catch (_) { /* optional */ }
         }
         await this.apiJSON(`${record.url}/complete`, { method: 'POST', signal: session.signal });
-        try { await this.store.remove(record.key); this.notifyJobsChanged(); } catch (_) { /* optional */ }
+        try { await this.store.remove(record.key); this.notifyJobsChanged(record.id); } catch (_) { /* optional */ }
         this.setFileProgress(record.key, item, item.file.size, 'Completed');
         this.progress.delete(record.key);
     }
@@ -543,6 +605,24 @@ export class Uploader {
             this.app.ui.showToast('Upload in progress', 'Pause or finish the current upload first.', 'warning');
             return;
         }
+        const outcome = await this.originUploadLock.run(() => this.uploadBatch(items, destinationOverride));
+        if (!outcome.acquired) {
+            this.app.ui.showToast(
+                'Upload running in another tab',
+                'Finish or pause the other upload, then try again.',
+                'warning'
+            );
+        }
+        return outcome.result;
+    }
+
+    async uploadBatch(items, destinationOverride = null) {
+        // Recheck after obtaining the origin lock in case this tab started an
+        // upload through another interaction during lock acquisition.
+        if (this.activeUploadSession) return;
+        // File bytes remain outside IndexedDB. Persistence only protects the
+        // small session records needed to resume after a reload.
+        await this.metadataStorage.prepare();
         const session = this.createUploadSession();
         this.activeUploadSession = session;
         const destination = destinationOverride || this.app.router.getCurrentPath();

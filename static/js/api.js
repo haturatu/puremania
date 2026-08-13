@@ -1,8 +1,16 @@
 import { showConfirmDialog, showPromptDialog } from './modal.js';
 import { buildApiUrl, getBaseName, getParentPath, isEditableFile, isValidPath } from './util.js';
+import {
+    createRequestSignal,
+    DEFAULT_REQUEST_TIMEOUT_MS,
+    isManualRequestAbort,
+    requestErrorMessage
+} from './request-signal.js';
 
 const MAX_CACHED_DIRECTORIES = 20;
 const MAX_CACHED_ENTRIES = 100000;
+const SEARCH_REQUEST_TIMEOUT_MS = 2 * 60_000;
+const LONG_OPERATION_TIMEOUT_MS = 15 * 60_000;
 
 export class ApiClient {
     constructor(app) {
@@ -43,25 +51,36 @@ export class ApiClient {
         payload,
         headers = {},
         signal,
+        timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
         validateSuccess = false,
         fallbackMessage = 'Request failed'
     } = {}) {
         const requestHeaders = { ...headers };
-        const options = { method, headers: requestHeaders, signal };
+        const requestSignal = createRequestSignal(signal, { timeoutMs });
+        const options = { method, headers: requestHeaders, signal: requestSignal.signal };
         if (payload !== undefined) {
             requestHeaders['Content-Type'] ||= 'application/json';
             options.body = JSON.stringify(payload);
         }
 
-        const response = await fetch(url, options);
-        const result = await response.json().catch(() => null);
-        if (!response.ok) {
-            throw new Error(this.getApiErrorMessage(result, `${fallbackMessage} (status: ${response.status})`));
+        try {
+            const response = await fetch(url, options);
+            const result = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw new Error(this.getApiErrorMessage(result, `${fallbackMessage} (status: ${response.status})`));
+            }
+            if (validateSuccess && !result?.success) {
+                throw new Error(this.getApiErrorMessage(result, fallbackMessage));
+            }
+            return result;
+        } catch (error) {
+            if (error?.name === 'TimeoutError') {
+                throw new DOMException(requestErrorMessage(error, fallbackMessage), 'TimeoutError');
+            }
+            throw error;
+        } finally {
+            requestSignal.cleanup();
         }
-        if (validateSuccess && !result?.success) {
-            throw new Error(this.getApiErrorMessage(result, fallbackMessage));
-        }
-        return result;
     }
 
     async postJson(url, payload, options = {}) {
@@ -85,16 +104,18 @@ export class ApiClient {
         fallbackMessage = 'Request failed',
         toastOnError = true,
         validateSuccess = false,
-        signal
+        signal,
+        timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
     } = {}) {
         try {
-            return await this.request(url, { signal, validateSuccess, fallbackMessage });
+            return await this.request(url, { signal, timeoutMs, validateSuccess, fallbackMessage });
         } catch (error) {
-            if (error.name === 'AbortError') return null;
+            if (isManualRequestAbort(error)) return null;
+            const message = requestErrorMessage(error, fallbackMessage);
             if (toastOnError) {
-                this.notifyApiError(error.message || fallbackMessage, { error, context });
+                this.notifyApiError(message, { error, context });
             } else {
-                console.error(`Error ${context}:`, error);
+                console.error(`Error ${context}: ${message}`, error);
             }
             return null;
         }
@@ -130,13 +151,15 @@ export class ApiClient {
         errorMessage,
         showLoading = false,
         onSuccess = null,
+        timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
         logContext = endpoint
     }) {
         try {
             if (showLoading) this.app.ui.showLoading();
             const result = await this.postJson(endpoint, payload, {
                 validateSuccess: true,
-                fallbackMessage: errorMessage
+                fallbackMessage: errorMessage,
+                timeoutMs
             });
 
             if (successMessage) {
@@ -149,14 +172,15 @@ export class ApiClient {
             this.app.emit('files-mutated', { endpoint, payload });
             return { success: true, result };
         } catch (error) {
-            this.notifyApiError(this.getApiErrorMessage(error, errorMessage), { error, context: logContext });
+            this.notifyApiError(requestErrorMessage(error, errorMessage), { error, context: logContext });
             return { success: false, error };
         } finally {
             if (showLoading) this.app.ui.hideLoading();
         }
     }
 
-    async getFiles(path, { signal = null, useCache = true, detailed = false, limit = 0, cursor = '', sort = '', direction = '' } = {}) {
+    async getFiles(path, { signal = null, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, useCache = true, detailed = false, limit = 0, cursor = '', sort = '', direction = '' } = {}) {
+        const requestSignal = createRequestSignal(signal, { timeoutMs });
         try {
             const key = this.directoryCacheKey(path, { limit, cursor, sort, direction });
             const headers = {};
@@ -167,7 +191,7 @@ export class ApiClient {
 
             const query = { path };
             if (limit) Object.assign(query, { limit, cursor, sort, direction });
-            const response = await fetch(buildApiUrl('/api/files', query), { headers, signal });
+            const response = await fetch(buildApiUrl('/api/files', query), { headers, signal: requestSignal.signal });
 
             if (response.status === 304) {
                 console.log(`Content for ${path} not modified. Using cache.`);
@@ -195,9 +219,14 @@ export class ApiClient {
                 throw new Error(result.message || 'API returned success:false');
             }
         } catch (error) {
-            if (error.name === 'AbortError') throw error;
+            if (isManualRequestAbort(error)) throw error;
+            if (error?.name === 'TimeoutError') {
+                error = new DOMException('Directory request timed out. Try again.', 'TimeoutError');
+            }
             console.error(`Error in getFiles for path ${path}:`, error);
             return detailed ? { files: null, notModified: false, error } : null;
+        } finally {
+            requestSignal.cleanup();
         }
     }
 
@@ -464,6 +493,7 @@ export class ApiClient {
             errorMessage: 'Failed to extract file',
             showLoading: true,
             onSuccess: async () => this.refreshCurrentDirectory(),
+            timeoutMs: LONG_OPERATION_TIMEOUT_MS,
             logContext: 'extracting file'
         });
     }
@@ -483,6 +513,7 @@ export class ApiClient {
             successMessage: 'File deleted successfully',
             errorMessage: 'Failed to delete file',
             onSuccess: async () => this.refreshCurrentDirectory([], true),
+            timeoutMs: LONG_OPERATION_TIMEOUT_MS,
             logContext: 'deleting file'
         });
     }
@@ -503,6 +534,7 @@ export class ApiClient {
             successMessage: 'Files deleted successfully',
             errorMessage: 'Failed to delete files',
             onSuccess: async () => this.refreshCurrentDirectory([], true),
+            timeoutMs: LONG_OPERATION_TIMEOUT_MS,
             logContext: 'deleting files'
         });
     }
@@ -548,7 +580,8 @@ export class ApiClient {
                 paths: Array.from(this.app.selectedFiles)
             }, {
                 validateSuccess: true,
-                fallbackMessage: 'Failed to create zip archive'
+                fallbackMessage: 'Failed to create zip archive',
+                timeoutMs: LONG_OPERATION_TIMEOUT_MS
             });
             if (!result.data?.downloadUrl) {
                 throw new Error(this.getApiErrorMessage(result, 'Failed to create zip archive'));
@@ -565,7 +598,7 @@ export class ApiClient {
             this.app.progressManager.hide();
             window.location.assign(result.data.downloadUrl);
         } catch (error) {
-            this.notifyApiError(this.getApiErrorMessage(error, 'Failed to download files'), { error, context: 'downloading files' });
+            this.notifyApiError(requestErrorMessage(error, 'Failed to download files'), { error, context: 'downloading files' });
             this.app.progressManager.hide();
         }
     }
@@ -649,7 +682,7 @@ export class ApiClient {
             limit
         };
 
-        return await this.postJson('/api/search', body, { signal });
+        return await this.postJson('/api/search', body, { signal, timeoutMs: SEARCH_REQUEST_TIMEOUT_MS });
     }
 
     async startAria2cDownload(url, path) {

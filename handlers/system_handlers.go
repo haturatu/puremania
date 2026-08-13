@@ -230,6 +230,11 @@ func (h *Handler) DownloadWithAria2c(w http.ResponseWriter, r *http.Request) {
 
 // GetAria2cStatus はaria2cのダウンロードステータスを取得
 func (h *Handler) GetAria2cStatus(w http.ResponseWriter, r *http.Request) {
+	statuses, _ := h.collectAria2cStatus()
+	h.respondSuccess(w, statuses)
+}
+
+func (h *Handler) collectAria2cStatus() (map[string]interface{}, error) {
 	// tellActive, tellWaiting, tellStoppedを並行して呼び出す
 	type StatusResult struct {
 		Name   string
@@ -259,9 +264,13 @@ func (h *Handler) GetAria2cStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	statuses := make(map[string]interface{})
+	var firstErr error
 	for i := 0; i < len(methods); i++ {
 		res := <-ch
 		if res.Err != nil {
+			if firstErr == nil {
+				firstErr = res.Err
+			}
 			h.logger.Error("Failed to get aria2c status", "method", res.Name, "error", res.Err)
 			// 一つのメソッドが失敗しても、他は成功する可能性があるので、エラーを返しつつも処理を続ける
 			statuses[res.Name] = res.Err.Error()
@@ -269,8 +278,7 @@ func (h *Handler) GetAria2cStatus(w http.ResponseWriter, r *http.Request) {
 			statuses[res.Name] = res.Result
 		}
 	}
-
-	h.respondSuccess(w, statuses)
+	return statuses, firstErr
 }
 
 // ControlAria2cDownload はaria2cのダウンロードを操作 (キャンセル、一時停止、再開)。

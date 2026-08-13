@@ -1,5 +1,4 @@
 import { getTemplateContent } from './template.js';
-import { PollingPageController } from './polling-page-controller.js';
 import { TEMPLATES } from './template-registry.js';
 
 export class Aria2cPageHandler {
@@ -8,17 +7,12 @@ export class Aria2cPageHandler {
         this.previousPath = '/'; // Store the path before entering this page
         this.torrentsToCancel = new Set(); // Track torrents scheduled for cancellation
         this.initialLoadPending = false;
-        this.poller = new PollingPageController({
-            interval: 2000,
-            isCurrentPage: () => this.isInAria2cMode,
-            fetchData: signal => this.fileManager.api.getAria2cStatus(signal),
-            render: status => this.render(status),
-            onSettled: () => {
-                if (!this.initialLoadPending) return;
-                this.initialLoadPending = false;
-                this.fileManager.ui.hideLoading();
-            }
-        });
+        this.active = false;
+        this.onStatus = event => {
+            if (!this.active) return;
+            this.finishInitialLoad();
+            this.render(event.detail);
+        };
     }
 
     get isInAria2cMode() {
@@ -26,11 +20,13 @@ export class Aria2cPageHandler {
     }
 
     init() {
-        // No initial event binding needed, will be triggered by router
+        this.fileManager.eventBus.addEventListener('server:aria2', this.onStatus);
     }
 
     enterAria2cMode() {
-        if (this.poller.active) return;
+        if (this.active) return;
+
+        this.active = true;
 
         const currentPath = this.fileManager.router.getCurrentPath();
         if (currentPath !== '/system/aria2c') {
@@ -39,14 +35,25 @@ export class Aria2cPageHandler {
 
         this.initialLoadPending = true;
         this.fileManager.ui.showLoading();
-        this.poller.start();
+        const hasEventStream = this.fileManager.realtimeEvents.setAria2Enabled(true);
+        const latest = this.fileManager.realtimeEvents.latest('aria2');
+        if (latest) {
+            this.finishInitialLoad();
+            this.render(latest);
+        } else if (!hasEventStream) {
+            void this.loadAria2cStatus();
+        }
         
         const breadcrumbs = document.querySelector('.breadcrumbs');
         if (breadcrumbs) breadcrumbs.style.display = 'none';
     }
 
     exitAria2cMode(navigate = true) {
-        if (!this.poller.stop()) return;
+        if (!this.active) return;
+
+        this.active = false;
+        this.fileManager.realtimeEvents.setAria2Enabled(false);
+        this.finishInitialLoad();
 
         const breadcrumbs = document.querySelector('.breadcrumbs');
         if (breadcrumbs) breadcrumbs.style.display = '';
@@ -55,7 +62,15 @@ export class Aria2cPageHandler {
     }
 
     async loadAria2cStatus() {
-        await this.poller.refresh();
+        const status = await this.fileManager.api.getAria2cStatus();
+        if (status && this.active) this.render(status);
+        this.finishInitialLoad();
+    }
+
+    finishInitialLoad() {
+        if (!this.initialLoadPending) return;
+        this.initialLoadPending = false;
+        this.fileManager.ui.hideLoading();
     }
 
     render(status) {

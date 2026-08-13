@@ -32,6 +32,7 @@ type Handler struct {
 	preparedZipCount     int
 	thumbnailCleanupMu   sync.Mutex
 	lastThumbnailCleanup time.Time
+	events               *eventBroker
 }
 
 type preparedZip struct {
@@ -66,6 +67,7 @@ func NewHandler(config *types.Config, logger *slog.Logger) *Handler {
 		extractGate:   make(chan struct{}, 2),
 		thumbnailGate: make(chan struct{}, 2),
 		searchGate:    make(chan struct{}, 4),
+		events:        newEventBroker(),
 	}
 	h.cleanupExpiredUploadSessions()
 	return h
