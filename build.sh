@@ -21,7 +21,7 @@ go vet ./...
 
 # ビルド
 echo "Building backend..."
-CGO_ENABLED=0 GOOS=linux go build -o ${PROJECT_NAME} .
+CGO_ENABLED=0 GOOS=linux go build -o ${PROJECT_NAME} ./cmd/puremania
 
 chmod +x ${PROJECT_NAME}
 

@@ -8,7 +8,7 @@ npm-debug.log
 
 # Build artifacts
 static/dist/
-puremania
+/puremania
 
 # Browser E2E runtime data
 .e2e-storage/
