@@ -3,13 +3,18 @@
 set -eo pipefail
 
 PROJECT_NAME="puremania"
+INDEX_FILE="static/index.html"
 
 echo "Building Pure Mania..."
 
-# Build the browser bundle before compiling the server so a fresh checkout has
-# the same static assets as the container image and browser E2E job.
-echo "Building frontend..."
-npm run build
+# Build the browser bundle before compiling the server when the local bundle is
+# active. Remote mode loads modules from esm.sh and removes node_modules.
+if grep -q 'https://esm\.sh/' "${INDEX_FILE}"; then
+    echo "Remote frontend mode detected; skipping local frontend build."
+else
+    echo "Building frontend..."
+    npm run build
+fi
 
 # 依存関係の整理
 echo "Downloading Go dependencies..."
