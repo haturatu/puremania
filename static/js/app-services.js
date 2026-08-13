@@ -5,6 +5,7 @@ import { FileEditor } from './file-editor.js';
 import { ImageViewer } from './gallery.js';
 import { MediaPlayer } from './media-player.js';
 import { ProgressManager } from './progress.js';
+import { RealtimeEvents } from './realtime-events.js';
 import { Router } from './router.js';
 import { SearchHandler } from './search.js';
 import { UIManager } from './ui.js';
@@ -23,6 +24,7 @@ export function createAppServices(app) {
     attach('events', new EventHandler(app));
     attach('ui', new UIManager(app));
     attach('progressManager', new ProgressManager());
+    attach('realtimeEvents', new RealtimeEvents(app));
     attach('editor', new FileEditor(app));
     attach('mediaPlayer', new MediaPlayer(app));
     attach('imageViewer', new ImageViewer(app));
