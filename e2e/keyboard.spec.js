@@ -31,32 +31,42 @@ test.beforeEach(async () => {
     await resetStorage();
 });
 
-test('Ctrl+N creates a file', async ({ page }) => {
+test('N creates a file', async ({ page }) => {
     await openApp(page);
 
-    await page.keyboard.press('Control+N');
+    await page.keyboard.press('N');
     await completePrompt(page, 'Create File', 'keyboard-file.bin', 'Create');
 
     await expect(fileItem(page, 'keyboard-file.bin')).toBeVisible();
     await expect.poll(() => storagePathExists('keyboard-file.bin')).toBe(true);
 });
 
-test('Ctrl+Shift+N creates a folder', async ({ page }) => {
+test('Alt+N creates a file', async ({ page }) => {
     await openApp(page);
 
-    await page.keyboard.press('Control+Shift+N');
+    await page.keyboard.press('Alt+N');
+    await completePrompt(page, 'Create File', 'keyboard-alt-file.bin', 'Create');
+
+    await expect(fileItem(page, 'keyboard-alt-file.bin')).toBeVisible();
+    await expect.poll(() => storagePathExists('keyboard-alt-file.bin')).toBe(true);
+});
+
+test('Shift+N creates a folder', async ({ page }) => {
+    await openApp(page);
+
+    await page.keyboard.press('Shift+N');
     await completePrompt(page, 'Create Folder', 'keyboard-dir', 'Create');
 
     await expect(fileItem(page, 'keyboard-dir')).toBeVisible();
     await expect.poll(() => storagePathExists('keyboard-dir')).toBe(true);
 });
 
-test('Ctrl+U opens the native upload chooser', async ({ page }) => {
+test('U opens the native upload chooser', async ({ page }) => {
     await openApp(page);
 
     const [chooser] = await Promise.all([
         page.waitForEvent('filechooser'),
-        page.keyboard.press('Control+U'),
+        page.keyboard.press('U'),
     ]);
 
     expect(chooser.isMultiple()).toBe(true);
@@ -135,17 +145,44 @@ test('Delete requires selection and focus inside the file browser', async ({ pag
     await expect.poll(() => storagePathExists('delete-target.bin')).toBe(false);
 });
 
-test('Alt+Left navigates to the parent directory', async ({ page }) => {
+test('Backspace and ArrowLeft navigate to the parent directory', async ({ page }) => {
     await seedFiles({ 'parent/child/file.bin': 'nested' });
     await openApp(page);
     await openFileItem(page, 'parent');
     await openFileItem(page, 'child');
     await expect(page).toHaveURL(/\/parent\/child$/);
 
-    await page.keyboard.press('Alt+ArrowLeft');
+    await page.evaluate(() => {
+        const probe = event => {
+            if (event.key === 'ArrowLeft') {
+                globalThis.__arrowLeftPrevented = event.defaultPrevented;
+                document.removeEventListener('keydown', probe);
+            }
+        };
+        document.addEventListener('keydown', probe);
+    });
+    await page.keyboard.press('ArrowLeft');
 
     await expect(page).toHaveURL(/\/parent$/);
     await expect(page.locator('.breadcrumb-item[data-path="/parent"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => globalThis.__arrowLeftPrevented)).toBe(true);
+
+    await openFileItem(page, 'child');
+    await expect(page).toHaveURL(/\/parent\/child$/);
+
+    await page.evaluate(() => {
+        const probe = event => {
+            if (event.key === 'Backspace') {
+                globalThis.__backspacePrevented = event.defaultPrevented;
+                document.removeEventListener('keydown', probe);
+            }
+        };
+        document.addEventListener('keydown', probe);
+    });
+    await page.keyboard.press('Backspace');
+
+    await expect(page).toHaveURL(/\/parent$/);
+    await expect.poll(() => page.evaluate(() => globalThis.__backspacePrevented)).toBe(true);
 });
 
 test.describe('shortcut suppression', () => {
