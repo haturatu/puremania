@@ -187,6 +187,7 @@ func (h *Handler) CreateUpload(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Cannot save upload session", http.StatusInternalServerError)
 		return
 	}
+	h.publishUploadState(session, false)
 	location := "/api/files/upload-sessions/" + id
 	w.Header().Set("Location", location)
 	w.Header().Set("Content-Type", "application/json")
@@ -321,6 +322,7 @@ func (h *Handler) UploadChunk(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Cannot persist upload progress", http.StatusInternalServerError)
 		return
 	}
+	h.publishUploadState(session, false)
 	status := http.StatusPermanentRedirect
 	if session.UploadedBytes == session.TotalBytes {
 		status = http.StatusOK
@@ -378,6 +380,7 @@ func (h *Handler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
 			}
 			cache.InvalidateByPrefix(h.cache, "list:"+filepath.Dir(h.convertToVirtualPath(target)))
 			cache.InvalidateByPrefix(h.cache, "search:")
+			h.publishUploadState(session, false)
 			h.respondSuccess(w, map[string]any{"path": h.convertToVirtualPath(target)})
 			return
 		}
@@ -409,6 +412,7 @@ func (h *Handler) CompleteUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	cache.InvalidateByPrefix(h.cache, "list:"+filepath.Dir(h.convertToVirtualPath(target)))
 	cache.InvalidateByPrefix(h.cache, "search:")
+	h.publishUploadState(session, false)
 	h.respondSuccess(w, map[string]any{"path": h.convertToVirtualPath(target)})
 }
 
@@ -417,11 +421,13 @@ func (h *Handler) AbortUpload(w http.ResponseWriter, r *http.Request) {
 	lock := h.sessionMutex(id)
 	lock.Lock()
 	defer lock.Unlock()
-	if _, err := h.readUploadSession(id); err != nil {
+	session, err := h.readUploadSession(id)
+	if err != nil {
 		h.respondError(w, "Upload session not found", http.StatusNotFound)
 		return
 	}
 	_ = os.Remove(h.uploadTempPath(id))
 	_ = os.Remove(h.uploadMetadataPath(id))
+	h.publishUploadState(session, true)
 	w.WriteHeader(http.StatusNoContent)
 }
