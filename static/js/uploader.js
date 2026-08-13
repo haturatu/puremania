@@ -246,17 +246,17 @@ export class Uploader {
 
     notifyJobsChanged() { window.dispatchEvent(new CustomEvent('puremania:upload-jobs-changed')); }
 
-    async showUploadDialog() {
-        await this.openPicker(
+    async showUploadDialog(fallbackSelector = '.upload-input-files') {
+        return this.openPicker(
             () => this.filePicker.pickFiles(),
-            () => document.querySelector('.upload-input-files')?.click()
+            () => document.querySelector(fallbackSelector)?.click()
         );
     }
 
-    async showDirectoryDialog() {
-        await this.openPicker(
+    async showDirectoryDialog(fallbackSelector = '.upload-input-folders') {
+        return this.openPicker(
             () => this.filePicker.pickDirectory(),
-            () => document.querySelector('.upload-input-folders')?.click()
+            () => document.querySelector(fallbackSelector)?.click()
         );
     }
 
@@ -265,13 +265,16 @@ export class Uploader {
             const items = await pick();
             if (items === null) {
                 fallback();
+                return 'fallback';
             } else if (items.length) {
                 await this.handleUploadItems(items);
             }
+            return 'selected';
         } catch (error) {
-            if (error.name === 'AbortError') return;
+            if (error.name === 'AbortError') return 'cancelled';
             console.warn('Native file picker unavailable; using the input fallback', error);
             fallback();
+            return 'fallback';
         }
     }
 
@@ -284,6 +287,7 @@ export class Uploader {
             input.className = className;
             if (directory) input.setAttribute('webkitdirectory', '');
             input.addEventListener('change', () => { void this.handleSelectedFileList(input); });
+            input.addEventListener('cancel', () => { this.resumeRequest = null; });
             document.body.appendChild(input);
         };
         create('resume-upload-input-files', false);
@@ -328,6 +332,8 @@ export class Uploader {
         const selectFolders = area.querySelector('.btn-select-folders');
         filesInput.addEventListener('change', () => { void this.handleSelectedFileList(filesInput); });
         foldersInput.addEventListener('change', () => { void this.handleSelectedFileList(foldersInput); });
+        filesInput.addEventListener('cancel', () => { this.resumeRequest = null; });
+        foldersInput.addEventListener('cancel', () => { this.resumeRequest = null; });
         selectFiles.addEventListener('click', event => { event.preventDefault(); void this.showUploadDialog(); });
         selectFolders.addEventListener('click', event => { event.preventDefault(); void this.showDirectoryDialog(); });
         let dragDepth = 0;
@@ -397,11 +403,13 @@ export class Uploader {
         if (destinations.size !== 1) throw new Error('Select uploads with the same destination to resume together');
         const hasFolderUpload = records.some(record => record.relativePath.includes('/'));
         this.resumeRequest = { keys: new Set(records.map(record => record.key)), destination: records[0].destination };
+        let result;
         if (hasFolderUpload) {
-            await this.showDirectoryDialog();
+            result = await this.showDirectoryDialog('.resume-upload-input-folders');
         } else {
-            await this.showUploadDialog();
+            result = await this.showUploadDialog('.resume-upload-input-files');
         }
+        if (result === 'cancelled') this.resumeRequest = null;
     }
 
     async listJobs(signal) {

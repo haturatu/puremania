@@ -52,3 +52,29 @@ test('retains input and webkitdirectory fallbacks', async () => {
     assert.match(template, /input type="file" class="upload-input-files"/);
     assert.match(template, /class="upload-input-folders" webkitdirectory/);
 });
+
+for (const count of [10_000, 100_000, 300_000]) {
+    test(`yields responsively while walking ${count.toLocaleString()} file handles`, async () => {
+        let yields = 0;
+        const root = {
+            kind: 'directory',
+            name: 'large',
+            async *entries() {
+                for (let index = 0; index < count; index++) {
+                    const name = `${index}.txt`;
+                    yield [name, fileHandle(name)];
+                }
+            }
+        };
+        const picker = new FileSystemPicker(
+            { showDirectoryPicker: async () => root },
+            async () => { yields += 1; }
+        );
+
+        const items = await picker.pickDirectory();
+
+        assert.equal(items.length, count);
+        assert.equal(yields, Math.floor(count / 500));
+        assert.equal(items.at(-1).relativePath, `large/${count - 1}.txt`);
+    });
+}
