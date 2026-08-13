@@ -194,12 +194,12 @@ These shortcuts are available anywhere in the file browser view.
 | Keybinding          | Action                               |
 | ------------------- | ------------------------------------ |
 | `Ctrl` + `f`        | Focus the search bar                 |
-| `Alt` + `←`         | Navigate to the parent directory     |
+| `Backspace` or `←`  | Navigate to the parent directory     |
 | `Delete`            | Delete selected file(s)              |
 | `F2`                | Rename the selected file or folder   |
-| `Ctrl` + `u`        | Show the upload dialog               |
-| `Ctrl` + `n`        | Create a new empty file              |
-| `Ctrl` + `Shift` + `n` | Create a new folder                  |
+| `u`                 | Show the upload dialog               |
+| `n` or `Alt` + `n`  | Create a new empty file              |
+| `Shift` + `n`       | Create a new folder                  |
 
 ### Search Bar: `cd` and `aria2c` Mode
 
