@@ -228,6 +228,7 @@ func main() {
 	api.HandleFunc("/storage-info", handler.GetStorageInfo).Methods("GET")
 	api.HandleFunc("/specific-dirs", handler.GetSpecificDirs).Methods("GET")
 	api.HandleFunc("/health", handler.HealthCheck).Methods("GET")
+	api.HandleFunc("/events", handler.Events).Methods("GET")
 
 	// Aria2cが有効な場合のみエンドポイントを登録
 	if cfg.Aria2cEnabled {
