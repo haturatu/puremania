@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createRequestSignal } from './request-signal.js';
+import {
+    createRequestSignal,
+    isManualRequestAbort,
+    isRequestTimeout,
+    requestErrorMessage
+} from './request-signal.js';
 
 test('combines manual cancellation and a native timeout with AbortSignal.any', () => {
     const manual = new AbortController().signal;
@@ -43,4 +48,15 @@ test('cleanup cancels a fallback timeout after a completed request', async () =>
     await new Promise(resolve => setTimeout(resolve, 5));
 
     assert.equal(request.signal.aborted, false);
+});
+
+test('keeps manual abort and timeout semantics distinct', () => {
+    const manual = new DOMException('Stopped', 'AbortError');
+    const timeout = new DOMException('Expired', 'TimeoutError');
+
+    assert.equal(isManualRequestAbort(manual), true);
+    assert.equal(isRequestTimeout(manual), false);
+    assert.equal(isManualRequestAbort(timeout), false);
+    assert.equal(isRequestTimeout(timeout), true);
+    assert.equal(requestErrorMessage(timeout, 'Directory request'), 'Directory request timed out. Try again.');
 });

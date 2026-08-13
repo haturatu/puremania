@@ -1,5 +1,18 @@
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
+export function isManualRequestAbort(error) {
+    return error?.name === 'AbortError';
+}
+
+export function isRequestTimeout(error) {
+    return error?.name === 'TimeoutError';
+}
+
+export function requestErrorMessage(error, fallbackMessage = 'Request failed') {
+    if (isRequestTimeout(error)) return `${fallbackMessage} timed out. Try again.`;
+    return error?.message || fallbackMessage;
+}
+
 export function createRequestSignal(manualSignal, {
     timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
     AbortSignalClass = globalThis.AbortSignal,
