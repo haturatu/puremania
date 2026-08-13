@@ -59,6 +59,24 @@ test('skips an active transition when navigation changes again', async () => {
     assert.equal(skipped, true);
 });
 
+test('keeps the transition active until its animation finishes', async () => {
+    let finishAnimation;
+    const transition = {
+        updateCallbackDone: Promise.resolve(),
+        finished: new Promise(resolve => { finishAnimation = resolve; })
+    };
+    const controller = new ViewTransitionController({
+        startViewTransition: callback => { void callback(); return transition; }
+    }, () => ({ matches: false }));
+
+    const rendering = controller.run(() => {});
+    await transition.updateCallbackDone;
+    assert.equal(controller.activeTransition, transition);
+    finishAnimation();
+    await rendering;
+    assert.equal(controller.activeTransition, null);
+});
+
 test('uses a short transition and declares a reduced-motion override', async () => {
     const css = await readFile(new URL('../css/base/base.css', import.meta.url), 'utf8');
     assert.match(css, /::view-transition-old\(root\)[\s\S]*animation-duration:\s*100ms/);

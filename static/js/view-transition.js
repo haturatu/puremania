@@ -20,8 +20,8 @@ export class ViewTransitionController {
         this.activeTransition?.skipTransition?.();
         const transition = this.document.startViewTransition(() => Promise.resolve().then(update));
         this.activeTransition = transition;
-        const updated = transition.updateCallbackDone || transition.finished || Promise.resolve();
-        return Promise.resolve(updated).finally(() => {
+        const finished = transition.finished || transition.updateCallbackDone || Promise.resolve();
+        return Promise.resolve(finished).finally(() => {
             if (this.activeTransition === transition) this.activeTransition = null;
         });
     }
