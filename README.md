@@ -6,6 +6,7 @@
 - [Why did I make this?](#why-did-i-make-this)
   - [Features](#features)
   - [Recent Changes (v0.0.28 - v0.0.30)](#recent-changes-v0028---v0030)
+  - [Backend Layout](#backend-layout)
   - [Getting Started](#getting-started)
     - [IP Address Firewall Configuration](#ip-address-firewall-configuration)
     - [Prerequisites](#prerequisites)
@@ -85,6 +86,17 @@ Recent frontend-focused updates based on `git log`:
     - Replaced upload cancel confirmation with the same dialog-based flow for a more consistent UI.
 - **v0.0.28**
     - Wired upload cancellation to active XHR batches so the progress UI can stop in-flight uploads correctly.
+
+## Backend Layout
+
+The Go backend keeps its executable entry point in `cmd/puremania` and application implementation in `internal/` packages. This makes the entry point limited to process wiring while preventing application-only packages from being imported by external modules.
+
+- `internal/app`: server startup and HTTP route construction
+- `internal/config`: environment and `.env` configuration loading
+- `internal/middleware`: HTTP security, compression, body limits, and static caching
+- `internal/health`: container healthcheck command
+- `internal/aria2`: aria2c daemon lifecycle
+- `internal/handlers`, `internal/cache`, `internal/types`, `internal/utils`, `internal/worker`: application implementation packages
 
 ## Getting Started  
   
