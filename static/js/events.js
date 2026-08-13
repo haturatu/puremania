@@ -152,17 +152,32 @@ export class EventHandler {
         const target = e.target;
         if (target instanceof Element && target.closest('input, textarea, select, dialog, [contenteditable="true"], .cm-editor, .editor-modal')) return;
         const browserFocused = document.activeElement?.closest?.('.file-browser') || target?.closest?.('.file-browser');
+        const noModifiers = !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
+        const altOnly = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey;
+        const shiftOnly = e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
         const keyActions = {
             'Delete': () => browserFocused && this.app.selectedFiles.size > 0 && this.app.api.deleteSelectedFiles(),
-            'ArrowLeft': () => e.altKey && this.app.navigateToParent(),
+            'Backspace': () => {
+                if (!noModifiers) return;
+                e.preventDefault();
+                this.app.navigateToParent();
+            },
+            'ArrowLeft': () => {
+                if (!noModifiers) return;
+                e.preventDefault();
+                this.app.navigateToParent();
+            },
             'f': () => e.ctrlKey && (e.preventDefault(), document.querySelector('.search-input')?.focus()),
             'n': () => {
-                if (e.ctrlKey) {
+                if (shiftOnly) {
                     e.preventDefault();
-                    e.shiftKey ? this.app.api.createNewFolder() : this.app.api.createNewFile();
+                    this.app.api.createNewFolder();
+                } else if (noModifiers || altOnly) {
+                    e.preventDefault();
+                    this.app.api.createNewFile();
                 }
             },
-            'u': () => e.ctrlKey && (e.preventDefault(), this.app.uploader.showUploadDialog()),
+            'u': () => noModifiers && (e.preventDefault(), this.app.uploader.showUploadDialog()),
             'F2': () => {
                 if (this.app.selectedFiles.size === 1) {
                     const path = Array.from(this.app.selectedFiles)[0];
@@ -256,6 +271,10 @@ export class EventHandler {
             nextAnchor = path;
         }
         this.app.setSelection(nextSelection, nextAnchor);
+        // File cards are non-form containers, so a pointer click otherwise
+        // leaves focus on <body>. Keep keyboard actions scoped to the browser
+        // while allowing Delete to work immediately after selecting an item.
+        fileItem.closest('.file-browser')?.focus({ preventScroll: true });
     }
 
     handleFileDoubleClick(fileItem) {
