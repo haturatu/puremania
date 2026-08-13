@@ -154,13 +154,13 @@ jobs:
         run: go test -race ./...
 
       - name: Run fuzz smoke test (handlers)
-        run: go test ./handlers -run=FuzzParseContentRange -fuzz=FuzzParseContentRange -fuzztime=10s
+        run: go test ./internal/handlers -run=FuzzParseContentRange -fuzz=FuzzParseContentRange -fuzztime=10s
 
       - name: Run fuzz smoke test (server)
-        run: go test . -run=FuzzSelectContentEncoding -fuzz=FuzzSelectContentEncoding -fuzztime=10s
+        run: go test ./internal/middleware -run=FuzzSelectContentEncoding -fuzz=FuzzSelectContentEncoding -fuzztime=10s
 
       - name: Run HTTP soak test
-        run: SOAK_DURATION=15s go test . -run='^TestHTTPSoak$' -count=1 -timeout=1m
+        run: SOAK_DURATION=15s go test ./internal/middleware -run='^TestHTTPSoak$' -count=1 -timeout=1m
 
       - name: Run govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
