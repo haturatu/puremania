@@ -5,13 +5,14 @@
 - [Pure Mania](#pure-mania)
 - [Why did I make this?](#why-did-i-make-this)
   - [Features](#features)
-  - [Recent Changes (v0.0.28 - v0.0.30)](#recent-changes-v0028---v0030)
+  - [Recent Changes (v0.0.28 - current)](#recent-changes-v0028---current)
   - [Backend Layout](#backend-layout)
   - [Getting Started](#getting-started)
     - [IP Address Firewall Configuration](#ip-address-firewall-configuration)
     - [Prerequisites](#prerequisites)
     - [Installation & Building](#installation--building)
     - [Configuration](#configuration)
+    - [Docker Compose](#docker-compose)
     - [Running the Application](#running-the-application)
     - [Supervisor (Optional)](#supervisor-optional)
   - [Usage](#usage)
@@ -73,9 +74,9 @@ That’s enough of my rambling.
   - Playlist repeat functionality.
   - Caches album art at the directory level to reduce redundant API calls. It looks for `cover.jpg`, `cover.jpeg`, `cover.png`, `folder.jpg`, or `album.jpg` in the same directory as the music file.
 
-## Recent Changes (v0.0.28 - v0.0.30)
+## Recent Changes (v0.0.28 - current)
 
-Recent frontend-focused updates based on `git log`:
+Recent updates based on the release history and current `main` branch:
 
 - **v0.0.30**
     - Improved startup performance by parallelizing initial frontend data loading.
@@ -86,6 +87,21 @@ Recent frontend-focused updates based on `git log`:
     - Replaced upload cancel confirmation with the same dialog-based flow for a more consistent UI.
 - **v0.0.28**
     - Wired upload cancellation to active XHR batches so the progress UI can stop in-flight uploads correctly.
+- **v0.0.31–v0.0.34**
+    - Added the container build files (`Dockerfile` and `.dockerignore`) and Dependabot configuration.
+- **v0.0.35–v0.0.40**
+    - Updated Go and frontend dependencies, fixed CodeMirror and video-view assets, and aligned the container user ID with the host setup.
+- **v0.0.41–v0.0.49**
+    - Consolidated Docker runtime configuration and host networking.
+    - Added resumable uploads, resume selection, adaptive concurrency, drag-and-drop folders, and bulk-upload handling.
+    - Improved thumbnail loading and mobile image-loader behavior.
+    - Added static response compression, reproducible static builds, and FFmpeg/aria2c support in the container image.
+- **Current `main`**
+    - Added request bounds, input validation, safe path handling, security headers, CSRF protection, and resilience/fuzz/soak CI checks.
+    - Added Chromium browser E2E coverage and expanded keyboard shortcut tests.
+    - Replaced page polling with SSE invalidation and synchronized upload changes across tabs.
+    - Added native route transitions, native file-system picker progressive enhancement, Web Locks upload coordination, upload metadata persistence, and combined abort signals.
+    - Organized the Go backend under `cmd/puremania` and `internal/` packages.
 
 ## Backend Layout
 
@@ -144,8 +160,21 @@ In general, as long as proper user and permission management is in place, any fi
     ```  
   
 2.  **Edit the `.env` file:**  
-    Open the `.env` file and customize the settings to match your environment. See the [Configuration](#Configuration-1) section for more details.  
-  
+    Open the `.env` file and customize the settings to match your environment. See the [Configuration](#Configuration-1) section for more details.
+
+### Docker Compose
+
+Docker Compose uses a separate example because its interpolation variables are prefixed with `PUREMANIA_`.
+The regular `.env.example` is intended for running `./puremania` directly and its `ARIA2C` variable is not used by Compose.
+
+```bash
+cp .env.docker.example .env.docker
+# Edit .env.docker, especially PUREMANIA_HOST_HOME and PUREMANIA_ARIA2C.
+docker compose --env-file .env.docker up -d --build
+```
+
+Set `PUREMANIA_ARIA2C=enable` to start the bundled aria2c daemon in the container.
+
 ### Running the Application  
   
 After building and configuring, you can run the application:  
