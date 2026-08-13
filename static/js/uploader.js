@@ -1,5 +1,7 @@
 // Resumable uploader: file bytes stay in the browser File object and each
 // request owns only one Blob slice. IndexedDB stores session metadata only.
+import { createRequestSignal, DEFAULT_REQUEST_TIMEOUT_MS } from './request-signal.js';
+
 const CHUNK_SIZE = 8 * 1024 * 1024;
 const MIN_CONCURRENT_FILES = 2;
 const AIMD_DECISION_INTERVAL_MS = 1500;
@@ -396,7 +398,7 @@ export class Uploader {
     async discardJob(key) {
         const record = await this.store.get(key);
         if (!record) return;
-        try { await fetch(record.url, { method: 'DELETE' }); } finally { await this.store.remove(key); this.notifyJobsChanged(); }
+        try { await this.apiJSON(record.url, { method: 'DELETE' }); } finally { await this.store.remove(key); this.notifyJobsChanged(); }
     }
 
     async discardWrongRouteDuplicates(items, destination) {
@@ -409,13 +411,24 @@ export class Uploader {
     }
 
     async apiJSON(url, options = {}) {
-        const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
-        if (!response.ok) {
-            const error = new Error((await response.json().catch(() => ({}))).message || `Request failed (${response.status})`);
-            error.status = response.status;
-            throw error;
+        const { signal, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, ...fetchOptions } = options;
+        const requestSignal = createRequestSignal(signal, { timeoutMs });
+        try {
+            const response = await fetch(url, {
+                ...fetchOptions,
+                signal: requestSignal.signal,
+                headers: { 'Content-Type': 'application/json', ...(fetchOptions.headers || {}) }
+            });
+            if (!response.ok) {
+                const error = new Error((await response.json().catch(() => ({}))).message || `Request failed (${response.status})`);
+                error.status = response.status;
+                throw error;
+            }
+            if (response.status === 204) return null;
+            return await response.json();
+        } finally {
+            requestSignal.cleanup();
         }
-        return response.json();
     }
 
     async getOrCreateRemoteSession(item, destination, session) {

@@ -1,5 +1,6 @@
 import { showConfirmDialog, showPromptDialog } from './modal.js';
 import { buildApiUrl, getBaseName, getParentPath, isEditableFile, isValidPath } from './util.js';
+import { createRequestSignal, DEFAULT_REQUEST_TIMEOUT_MS } from './request-signal.js';
 
 const MAX_CACHED_DIRECTORIES = 20;
 const MAX_CACHED_ENTRIES = 100000;
@@ -43,25 +44,31 @@ export class ApiClient {
         payload,
         headers = {},
         signal,
+        timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
         validateSuccess = false,
         fallbackMessage = 'Request failed'
     } = {}) {
         const requestHeaders = { ...headers };
-        const options = { method, headers: requestHeaders, signal };
+        const requestSignal = createRequestSignal(signal, { timeoutMs });
+        const options = { method, headers: requestHeaders, signal: requestSignal.signal };
         if (payload !== undefined) {
             requestHeaders['Content-Type'] ||= 'application/json';
             options.body = JSON.stringify(payload);
         }
 
-        const response = await fetch(url, options);
-        const result = await response.json().catch(() => null);
-        if (!response.ok) {
-            throw new Error(this.getApiErrorMessage(result, `${fallbackMessage} (status: ${response.status})`));
+        try {
+            const response = await fetch(url, options);
+            const result = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw new Error(this.getApiErrorMessage(result, `${fallbackMessage} (status: ${response.status})`));
+            }
+            if (validateSuccess && !result?.success) {
+                throw new Error(this.getApiErrorMessage(result, fallbackMessage));
+            }
+            return result;
+        } finally {
+            requestSignal.cleanup();
         }
-        if (validateSuccess && !result?.success) {
-            throw new Error(this.getApiErrorMessage(result, fallbackMessage));
-        }
-        return result;
     }
 
     async postJson(url, payload, options = {}) {
@@ -85,10 +92,11 @@ export class ApiClient {
         fallbackMessage = 'Request failed',
         toastOnError = true,
         validateSuccess = false,
-        signal
+        signal,
+        timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
     } = {}) {
         try {
-            return await this.request(url, { signal, validateSuccess, fallbackMessage });
+            return await this.request(url, { signal, timeoutMs, validateSuccess, fallbackMessage });
         } catch (error) {
             if (error.name === 'AbortError') return null;
             if (toastOnError) {
@@ -156,7 +164,8 @@ export class ApiClient {
         }
     }
 
-    async getFiles(path, { signal = null, useCache = true, detailed = false, limit = 0, cursor = '', sort = '', direction = '' } = {}) {
+    async getFiles(path, { signal = null, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, useCache = true, detailed = false, limit = 0, cursor = '', sort = '', direction = '' } = {}) {
+        const requestSignal = createRequestSignal(signal, { timeoutMs });
         try {
             const key = this.directoryCacheKey(path, { limit, cursor, sort, direction });
             const headers = {};
@@ -167,7 +176,7 @@ export class ApiClient {
 
             const query = { path };
             if (limit) Object.assign(query, { limit, cursor, sort, direction });
-            const response = await fetch(buildApiUrl('/api/files', query), { headers, signal });
+            const response = await fetch(buildApiUrl('/api/files', query), { headers, signal: requestSignal.signal });
 
             if (response.status === 304) {
                 console.log(`Content for ${path} not modified. Using cache.`);
@@ -198,6 +207,8 @@ export class ApiClient {
             if (error.name === 'AbortError') throw error;
             console.error(`Error in getFiles for path ${path}:`, error);
             return detailed ? { files: null, notModified: false, error } : null;
+        } finally {
+            requestSignal.cleanup();
         }
     }
 
