@@ -1,5 +1,7 @@
 // Resumable uploader: file bytes stay in the browser File object and each
 // request owns only one Blob slice. IndexedDB stores session metadata only.
+import { UploadMetadataStorage } from './upload-storage.js';
+
 const CHUNK_SIZE = 8 * 1024 * 1024;
 const MIN_CONCURRENT_FILES = 2;
 const AIMD_DECISION_INTERVAL_MS = 1500;
@@ -187,6 +189,7 @@ export class Uploader {
         this.app = app;
         this._processingDrop = false;
         this.store = new UploadSessionStore();
+        this.metadataStorage = new UploadMetadataStorage();
         this.resumeRequest = null;
         this.createResumeInputs();
     }
@@ -543,6 +546,9 @@ export class Uploader {
             this.app.ui.showToast('Upload in progress', 'Pause or finish the current upload first.', 'warning');
             return;
         }
+        // File bytes remain outside IndexedDB. Persistence only protects the
+        // small session records needed to resume after a reload.
+        this.storageEstimate = await this.metadataStorage.prepare();
         const session = this.createUploadSession();
         this.activeUploadSession = session;
         const destination = destinationOverride || this.app.router.getCurrentPath();
