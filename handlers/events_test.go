@@ -74,6 +74,9 @@ func TestEventsSetsStreamingHeadersAndStopsOnDisconnect(t *testing.T) {
 	if !strings.Contains(response.Body.String(), ": connected") {
 		t.Fatalf("missing connection prelude: %q", response.Body.String())
 	}
+	if !strings.Contains(response.Body.String(), "event: sync\ndata: {}\n\n") {
+		t.Fatalf("missing initial reconciliation event: %q", response.Body.String())
+	}
 }
 
 func TestUploadEventDoesNotExposePaths(t *testing.T) {

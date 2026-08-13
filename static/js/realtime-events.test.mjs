@@ -21,10 +21,14 @@ test('opens one event stream and publishes typed server events', () => {
     assert.equal(realtime.start(), true);
     assert.equal(realtime.start(), false);
     assert.equal(realtime.source.url, '/api/events');
+    realtime.source.dispatch('sync', {});
     realtime.source.dispatch('aria2', { active: [] });
 
     assert.deepEqual(realtime.latest('aria2'), { active: [] });
-    assert.deepEqual(emitted, [{ type: 'server:aria2', detail: { active: [] } }]);
+    assert.deepEqual(emitted, [
+        { type: 'server:sync', detail: {} },
+        { type: 'server:aria2', detail: { active: [] } }
+    ]);
 });
 
 test('closes the active stream', () => {

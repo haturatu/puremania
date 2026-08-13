@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pure Mania</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=HMYJN34G">
-    <link rel="stylesheet" href="/static/css/masonry.css?v=HMYJN34G">
-    <link rel="stylesheet" href="/static/css/components/video-view.css?v=HMYJN34G">
+    <link rel="stylesheet" href="/static/css/style.css?v=CUU5JEC7">
+    <link rel="stylesheet" href="/static/css/masonry.css?v=CUU5JEC7">
+    <link rel="stylesheet" href="/static/css/components/video-view.css?v=CUU5JEC7">
     <style>
     .cm-editor { border: 1px solid #ddd; }
     </style>
@@ -16,10 +16,10 @@
     <script type="module">
         const root = document.getElementById('app-root');
         try {
-            const response = await fetch('/static/templates/app_shell.html?v=HMYJN34G');
+            const response = await fetch('/static/templates/app_shell.html?v=CUU5JEC7');
             if (!response.ok) throw new Error(`App shell request failed (${response.status})`);
             root.innerHTML = await response.text();
-            await import('/static/dist/app-HMYJN34G.js');
+            await import('/static/dist/app-CUU5JEC7.js');
         } catch (error) {
             console.error('Failed to load the application shell', error);
             root.textContent = 'Failed to load the application. Please reload.';

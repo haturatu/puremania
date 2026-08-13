@@ -26,6 +26,9 @@ export class UploadPageHandler {
         this.onUploadState = event => {
             if (event.detail?.uploadId) void this.refresh();
         };
+        this.onServerSync = () => {
+            if (this.active) void this.refresh();
+        };
     }
 
     get isActive() {
@@ -37,6 +40,7 @@ export class UploadPageHandler {
         this.active = true;
         window.addEventListener('puremania:upload-jobs-changed', this.onJobsChanged);
         this.app.eventBus.addEventListener('server:upload', this.onUploadState);
+        this.app.eventBus.addEventListener('server:sync', this.onServerSync);
         document.querySelector('.breadcrumbs')?.style.setProperty('display', 'none');
         void this.refresh();
     }
@@ -49,6 +53,7 @@ export class UploadPageHandler {
         this.refreshRequested = false;
         window.removeEventListener('puremania:upload-jobs-changed', this.onJobsChanged);
         this.app.eventBus.removeEventListener('server:upload', this.onUploadState);
+        this.app.eventBus.removeEventListener('server:sync', this.onServerSync);
         document.querySelector('.breadcrumbs')?.style.removeProperty('display');
     }
 

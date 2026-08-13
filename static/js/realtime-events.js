@@ -11,7 +11,7 @@ export class RealtimeEvents {
         if (this.source || typeof this.EventSourceClass !== 'function') return false;
         const url = this.aria2Enabled ? '/api/events?aria2=1' : '/api/events';
         this.source = new this.EventSourceClass(url);
-        for (const type of ['aria2', 'upload']) {
+        for (const type of ['sync', 'aria2', 'upload']) {
             this.source.addEventListener(type, event => this.handle(type, event));
         }
         return true;

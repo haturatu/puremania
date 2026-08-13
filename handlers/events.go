@@ -98,15 +98,20 @@ func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, "Streaming is unavailable", http.StatusInternalServerError)
 		return
 	}
+	// Subscribe before the initial sync so mutations racing with connection
+	// setup are queued and reconciled after the authoritative reload.
+	subscriber, unsubscribe := h.events.subscribe()
+	defer unsubscribe()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache, no-transform")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	_, _ = fmt.Fprint(w, ": connected\n\n")
+	if writeServerEvent(w, serverEvent{name: "sync", data: struct{}{}}) != nil {
+		return
+	}
 	flusher.Flush()
 
-	subscriber, unsubscribe := h.events.subscribe()
-	defer unsubscribe()
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
 	var aria2Ticker *time.Ticker
