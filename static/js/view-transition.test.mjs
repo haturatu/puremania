@@ -33,7 +33,9 @@ test('renders without animation when reduced motion is preferred', async () => {
 });
 
 test('skips an active transition when navigation changes again', async () => {
-    let finishFirst;
+    let rejectFirstReady;
+    let rejectFirstUpdate;
+    let rejectFirstFinished;
     let skipped = false;
     let count = 0;
     const documentObject = {
@@ -42,8 +44,16 @@ test('skips an active transition when navigation changes again', async () => {
             count += 1;
             if (count === 1) {
                 return {
-                    skipTransition: () => { skipped = true; },
-                    updateCallbackDone: new Promise(resolve => { finishFirst = resolve; })
+                    skipTransition: () => {
+                        skipped = true;
+                        const error = new Error('Transition was skipped');
+                        rejectFirstReady(error);
+                        rejectFirstUpdate(error);
+                        rejectFirstFinished(error);
+                    },
+                    ready: new Promise((_, reject) => { rejectFirstReady = reject; }),
+                    updateCallbackDone: new Promise((_, reject) => { rejectFirstUpdate = reject; }),
+                    finished: new Promise((_, reject) => { rejectFirstFinished = reject; })
                 };
             }
             return { updateCallbackDone: Promise.resolve() };
@@ -53,7 +63,6 @@ test('skips an active transition when navigation changes again', async () => {
 
     const first = controller.run(() => {});
     await controller.run(() => {});
-    finishFirst();
     await first;
 
     assert.equal(skipped, true);
