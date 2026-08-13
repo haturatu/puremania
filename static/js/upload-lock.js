@@ -6,6 +6,9 @@ export class OriginUploadLock {
     }
 
     async run(task) {
+        // Best-effort browser coordination only. Unsupported/insecure contexts
+        // fall back to the uploader unchanged; the Go semaphore remains the
+        // authoritative server-side concurrency limit in every browser.
         if (typeof this.lockManager?.request !== 'function') {
             return { acquired: true, result: await task() };
         }

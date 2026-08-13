@@ -335,6 +335,10 @@ Pure Mania exposes the following RESTful API endpoints under the `/api` prefix:
 - `GET    /files/upload-sessions/{id}`: Retrieve durable received-byte progress for resumption.
 - `POST   /files/upload-sessions/{id}/complete`: Atomically finalize a fully received upload.
 - `DELETE /files/upload-sessions/{id}`: Permanently discard an abandoned upload session.
+
+Supporting browsers use an origin-wide Web Lock to prevent 2 tabs from starting
+adaptive upload batches simultaneously. This is a best-effort client optimization;
+the Go upload semaphore remains authoritative when Web Locks are unavailable.
 - `GET    /files/download`: Download a single file.  
 - `GET    /files/content`: Get the content of a text-based file.  
 - `POST   /files/download-zip`: Create and download a ZIP archive of multiple files.  
