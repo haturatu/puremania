@@ -1,4 +1,3 @@
-import { PollingPageController } from './polling-page-controller.js';
 import { getTemplateContent } from './template.js';
 import { TEMPLATES } from './template-registry.js';
 
@@ -17,14 +16,21 @@ export class UploadPageHandler {
     constructor(app) {
         this.app = app;
         this.selectedKeys = new Set();
-        this.poller = new PollingPageController({
-            interval: 3000,
-            isCurrentPage: () => this.isActive,
-            fetchData: signal => this.app.uploader.listJobs(signal),
-            render: jobs => this.render(jobs),
-            onError: error => console.error('Failed to refresh uploads', error)
-        });
+        this.active = false;
+        this.jobs = [];
+        this.refreshController = null;
+        this.refreshRequested = false;
+        // Local EventTarget and BroadcastChannel notifications share one
+        // invalidation path; refresh() resolves authoritative server state.
         this.onJobsChanged = () => this.refresh();
+        // Server events invalidate the view; REST/IndexedDB remain the source
+        // of truth so coalesced or reconnected streams cannot render stale data.
+        this.onUploadState = event => {
+            if (event.detail?.uploadId) void this.refresh();
+        };
+        this.onServerSync = () => {
+            if (this.active) void this.refresh();
+        };
     }
 
     get isActive() {
@@ -32,19 +38,50 @@ export class UploadPageHandler {
     }
 
     enter() {
-        if (!this.poller.start()) return;
-        window.addEventListener('puremania:upload-jobs-changed', this.onJobsChanged);
+        if (this.active) return;
+        this.active = true;
+        this.app.eventBus.addEventListener('upload-jobs-changed', this.onJobsChanged);
+        this.app.eventBus.addEventListener('server:upload', this.onUploadState);
+        this.app.eventBus.addEventListener('server:sync', this.onServerSync);
         document.querySelector('.breadcrumbs')?.style.setProperty('display', 'none');
+        void this.refresh();
     }
 
     exit() {
-        if (!this.poller.stop()) return;
-        window.removeEventListener('puremania:upload-jobs-changed', this.onJobsChanged);
+        if (!this.active) return;
+        this.active = false;
+        this.refreshController?.abort();
+        this.refreshController = null;
+        this.refreshRequested = false;
+        this.app.eventBus.removeEventListener('upload-jobs-changed', this.onJobsChanged);
+        this.app.eventBus.removeEventListener('server:upload', this.onUploadState);
+        this.app.eventBus.removeEventListener('server:sync', this.onServerSync);
         document.querySelector('.breadcrumbs')?.style.removeProperty('display');
     }
 
     async refresh() {
-        await this.poller.refresh();
+        if (!this.active) return;
+        if (this.refreshController) {
+            this.refreshRequested = true;
+            return;
+        }
+        const controller = new AbortController();
+        this.refreshController = controller;
+        try {
+            const jobs = await this.app.uploader.listJobs(controller.signal);
+            if (this.active && !controller.signal.aborted) {
+                this.jobs = jobs;
+                this.render(jobs);
+            }
+        } catch (error) {
+            if (error.name !== 'AbortError') console.error('Failed to refresh uploads', error);
+        } finally {
+            if (this.refreshController === controller) this.refreshController = null;
+            if (this.refreshRequested && this.active) {
+                this.refreshRequested = false;
+                void this.refresh();
+            }
+        }
     }
 
     render(jobs) {
