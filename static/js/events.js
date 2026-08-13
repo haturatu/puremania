@@ -164,7 +164,6 @@ export class EventHandler {
             },
             'u': () => e.ctrlKey && (e.preventDefault(), this.app.uploader.showUploadDialog()),
             'F2': () => {
-                if (!browserFocused) return;
                 if (this.app.selectedFiles.size === 1) {
                     const path = Array.from(this.app.selectedFiles)[0];
                     this.app.api.renameFile(path);
@@ -172,7 +171,8 @@ export class EventHandler {
             }
         };
 
-        const action = keyActions[e.key];
+        const normalizedKey = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+        const action = keyActions[e.key] || keyActions[normalizedKey];
         if (action) {
             action();
         }
