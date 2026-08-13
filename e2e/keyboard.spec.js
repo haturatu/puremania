@@ -51,15 +51,22 @@ test('Ctrl+Shift+N creates a folder', async ({ page }) => {
     await expect.poll(() => storagePathExists('keyboard-dir')).toBe(true);
 });
 
-test('Ctrl+U opens the native upload chooser', async ({ page }) => {
+test('Ctrl+U opens the upload chooser', async ({ page }) => {
     await openApp(page);
+    await page.evaluate(() => {
+        // Exercise the compatibility path deterministically; native picker
+        // support is covered by the FileSystemPicker unit tests.
+        window.showOpenFilePicker = undefined;
+        const input = document.querySelector('.upload-input-files');
+        input.click = () => {
+            globalThis.__e2eUploadShortcutClicked = true;
+        };
+    });
 
-    const [chooser] = await Promise.all([
-        page.waitForEvent('filechooser'),
-        page.keyboard.press('Control+U'),
-    ]);
+    await page.keyboard.press('Control+U');
 
-    expect(chooser.isMultiple()).toBe(true);
+    await expect.poll(() => page.evaluate(() => globalThis.__e2eUploadShortcutClicked)).toBe(true);
+    await expect(page.locator('.upload-input-files')).toHaveAttribute('multiple', '');
 });
 
 test('Ctrl+F focuses application search and prevents the browser shortcut', async ({ page }) => {
@@ -172,6 +179,8 @@ test.describe('shortcut suppression', () => {
         await openWithSelectedFile(page);
         await page.locator('.search-options').click();
         const dialog = page.getByRole('dialog', { name: 'Search Options' });
+        await expect(dialog).toBeVisible();
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const select = dialog.locator('#search-scope');
         await select.focus();
 
@@ -183,6 +192,8 @@ test.describe('shortcut suppression', () => {
         await openWithSelectedFile(page);
         await page.locator('.search-options').click();
         const dialog = page.getByRole('dialog', { name: 'Search Options' });
+        await expect(dialog).toBeVisible();
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const applyButton = dialog.getByRole('button', { name: 'Apply' });
         await applyButton.focus();
 
