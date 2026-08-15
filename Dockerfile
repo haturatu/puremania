@@ -34,7 +34,7 @@ RUN apt-get update \
         media-types \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd --system --uid 1000 --home-dir /home/puremania --create-home --shell /usr/sbin/nologin puremania \
+RUN useradd --system --uid 1000 --home-dir /home/puremania --create-home --shell /usr/bin/nologin puremania \
     && mkdir -p /app /data \
     && chown -R puremania:puremania /app /data
 
