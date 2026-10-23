@@ -10,7 +10,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/puremania ./cmd/puremania
 
-FROM node:26-bookworm-slim AS frontend
+FROM node:26.12.1-bookworm-slim AS frontend
 
 WORKDIR /src
 
