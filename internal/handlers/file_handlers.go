@@ -18,6 +18,7 @@ import (
 	"puremania/internal/types"
 	"puremania/internal/utils"
 	"puremania/internal/worker"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -495,38 +496,67 @@ func (h *Handler) servePaginatedFileList(w http.ResponseWriter, r *http.Request,
 		cache.Set(h.cache, cacheKey, files, int64(len(files)*200), CacheTTL)
 	}
 
-	pageFiles := append([]types.FileInfo(nil), files...)
-	sort.SliceStable(pageFiles, func(i, j int) bool {
-		left, right := pageFiles[i], pageFiles[j]
-		comparison := 0
-		switch sortField {
-		case "size":
-			comparison = compareInt64(left.Size, right.Size)
-		case "modified":
-			comparison = strings.Compare(left.ModTime, right.ModTime)
-		case "type":
-			comparison = strings.Compare(fileSortType(left), fileSortType(right))
-		default:
-			comparison = strings.Compare(strings.ToLower(left.Name), strings.ToLower(right.Name))
-		}
-		if comparison == 0 {
-			comparison = strings.Compare(left.Path, right.Path)
-		}
-		if direction == "desc" {
-			return comparison > 0
-		}
-		return comparison < 0
-	})
-	if offset > len(pageFiles) {
-		offset = len(pageFiles)
+	if offset > len(files) {
+		offset = len(files)
 	}
-	end := min(offset+limit, len(pageFiles))
-	hasMore := end < len(pageFiles)
+	end := min(offset+limit, len(files))
+	pageFiles := sortedFilePage(files, sortField, direction, offset, end)
+	hasMore := end < len(files)
 	nextCursor := ""
 	if hasMore {
 		nextCursor = strconv.Itoa(end)
 	}
-	h.respondSuccess(w, directoryPage{Data: pageFiles[offset:end], NextCursor: nextCursor, HasMore: hasMore, Offset: offset, Total: len(pageFiles)})
+	h.respondSuccess(w, directoryPage{Data: pageFiles, NextCursor: nextCursor, HasMore: hasMore, Offset: offset, Total: len(files)})
+}
+
+// Sort a compact index without copying or mutating the cached file list. Name
+// normalization happens once per file, rather than twice per comparison.
+func sortedFilePage(files []types.FileInfo, field, direction string, start, end int) []types.FileInfo {
+	if len(files) == 0 {
+		return nil
+	}
+	if start == end {
+		return []types.FileInfo{}
+	}
+	type sortEntry struct {
+		index int
+		key   string
+	}
+	order := make([]sortEntry, len(files))
+	for i := range files {
+		order[i].index = i
+		switch field {
+		case "size":
+		case "modified":
+			order[i].key = files[i].ModTime
+		case "type":
+			order[i].key = fileSortType(files[i])
+		default:
+			order[i].key = strings.ToLower(files[i].Name)
+		}
+	}
+	slices.SortFunc(order, func(a, b sortEntry) int {
+		comparison := strings.Compare(a.key, b.key)
+		if field == "size" {
+			comparison = compareInt64(files[a.index].Size, files[b.index].Size)
+		}
+		if comparison == 0 {
+			comparison = strings.Compare(files[a.index].Path, files[b.index].Path)
+		}
+		if direction == "desc" {
+			comparison = -comparison
+		}
+		if comparison == 0 {
+			// Match the old stable sort even for duplicate virtual paths.
+			return compareInt64(int64(a.index), int64(b.index))
+		}
+		return comparison
+	})
+	page := make([]types.FileInfo, end-start)
+	for i, entry := range order[start:end] {
+		page[i] = files[entry.index]
+	}
+	return page
 }
 
 func compareInt64(left, right int64) int {

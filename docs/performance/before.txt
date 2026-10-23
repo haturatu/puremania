@@ -1,0 +1,94 @@
+goos: linux
+goarch: amd64
+pkg: puremania/internal/handlers
+cpu: AMD Ryzen 5 PRO 3500U w/ Radeon Vega Mobile Gfx
+BenchmarkPaginatedFileList/3000/name-4         	      30	  21096609 ns/op	 1888016 B/op	   96717 allocs/op
+BenchmarkPaginatedFileList/3000/name-4         	      38	  24680936 ns/op	 1904253 B/op	   96717 allocs/op
+BenchmarkPaginatedFileList/3000/name-4         	      39	  14827730 ns/op	 1891714 B/op	   96714 allocs/op
+BenchmarkPaginatedFileList/3000/name-4         	      51	  13576296 ns/op	 1884312 B/op	   96711 allocs/op
+BenchmarkPaginatedFileList/3000/name-4         	      46	  12695194 ns/op	 1879797 B/op	   96709 allocs/op
+BenchmarkPaginatedFileList/3000/name-4         	      52	  12370324 ns/op	 1868430 B/op	   96706 allocs/op
+BenchmarkPaginatedFileList/3000/size-4         	     481	   1304118 ns/op	  298264 B/op	      45 allocs/op
+BenchmarkPaginatedFileList/3000/size-4         	     549	   1189798 ns/op	  294509 B/op	      44 allocs/op
+BenchmarkPaginatedFileList/3000/size-4         	     525	   1175366 ns/op	  294457 B/op	      44 allocs/op
+BenchmarkPaginatedFileList/3000/size-4         	     543	   1133008 ns/op	  295309 B/op	      44 allocs/op
+BenchmarkPaginatedFileList/3000/size-4         	     454	   1156139 ns/op	  295230 B/op	      44 allocs/op
+BenchmarkPaginatedFileList/3000/size-4         	     471	   1162485 ns/op	  294381 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/3000/modified-4     	     162	   3508549 ns/op	  294472 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/3000/modified-4     	     176	   4065356 ns/op	  293772 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/3000/modified-4     	     177	   3929976 ns/op	  295209 B/op	      44 allocs/op
+BenchmarkPaginatedFileList/3000/modified-4     	     153	   3668367 ns/op	  294058 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/3000/modified-4     	     174	   3494906 ns/op	  294280 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/3000/modified-4     	     175	   3375609 ns/op	  294265 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/3000/type-4         	     165	   3529303 ns/op	  293895 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/3000/type-4         	     166	   3621372 ns/op	  295422 B/op	      44 allocs/op
+BenchmarkPaginatedFileList/3000/type-4         	     170	   3845201 ns/op	  293825 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/3000/type-4         	     170	   3515681 ns/op	  293322 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/3000/type-4         	     171	   3485927 ns/op	  294813 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/3000/type-4         	     171	   3456616 ns/op	  293313 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/30000/name-4        	       4	 146292422 ns/op	22552004 B/op	 1238794 allocs/op
+BenchmarkPaginatedFileList/30000/name-4        	       4	 159759218 ns/op	22551948 B/op	 1238793 allocs/op
+BenchmarkPaginatedFileList/30000/name-4        	       3	 173208718 ns/op	22573200 B/op	 1238799 allocs/op
+BenchmarkPaginatedFileList/30000/name-4        	       4	 149639141 ns/op	22530354 B/op	 1238786 allocs/op
+BenchmarkPaginatedFileList/30000/name-4        	       4	 148932286 ns/op	22551742 B/op	 1238793 allocs/op
+BenchmarkPaginatedFileList/30000/name-4        	       4	 149675627 ns/op	22551748 B/op	 1238793 allocs/op
+BenchmarkPaginatedFileList/30000/size-4        	      24	  23719248 ns/op	 2667531 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/30000/size-4        	      26	  23335581 ns/op	 2674080 B/op	      45 allocs/op
+BenchmarkPaginatedFileList/30000/size-4        	      24	  24095502 ns/op	 2671077 B/op	      44 allocs/op
+BenchmarkPaginatedFileList/30000/size-4        	      25	  23676423 ns/op	 2674345 B/op	      45 allocs/op
+BenchmarkPaginatedFileList/30000/size-4        	      25	  23666767 ns/op	 2674345 B/op	      45 allocs/op
+BenchmarkPaginatedFileList/30000/size-4        	      25	  23672132 ns/op	 2670932 B/op	      44 allocs/op
+BenchmarkPaginatedFileList/30000/modified-4    	      12	  47737706 ns/op	 2681713 B/op	      47 allocs/op
+BenchmarkPaginatedFileList/30000/modified-4    	      12	  46653185 ns/op	 2667509 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/30000/modified-4    	      12	  46017284 ns/op	 2674601 B/op	      45 allocs/op
+BenchmarkPaginatedFileList/30000/modified-4    	      13	  46323164 ns/op	 2667505 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/30000/modified-4    	      12	  47618036 ns/op	 2674601 B/op	      45 allocs/op
+BenchmarkPaginatedFileList/30000/modified-4    	      12	  47466600 ns/op	 2674601 B/op	      45 allocs/op
+BenchmarkPaginatedFileList/30000/type-4        	      12	  47956600 ns/op	 2674601 B/op	      45 allocs/op
+BenchmarkPaginatedFileList/30000/type-4        	      13	  46502696 ns/op	 2674052 B/op	      44 allocs/op
+BenchmarkPaginatedFileList/30000/type-4        	      12	  47361520 ns/op	 2674601 B/op	      45 allocs/op
+BenchmarkPaginatedFileList/30000/type-4        	      12	  47343757 ns/op	 2667509 B/op	      43 allocs/op
+BenchmarkPaginatedFileList/30000/type-4        	      12	  49649485 ns/op	 2674601 B/op	      45 allocs/op
+BenchmarkPaginatedFileList/30000/type-4        	      12	  48437098 ns/op	 2667509 B/op	      43 allocs/op
+BenchmarkDirectoryStateKey-4                   	      54	  11556633 ns/op	 1772112 B/op	   21082 allocs/op
+BenchmarkDirectoryStateKey-4                   	      49	  11611634 ns/op	 1771969 B/op	   21082 allocs/op
+BenchmarkDirectoryStateKey-4                   	      54	  10961236 ns/op	 1771954 B/op	   21082 allocs/op
+BenchmarkDirectoryStateKey-4                   	      51	  11736175 ns/op	 1772123 B/op	   21082 allocs/op
+BenchmarkDirectoryStateKey-4                   	      54	  10865345 ns/op	 1771954 B/op	   21082 allocs/op
+BenchmarkDirectoryStateKey-4                   	      54	  11517516 ns/op	 1771963 B/op	   21082 allocs/op
+BenchmarkListFilesWarm-4                       	      25	  22153957 ns/op	 3518693 B/op	  117790 allocs/op
+BenchmarkListFilesWarm-4                       	      28	  21730957 ns/op	 3521101 B/op	  117790 allocs/op
+BenchmarkListFilesWarm-4                       	      26	  22919034 ns/op	 3522157 B/op	  117791 allocs/op
+BenchmarkListFilesWarm-4                       	      28	  21945278 ns/op	 3521384 B/op	  117790 allocs/op
+BenchmarkListFilesWarm-4                       	      27	  22917085 ns/op	 3521594 B/op	  117790 allocs/op
+BenchmarkListFilesWarm-4                       	      27	  22647426 ns/op	 3521594 B/op	  117790 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: puremania/internal/middleware
+cpu: AMD Ryzen 5 PRO 3500U w/ Radeon Vega Mobile Gfx
+BenchmarkResponseCompression/gzip/1024-4         	    1638	    341575 ns/op	   3.00 MB/s	 1077380 B/op	      30 allocs/op
+BenchmarkResponseCompression/gzip/1024-4         	    1720	    337806 ns/op	   3.03 MB/s	 1077364 B/op	      30 allocs/op
+BenchmarkResponseCompression/gzip/1024-4         	    1645	    340523 ns/op	   3.01 MB/s	 1077363 B/op	      30 allocs/op
+BenchmarkResponseCompression/gzip/1024-4         	    1645	    346951 ns/op	   2.95 MB/s	 1077363 B/op	      30 allocs/op
+BenchmarkResponseCompression/gzip/1024-4         	    1552	    337403 ns/op	   3.03 MB/s	 1077363 B/op	      30 allocs/op
+BenchmarkResponseCompression/gzip/1024-4         	    1512	    366100 ns/op	   2.80 MB/s	 1077364 B/op	      30 allocs/op
+BenchmarkResponseCompression/gzip/32768-4        	    1342	    459110 ns/op	  71.37 MB/s	 1077857 B/op	      31 allocs/op
+BenchmarkResponseCompression/gzip/32768-4        	    1555	    370985 ns/op	  88.33 MB/s	 1077856 B/op	      31 allocs/op
+BenchmarkResponseCompression/gzip/32768-4        	    1642	    364179 ns/op	  89.98 MB/s	 1077856 B/op	      31 allocs/op
+BenchmarkResponseCompression/gzip/32768-4        	    1509	    384107 ns/op	  85.31 MB/s	 1077856 B/op	      31 allocs/op
+BenchmarkResponseCompression/gzip/32768-4        	    1358	    393515 ns/op	  83.27 MB/s	 1077856 B/op	      31 allocs/op
+BenchmarkResponseCompression/gzip/32768-4        	    1546	    386636 ns/op	  84.75 MB/s	 1077856 B/op	      31 allocs/op
+BenchmarkResponseCompression/br/1024-4           	    2689	    217857 ns/op	   4.70 MB/s	  563946 B/op	      26 allocs/op
+BenchmarkResponseCompression/br/1024-4           	    2624	    244176 ns/op	   4.19 MB/s	  563478 B/op	      25 allocs/op
+BenchmarkResponseCompression/br/1024-4           	    2593	    231957 ns/op	   4.41 MB/s	  563405 B/op	      25 allocs/op
+BenchmarkResponseCompression/br/1024-4           	    2701	    246118 ns/op	   4.16 MB/s	  563601 B/op	      25 allocs/op
+BenchmarkResponseCompression/br/1024-4           	    2452	    243554 ns/op	   4.20 MB/s	  563594 B/op	      25 allocs/op
+BenchmarkResponseCompression/br/1024-4           	    2718	    235448 ns/op	   4.35 MB/s	  563523 B/op	      25 allocs/op
+BenchmarkResponseCompression/br/32768-4          	    1736	    345949 ns/op	  94.72 MB/s	 1061718 B/op	      25 allocs/op
+BenchmarkResponseCompression/br/32768-4          	    1860	    337833 ns/op	  96.99 MB/s	 1061492 B/op	      25 allocs/op
+BenchmarkResponseCompression/br/32768-4          	    1366	    397442 ns/op	  82.45 MB/s	 1062651 B/op	      27 allocs/op
+BenchmarkResponseCompression/br/32768-4          	    1789	    336848 ns/op	  97.28 MB/s	 1061591 B/op	      25 allocs/op
+BenchmarkResponseCompression/br/32768-4          	    1773	    332529 ns/op	  98.54 MB/s	 1061657 B/op	      25 allocs/op
+BenchmarkResponseCompression/br/32768-4          	    1957	    343259 ns/op	  95.46 MB/s	 1061463 B/op	      25 allocs/op
+PASS
