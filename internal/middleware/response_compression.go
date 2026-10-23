@@ -10,9 +10,18 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/andybalholm/brotli"
 )
+
+var gzipWriterPool = sync.Pool{New: func() any {
+	return gzip.NewWriter(io.Discard)
+}}
+
+var brotliWriterPool = sync.Pool{New: func() any {
+	return brotli.NewWriterLevel(io.Discard, 4)
+}}
 
 // ResponseCompression negotiates a response encoding for textual
 // responses. File streams, Range requests, and already-compressed media are
@@ -37,6 +46,7 @@ func ResponseCompression(next http.Handler) http.Handler {
 			ResponseWriter: w,
 			encoding:       encoding,
 		}
+		defer cw.release()
 		next.ServeHTTP(cw, r)
 		cw.finish()
 	})
@@ -114,10 +124,12 @@ func (w *compressionResponseWriter) start() {
 		header.Set("Content-Encoding", w.encoding)
 		switch w.encoding {
 		case "br":
-			writer := brotli.NewWriterLevel(w.ResponseWriter, 4)
+			writer := brotliWriterPool.Get().(*brotli.Writer)
+			writer.Reset(w.ResponseWriter)
 			w.writer, w.closer = writer, writer
 		case "gzip":
-			writer, _ := gzip.NewWriterLevel(w.ResponseWriter, gzip.DefaultCompression)
+			writer := gzipWriterPool.Get().(*gzip.Writer)
+			writer.Reset(w.ResponseWriter)
 			w.writer, w.closer = writer, writer
 		}
 	} else {
@@ -137,6 +149,20 @@ func (w *compressionResponseWriter) finish() {
 	if w.closer != nil {
 		_ = w.closer.Close()
 	}
+}
+
+// Detach request state before pooling, including when the handler panics. Reset
+// discards an unfinished stream without writing a footer to a failed response.
+func (w *compressionResponseWriter) release() {
+	switch writer := w.closer.(type) {
+	case *gzip.Writer:
+		writer.Reset(io.Discard)
+		gzipWriterPool.Put(writer)
+	case *brotli.Writer:
+		writer.Reset(io.Discard)
+		brotliWriterPool.Put(writer)
+	}
+	w.writer, w.closer = nil, nil
 }
 
 func (w *compressionResponseWriter) shouldCompress(status int) bool {
