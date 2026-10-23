@@ -12,6 +12,7 @@ import (
 	"puremania/internal/cache"
 	"puremania/internal/types"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -154,19 +155,26 @@ func (h *Handler) generateDirectoryStateKey(path string) (string, error) {
 		return "", err
 	}
 
-	// ファイル名でソートして一貫性を保つ
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name() < entries[j].Name()
-	})
-
+	// os.ReadDir already returns entries sorted by filename.
 	hash := md5.New()
+	buffer := make([]byte, 0, 256)
+	writeEntry := func(prefix string, info os.FileInfo) {
+		buffer = append(buffer[:0], prefix...)
+		buffer = append(buffer, info.Name()...)
+		buffer = append(buffer, ':')
+		buffer = strconv.AppendInt(buffer, info.Size(), 10)
+		buffer = append(buffer, ':')
+		buffer = strconv.AppendInt(buffer, info.ModTime().UnixNano(), 10)
+		buffer = append(buffer, ';')
+		_, _ = hash.Write(buffer)
+	}
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
 			h.logger.Warn("Failed to get entry info for state key generation", "entry", entry.Name(), "error", err)
 			continue
 		}
-		_, _ = fmt.Fprintf(hash, "%s:%d:%d;", info.Name(), info.Size(), info.ModTime().UnixNano())
+		writeEntry("", info)
 	}
 
 	// ルートディレクトリの場合、マウントポイントの情報もキーに含める
@@ -178,7 +186,7 @@ func (h *Handler) generateDirectoryStateKey(path string) (string, error) {
 
 		for _, mountDir := range sortedMounts {
 			if info, err := os.Stat(mountDir); err == nil {
-				_, _ = fmt.Fprintf(hash, "mount_%s:%d:%d;", info.Name(), info.Size(), info.ModTime().UnixNano())
+				writeEntry("mount_", info)
 			} else if !os.IsNotExist(err) {
 				h.logger.Warn("Failed to stat mount dir for state key generation", "path", mountDir, "error", err)
 			}
