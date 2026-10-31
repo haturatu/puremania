@@ -6,7 +6,67 @@ on:
       - main
 
 jobs:
+  changes:
+    name: Detect affected components
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+      app: ${{ steps.filter.outputs.app }}
+      container: ${{ steps.filter.outputs.container }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          base: ${{ github.ref }}
+          filters: |
+            go:
+              - 'cmd/**'
+              - 'internal/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'build.sh'
+              - '.github/workflows/ci.yml'
+            app:
+              - 'cmd/**'
+              - 'internal/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'build.sh'
+              - 'build.js'
+              - 'e2e/**'
+              - 'static/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'playwright.config.js'
+              - '.nvmrc'
+              - 'index.html.local'
+              - 'index.html.remote'
+              - 'jsload.sh'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - '.github/workflows/ci.yml'
+            container:
+              - 'cmd/**'
+              - 'internal/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'build.sh'
+              - 'build.js'
+              - 'static/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'index.html.local'
+              - 'index.html.remote'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - '.github/workflows/ci.yml'
   build:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     name: Build
     runs-on: ubuntu-latest
     steps:
@@ -52,8 +112,9 @@ jobs:
           retention-days: 1
 
   browser-e2e:
+    if: needs.changes.outputs.app == 'true'
     name: Chromium browser E2E
-    needs: build
+    needs: [changes, build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -97,6 +158,8 @@ jobs:
           retention-days: 14
 
   lint:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     name: Lint
     runs-on: ubuntu-latest
     steps:
@@ -135,6 +198,8 @@ jobs:
           skip-cache: true
 
   security:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     name: Security and resilience
     runs-on: ubuntu-latest
     permissions:
@@ -166,6 +231,7 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   container-scan:
+    if: needs.changes.outputs.container == 'true'
     name: Container scan
     needs: build
     runs-on: ubuntu-latest
