@@ -175,7 +175,6 @@ jobs:
 
       - name: Check formatting
         run: |
-          python3 -c 'import json,subprocess; [(print("PUREMANIA_FMT:"+f+":"+json.dumps(subprocess.check_output(["gofmt",f],text=True),ensure_ascii=True))) for f in ["internal/config/config.go","internal/handlers/hls.go","internal/handlers/hls_test.go","internal/handlers/system_handlers.go"]]'
           gofmt_output=$(gofmt -l .)
           if [ -n "$gofmt_output" ]; then
             echo "The following files are not formatted correctly:"
