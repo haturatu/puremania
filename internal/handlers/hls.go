@@ -24,15 +24,45 @@ import (
 )
 
 const (
-	hlsSegmentSeconds = 4
 	hlsStartupTimeout = 45 * time.Second
 	hlsIdleGrace      = 2 * time.Minute
 )
 
 var (
 	hlsIDPattern      = regexp.MustCompile(`^[a-f0-9]{64}$`)
-	hlsSegmentPattern = regexp.MustCompile(`^segment_[0-9]{6,9}.ts$`)
-	errHLSCacheFull   = errors.New("HLS cache capacity reached")
+	hlsSegmentPattern = regexp.MustCompile(`^segment_[0-9]{6,9}\.tspackage handlers
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/gorilla/mux"
+	"puremania/internal/types"
+)
+
+const (
+	hlsStartupTimeout = 45 * time.Second
+	hlsIdleGrace      = 2 * time.Minute
+)
+
+var (
+	hlsIDPattern      = regexp.MustCompile(`^[a-f0-9]{64}$`)
+	hlsSegmentPattern = )
 	errHLSTooBusy     = errors.New("too many concurrent HLS transcodes")
 )
 
