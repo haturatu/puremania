@@ -33,6 +33,7 @@ type Handler struct {
 	thumbnailCleanupMu   sync.Mutex
 	lastThumbnailCleanup time.Time
 	events               *eventBroker
+	hls                  *hlsManager
 }
 
 type preparedZip struct {
