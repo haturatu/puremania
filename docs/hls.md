@@ -6,24 +6,32 @@ options are opt-in per playback: choosing Original does not transcode anything.
 
 ## How it works
 
-1. The browser POSTs `{"path":"/Videos/example.mp4","quality":"720"}` as
-   `application/json` to `/api/hls/start`. This route retains the existing
-   CSRF protection and safe file-open checks.
-2. A single FFmpeg job for the file+mtime+size+quality identity generates
-   four-second MPEG-TS HLS segments and a growing EVENT manifest. Completed
-   segments are written atomically before becoming visible.
-3. The start request returns when the first manifest and segment are available,
-   **not** when the whole video has been converted. The client uses native HLS
-   on supported browsers and a locally bundled lazy-loaded hls.js elsewhere.
-4. When FFmpeg finishes, the manifest includes `#EXT-X-ENDLIST`. Reopening
-   the unchanged video reuses the completed conversion, including after a
-   process/container restart when the cache volume persists.
+1. The browser POSTs `{"path":"/Videos/example.mp4","quality":"480"}`
+   to `/api/hls/start`. FFprobe reads the original duration and the server
+   publishes a *complete, seekable VOD playlist* immediately.
+2. The browser fetches only the requested 4-second segments. Missing segments
+   trigger a 16-second FFmpeg conversion group, with no need to transcode the
+   whole video first. Once the requested segment is written atomically, the
+   HTTP request can finish while later segments are still being produced.
+3. The native seek bar works over the **full video duration**. Seeking to an
+   uncached timestamp triggers conversion from the nearest 16-second group,
+   not a sequential decode from the start of the movie. Groups are separated
+   by HLS discontinuity tags to account for independently generated timestamps.
+4. While a viewer requests a segment, the needed group gets priority.
+   Interactive conversions can use up to 8 CPU threads (bounded by detected
+   CPU count). Optional lookahead uses one thread; an interactive seek can
+   cancel lookahead to reclaim its worker slot. Idle sessions do not run
+   unbounded background conversion.
+5. The quality selection is saved in the browser's `localStorage` as
+   `puremania.video.quality`. Opening the next video restores the last
+   selected **Original / 720p / 480p** choice. If HLS is unavailable, the
+   player falls back to Original without changing the saved choice.
 
-This initial implementation provides **manually selectable** 720p/480p
-renditions, not seamless adaptive-bitrate switching between renditions.
-While EVENT output is still growing, seeking ahead of the generated region is
-not supported. Switching from Original to an uncached rendition restarts from
-the beginning. Seek positions are retained when switching to a completed cache.
+This version offers **manual renditions**, not multivariant adaptive-bitrate
+switching between 720p and 480p. Seeking to an uncached location may pause
+briefly while FFmpeg generates the requested 4-second segment. Already created
+segments are reused from disk, including after a restart with persistent
+storage.
 
 ## Disk and CPU limits
 
@@ -36,19 +44,18 @@ the beginning. Seek positions are retained when switching to a completed cache.
 | `HLS_MAX_JOBS` | `1` | Simultaneous transcode limit (1–4) |
 
 The cache is best-effort bounded with a periodic sweep (every two seconds).
-It deletes incomplete jobs left by server crashes, expires old completed
-conversions, and evicts least-recently-used completed conversions when over
-quota. Recently accessed completed videos are only evicted when needed for the
-quota; active jobs are otherwise protected. If active conversions alone exceed
-the budget, they are **cancelled** to prevent unbounded disk growth, and the
-player can be switched back to Original. A segment written between sweeps can
-temporarily exceed the quota. For a *strict* filesystem-level quota use a
-dedicated quota-controlled volume as well.
+It removes stale incomplete segment groups, expires idle video entries, and
+evicts least-recently-used **completed 16-second groups** instead of entire
+movies. This means a multi-hour source does not require an equally large disk
+cache, and previously evicted segments can be generated again when seeking.
+If only active, incomplete groups remain and the cache exceeds its budget,
+those conversions are cancelled. Generated data can transiently exceed the
+quota between sweeps; enforce an additional filesystem quota for strict limits.
 
 The cache key includes a version, absolute source path, file size,
 nanosecond mtime and quality. Cache data never modifies originals. Only
 hex-identified directories managed by HLS are removed by the cleaner.
-If FFmpeg is absent, Pure Mania disables HLS and keeps direct playback.
+If FFmpeg or FFprobe is absent, Pure Mania disables HLS and keeps direct playback.
 
 **Do not point `HLS_CACHE_DIR` at a directory containing unrelated files or
 a publicly served directory.** In Docker, the supplied Compose config uses
@@ -64,7 +71,7 @@ docker compose --env-file .env.docker up -d --build
 ```
 
 For an existing binary, install FFmpeg with the H.264 `libx264` and AAC
-encoders, set the environment variables, and restart Pure Mania. The optional
+encoders **and FFprobe**, set the environment variables, and restart Pure Mania. The optional
 `HLS_CACHE_DIR` must be writable by the process user and have enough free
 space. The default cache directory is created with owner-only permissions.
 
@@ -86,5 +93,6 @@ HLS reduces bandwidth by re-encoding video, at the cost of CPU, temporary
 disk usage and initial startup delay. It cannot fix an upstream storage
 bottleneck or a network slower than the selected rendition. Default 480p
 targets about 1 Mbps video plus 96 kbps audio; 720p targets about 2.4 Mbps
-video plus 96 kbps audio. Long videos may exceed the configured cache limit:
-increase the quota or use Original for videos that cannot fit.
+video plus 96 kbps audio. Long videos reuse a bounded number of cached 16-second groups. For reliable
+playback on a slow CPU or storage device, consider increasing the cache quota
+or switching to the Original quality.
