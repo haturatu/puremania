@@ -92,6 +92,13 @@ jobs:
       - name: Run build script
         run: bash build.sh
 
+      - name: Install FFmpeg for HLS integration tests
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
+
       - name: Run tests
         run: go test ./...
 
@@ -175,7 +182,6 @@ jobs:
 
       - name: Check formatting
         run: |
-          python3 -c 'import json,subprocess; [(print("PUREMANIA_FMT:"+f+":"+json.dumps(subprocess.check_output(["gofmt",f],text=True),ensure_ascii=True))) for f in ["internal/handlers/hls.go","internal/handlers/hls_test.go"]]'
           gofmt_output=$(gofmt -l .)
           if [ -n "$gofmt_output" ]; then
             echo "The following files are not formatted correctly:"
