@@ -25,7 +25,7 @@ func testHLSManager(t *testing.T, quota int64) *hlsManager {
 	return &hlsManager{
 		root: root, maxBytes: quota, maxAge: 72 * time.Hour,
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		ctx: ctx, cancel: cancel, slots: make(chan struct{}, 1),
+		ctx:    ctx, cancel: cancel, slots: make(chan struct{}, 1),
 		jobs: make(map[string]*hlsJob),
 	}
 }
