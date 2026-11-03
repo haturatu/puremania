@@ -43,6 +43,7 @@ WORKDIR /app
 COPY --from=builder /out/puremania /app/puremania
 COPY --from=frontend /src/static /app/static
 COPY --link --from=static-ffmpeg /ffmpeg /usr/local/bin/ffmpeg
+COPY --link --from=static-ffmpeg /ffprobe /usr/local/bin/ffprobe
 COPY --link --from=static-aria2 /usr/local/bin/aria2c /usr/local/bin/aria2c
 
 USER puremania
