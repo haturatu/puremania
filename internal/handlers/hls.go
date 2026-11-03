@@ -38,7 +38,7 @@ const (
 var (
 	hlsIDPattern      = regexp.MustCompile("^[a-f0-9]{64}$")
 	hlsChunkPattern   = regexp.MustCompile("^chunk_([0-9]{6})$")
-	hlsSegmentPattern = regexp.MustCompile("^segment_([0-9]{6})\\.ts$")
+	hlsSegmentPattern = regexp.MustCompile(`^segment_([0-9]{6})\.ts$`)
 )
 
 // An HLS rendition exposes a complete, seekable VOD timeline from the start.
@@ -250,22 +250,6 @@ func hlsReady(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, "chunk_000000", "segment_000000.ts"))
 	return err == nil
 }
-func hlsComplete(dir string) bool {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return false
-	}
-	if _, err = os.Stat(filepath.Join(dir, "index.m3u8")); err != nil {
-		return false
-	}
-	for _, entry := range files {
-		if hlsChunkPattern.MatchString(entry.Name()) && entry.IsDir() && !hlsChunkComplete(filepath.Join(dir, entry.Name())) {
-			return false
-		}
-	}
-	return true
-}
-
 func hlsChunkName(chunk int) string     { return fmt.Sprintf("chunk_%06d", chunk) }
 func hlsSegmentName(segment int) string { return fmt.Sprintf("segment_%06d.ts", segment) }
 
@@ -357,11 +341,13 @@ func (m *hlsManager) encodeChunk(ctx context.Context, job *hlsChunkJob, stream *
 		<-m.slots
 	}
 	job.err = err
+	if err != nil {
+		_ = os.RemoveAll(job.dir)
+	}
 	delete(m.jobs, job.key)
 	close(job.done)
 	m.mu.Unlock()
 	if err != nil {
-		_ = os.RemoveAll(job.dir)
 		if !errors.Is(err, context.Canceled) {
 			m.logger.Warn("HLS chunk failed", "chunk", chunk, "error", err)
 		}
@@ -704,6 +690,9 @@ func (h *Handler) ServeHLS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.touch(stream.dir)
+	if chunkName != "" {
+		m.touch(filepath.Join(stream.dir, chunkName))
+	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if chunkName == "" {
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
