@@ -14,4 +14,9 @@ type Config struct {
 	Aria2cEnabled         bool
 	UploadSessionTTLHours int
 	PreallocateUploads    bool
+	HLSEnabled            bool
+	HLSCacheDir           string
+	HLSCacheMaxMB         int64
+	HLSCacheMaxAgeHours   int
+	HLSMaxJobs            int
 }
