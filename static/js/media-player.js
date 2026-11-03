@@ -16,6 +16,8 @@ export class MediaPlayer {
         this.isVideoModalOpen = false;
         this.videoModal = null;
         this.modalVideoElement = null;
+        this.hlsPlayer = null;
+        this.videoLoadController = null;
         this.previousVolume = this.volume;
         this.boundVideoModalKeydown = (e) => this.handleVideoModalKeydown(e);
         this.unbindVideoModalClose = null;
@@ -624,6 +626,13 @@ export class MediaPlayer {
                     <div class="video-modal-header-main">
                         <div class="dialog-title"></div>
                         <div class="video-modal-meta">Esc: close / Space: play-pause / ← →: seek 5s</div>
+                        <label class="video-quality-label">Quality
+                            <select class="video-quality" aria-label="Video playback quality">
+                                <option value="original">Original</option>
+                                <option value="720">720p HLS</option>
+                                <option value="480">480p HLS</option>
+                            </select>
+                        </label>
                     </div>
                     <button class="dialog-close" type="button" aria-label="Close">&times;</button>
                 </div>
@@ -637,6 +646,12 @@ export class MediaPlayer {
         title.textContent = fileName;
         title.title = fileName;
         const video = modal.querySelector('video');
+        const qualitySelector = modal.querySelector('.video-quality');
+        qualitySelector.disabled = !this.app?.config?.HLSEnabled;
+        qualitySelector.title = qualitySelector.disabled ? 'HLS is not available on this server' : 'Transcode on demand to save bandwidth';
+        qualitySelector.addEventListener('change', () => {
+            this.switchVideoQuality(qualitySelector.value);
+        });
         video.src = buildApiUrl('/api/files/download', { path: this.currentMedia.path });
         video.volume = this.volume;
         this.modalVideoElement = video;
@@ -656,8 +671,101 @@ export class MediaPlayer {
         video.addEventListener('ended', () => this.handleMediaEnded());
     }
 
+    async switchVideoQuality(quality) {
+        const video = this.modalVideoElement;
+        const path = this.currentMedia?.path;
+        if (!video || !path) return;
+        this.videoLoadController?.abort();
+        this.hlsPlayer?.destroy();
+        this.hlsPlayer = null;
+        const controller = new AbortController();
+        this.videoLoadController = controller;
+        const oldPosition = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+        const wasPaused = video.paused;
+        const directURL = buildApiUrl('/api/files/download', { path });
+
+        // Keep the existing video playing until the first HLS segment is ready.
+        let url = directURL;
+        let cached = true;
+        if (quality !== 'original') {
+            try {
+                const response = await fetch('/api/hls/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path, quality }),
+                    signal: controller.signal
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.message || 'HLS unavailable');
+                url = result.data.url;
+                cached = result.data.cached;
+            } catch (error) {
+                if (controller.signal.aborted) return;
+                this.app?.ui.showToast('HLS', 'Transcoding unavailable; keeping original playback.', 'warning');
+                this.videoModal?.querySelector('.video-quality')?.setAttribute('value', 'original');
+                const selector = this.videoModal?.querySelector('.video-quality');
+                if (selector) selector.value = 'original';
+                console.warn('HLS startup failed', error);
+                return;
+            }
+        }
+        if (controller.signal.aborted || this.modalVideoElement !== video) return;
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+
+        // Event playlists are still growing. Seeking beyond generated segments
+        // is not possible; only restore the position for complete cached VOD.
+        const startAt = cached ? oldPosition : 0;
+        if (!cached && oldPosition > 0) {
+            this.app?.ui.showToast('HLS', 'Transcoding starts from the beginning; seeking is available as segments finish.', 'info');
+        }
+        const onMetadata = () => {
+            if (startAt > 0 && Number.isFinite(video.duration) && startAt < video.duration) {
+                video.currentTime = startAt;
+            }
+            if (!wasPaused) this.startPlayback(video);
+        };
+        video.addEventListener('loadedmetadata', onMetadata, { once: true });
+
+        if (quality === 'original' || video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = url;
+            video.load();
+            return;
+        }
+        try {
+            const { default: Hls } = await import('hls.js');
+            if (controller.signal.aborted || this.modalVideoElement !== video) return;
+            if (!Hls.isSupported()) throw new Error('MediaSource HLS is not supported');
+            const player = new Hls({ startPosition: startAt, enableWorker: true });
+            this.hlsPlayer = player;
+            player.on(Hls.Events.ERROR, (_, data) => {
+                if (data.fatal && !controller.signal.aborted) {
+                    console.warn('HLS playback failed', data);
+                    this.app?.ui.showToast('HLS', 'Stream error; returning to original.', 'warning');
+                    const selector = this.videoModal?.querySelector('.video-quality');
+                    if (selector) selector.value = 'original';
+                    this.switchVideoQuality('original');
+                }
+            });
+            player.loadSource(url);
+            player.attachMedia(video);
+        } catch (error) {
+            if (controller.signal.aborted) return;
+            console.warn('HLS player unavailable', error);
+            this.app?.ui.showToast('HLS', 'Your browser cannot play HLS; using original.', 'warning');
+            const selector = this.videoModal?.querySelector('.video-quality');
+            if (selector) selector.value = 'original';
+            this.switchVideoQuality('original');
+        }
+    }
+
     closeVideoModal() {
         if (!this.videoModal) return;
+        this.videoLoadController?.abort();
+        this.videoLoadController = null;
+        this.hlsPlayer?.destroy();
+        this.hlsPlayer = null;
         document.removeEventListener('keydown', this.boundVideoModalKeydown);
         if (this.unbindVideoModalClose) {
             this.unbindVideoModalClose();
