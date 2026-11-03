@@ -51,6 +51,7 @@ func Run(args []string) int {
 	}
 
 	handler := handlers.NewHandler(cfg, logger)
+	defer handler.Close()
 	router := NewRouter(cfg, handler)
 	server := &http.Server{
 		Handler: middleware.SecurityHeaders(middleware.CSRF(middleware.RequestBodyLimit(middleware.ResponseCompression(router)))),

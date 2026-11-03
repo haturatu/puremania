@@ -33,6 +33,7 @@ type Handler struct {
 	thumbnailCleanupMu   sync.Mutex
 	lastThumbnailCleanup time.Time
 	events               *eventBroker
+	hls                  *hlsManager
 }
 
 type preparedZip struct {
@@ -70,5 +71,17 @@ func NewHandler(config *types.Config, logger *slog.Logger) *Handler {
 		events:        newEventBroker(),
 	}
 	h.cleanupExpiredUploadSessions()
+	var err error
+	h.hls, err = newHLSManager(config, logger)
+	if err != nil {
+		logger.Warn("HLS disabled", "error", err)
+	}
 	return h
+}
+
+// Close stops in-progress HLS conversions before the server exits.
+func (h *Handler) Close() {
+	if h.hls != nil {
+		h.hls.Close()
+	}
 }

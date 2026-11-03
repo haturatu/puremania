@@ -21,12 +21,17 @@ const (
 	maxConfigSizeMB              int64 = (1<<63 - 1) / (1 << 20)
 	maxDurationSeconds           int64 = (1<<63 - 1) / int64(time.Second)
 	maxDurationHours             int   = (1<<63 - 1) / int(time.Hour)
+	defaultHLSCacheMaxMB         int64 = 2048
 )
 
 // Load reads application configuration from the environment and optional .env file.
 func Load(logger *slog.Logger) *types.Config {
 	_ = godotenv.Load()
 
+	userCacheDir, err := os.UserCacheDir()
+	if err != nil || userCacheDir == "" {
+		userCacheDir = os.TempDir()
+	}
 	config := &types.Config{
 		StorageDir:            getEnv("STORAGE_DIR", "/home/"+os.Getenv("USER")),
 		MountDirs:             getEnvAsStringSlice("MOUNT_DIRS", []string{}),
@@ -37,6 +42,11 @@ func Load(logger *slog.Logger) *types.Config {
 		SpecificDirs:          getEnvAsStringSlice("SPECIFIC_DIRS", []string{}),
 		UploadSessionTTLHours: getEnvAsInt(logger, "UPLOAD_SESSION_TTL_HOURS", defaultUploadSessionTTLHours),
 		PreallocateUploads:    getEnvAsBool("UPLOAD_PREALLOCATE", true),
+		HLSEnabled:            getEnvAsBool("HLS_ENABLED", true),
+		HLSCacheDir:           getEnv("HLS_CACHE_DIR", filepath.Join(userCacheDir, "puremania", "hls")),
+		HLSCacheMaxMB:         getEnvAsInt64(logger, "HLS_CACHE_MAX_MB", defaultHLSCacheMaxMB),
+		HLSCacheMaxAgeHours:   getEnvAsInt(logger, "HLS_CACHE_MAX_AGE_HOURS", 72),
+		HLSMaxJobs:            getEnvAsInt(logger, "HLS_MAX_JOBS", 1),
 	}
 	validateConfig(logger, config)
 	config.Aria2cEnabled = strings.EqualFold(getEnv("ARIA2C", "disable"), "enable")
@@ -56,6 +66,16 @@ func Load(logger *slog.Logger) *types.Config {
 }
 
 func validateConfig(logger *slog.Logger, config *types.Config) {
+	if config.HLSCacheMaxMB < 128 || config.HLSCacheMaxMB > 102400 {
+		logger.Warn("Invalid HLS_CACHE_MAX_MB; using fallback", "value", config.HLSCacheMaxMB)
+		config.HLSCacheMaxMB = defaultHLSCacheMaxMB
+	}
+	if config.HLSCacheMaxAgeHours < 1 || config.HLSCacheMaxAgeHours > 8760 {
+		config.HLSCacheMaxAgeHours = 72
+	}
+	if config.HLSMaxJobs < 1 || config.HLSMaxJobs > 4 {
+		config.HLSMaxJobs = 1
+	}
 	if config.MaxFileSize <= 0 || config.MaxFileSize > maxConfigSizeMB {
 		logger.Warn("Invalid MAX_FILE_SIZE_MB; using fallback", "value", config.MaxFileSize, "fallback", defaultMaxFileSize)
 		config.MaxFileSize = defaultMaxFileSize
