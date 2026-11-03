@@ -31,7 +31,6 @@ const (
  hlsChunkSegments = 4
  hlsChunkSeconds = hlsSegmentDuration * hlsChunkSegments
  hlsSegmentWait = 90 * time.Second
- hlsIdleGrace = 2 * time.Minute
  hlsViewerTTL = 20 * time.Second
  hlsMaxDuration = 24 * time.Hour
 )
@@ -40,7 +39,6 @@ var (
  hlsIDPattern = regexp.MustCompile("^[a-f0-9]{64}$")
  hlsChunkPattern = regexp.MustCompile("^chunk_([0-9]{6})$")
  hlsSegmentPattern = regexp.MustCompile("^segment_([0-9]{6})\\.ts$")
- errHLSBusy = errors.New("HLS transcode capacity unavailable")
 )
 
 // An HLS rendition exposes a complete, seekable VOD timeline from the start.
@@ -227,7 +225,10 @@ func (m *hlsManager) startChunk(stream *hlsStream,chunk int,urgent bool,open fun
  m.mu.Lock()
  defer m.mu.Unlock()
  if job:=m.jobs[key];job!=nil {
-  if urgent { job.urgent=true }
+  if urgent && !job.urgent {
+   job.urgent=true
+   if !job.acquired {m.urgentWaiting++}
+  }
   return job
  }
  if hlsChunkComplete(dir) { return nil }
