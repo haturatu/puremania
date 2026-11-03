@@ -45,17 +45,17 @@ type hlsJob struct {
 }
 
 type hlsManager struct {
-	root       string
-	maxBytes   int64
-	maxAge     time.Duration
-	ffmpeg     string
-	logger     *slog.Logger
-	slots      chan struct{}
-	ctx        context.Context
-	cancel     context.CancelFunc
-	mu         sync.Mutex
-	jobs       map[string]*hlsJob
-	closed     bool
+	root     string
+	maxBytes int64
+	maxAge   time.Duration
+	ffmpeg   string
+	logger   *slog.Logger
+	slots    chan struct{}
+	ctx      context.Context
+	cancel   context.CancelFunc
+	mu       sync.Mutex
+	jobs     map[string]*hlsJob
+	closed   bool
 }
 
 func newHLSManager(cfg *types.Config, logger *slog.Logger) (*hlsManager, error) {
@@ -83,7 +83,7 @@ func newHLSManager(cfg *types.Config, logger *slog.Logger) (*hlsManager, error) 
 		maxAge: time.Duration(cfg.HLSCacheMaxAgeHours) * time.Hour,
 		ffmpeg: ffmpegPath, logger: logger,
 		slots: make(chan struct{}, cfg.HLSMaxJobs),
-		ctx: ctx, cancel: cancel, jobs: make(map[string]*hlsJob),
+		ctx:   ctx, cancel: cancel, jobs: make(map[string]*hlsJob),
 	}
 	m.prune()
 	go m.maintenance()
