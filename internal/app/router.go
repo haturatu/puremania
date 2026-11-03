@@ -17,6 +17,8 @@ func NewRouter(cfg *types.Config, handler *handlers.Handler) http.Handler {
 	r := mux.NewRouter()
 	api := r.PathPrefix("/api").Subrouter()
 	api.HandleFunc("/files", handler.ListFiles).Methods("GET")
+	api.HandleFunc("/hls/start", handler.StartHLS).Methods("POST")
+	api.HandleFunc("/hls/{id}/{asset}", handler.ServeHLS).Methods("GET", "HEAD")
 	api.HandleFunc("/files/upload", handler.UploadFile).Methods("POST")
 	api.HandleFunc("/files/upload-sessions", handler.CreateUpload).Methods("POST")
 	api.HandleFunc("/files/upload-sessions/{id}", handler.UploadStatus).Methods("GET")
