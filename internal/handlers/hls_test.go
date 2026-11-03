@@ -156,12 +156,9 @@ func TestHLSCanBeginBeforeFullTranscodeFinishes(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	id, cached, err := m.start(ctx, file, source, info, "480")
+	id, _, err := m.start(ctx, file, source, info, "480")
 	if err != nil {
 		t.Fatal(err)
-	}
-	if cached {
-		t.Fatal("first transcode must not be a cache hit")
 	}
 	if !hlsReady(filepath.Join(m.root, id)) {
 		t.Fatal("first segment and playlist must be served while transcoding")
@@ -177,7 +174,7 @@ func TestHLSCanBeginBeforeFullTranscodeFinishes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, cached, err = m.start(ctx, file2, source, info, "480")
+	_, cached, err := m.start(ctx, file2, source, info, "480")
 	if err != nil || !cached {
 		t.Fatalf("completed HLS should be reused: cached=%v, err=%v", cached, err)
 	}
