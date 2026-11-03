@@ -377,39 +377,60 @@ func (m *hlsManager) waitSegment(ctx context.Context,stream *hlsStream,chunk,seg
 func (m *hlsManager) prune() {
  m.mu.Lock()
  defer m.mu.Unlock()
- dirs,err:=os.ReadDir(m.root);if err!=nil{return}
+ roots,err:=os.ReadDir(m.root);if err!=nil{return}
  now:=time.Now()
- type entry struct { id,path string;modified time.Time;bytes int64;pinned bool }
- var entries []entry
+ type entry struct{path string;modified time.Time;bytes int64;recent bool}
+ var completed []entry
  var total int64
- for _,d:=range dirs {
-  if !d.IsDir() || !hlsIDPattern.MatchString(d.Name()){continue}
-  dir:=filepath.Join(m.root,d.Name())
-  info,err:=d.Info();if err!=nil{continue}
+ for _,root:=range roots{
+  id:=root.Name()
+  if !root.IsDir() || !hlsIDPattern.MatchString(id){continue}
+  dir:=filepath.Join(m.root,id)
+  info,err:=root.Info();if err!=nil{continue}
+  // Remove expired videos only when no FFmpeg job is still using their files.
   active:=false
-  for key:=range m.jobs{if strings.HasPrefix(key,d.Name()+":"){active=true;break}}
-  pinned:=active
-  if stream:=m.streams[d.Name()];stream!=nil && now.Sub(stream.lastViewed)<hlsViewerTTL {pinned=true}
-  if !active && !pinned && now.Sub(info.ModTime())>m.maxAge {
-   _=os.RemoveAll(dir);delete(m.streams,d.Name());continue
+  for key:=range m.jobs{if strings.HasPrefix(key,id+":"){active=true;break}}
+  if !active && now.Sub(info.ModTime())>m.maxAge{
+   _=os.RemoveAll(dir);delete(m.streams,id);continue
   }
-  bytes:=hlsDirectoryBytes(dir);total+=bytes
-  entries=append(entries,entry{d.Name(),dir,info.ModTime(),bytes,pinned})
+  files,err:=os.ReadDir(dir);if err!=nil{continue}
+  for _,child:=range files{
+   if child.IsDir() && hlsChunkPattern.MatchString(child.Name()){
+    group:=filepath.Join(dir,child.Name())
+    chunkID,_:=strconv.Atoi(strings.TrimPrefix(child.Name(),"chunk_"))
+    busy:=m.jobs[id+":"+strconv.Itoa(chunkID)]!=nil
+    groupInfo,infoErr:=child.Info()
+    if infoErr!=nil{continue}
+    if !busy && !hlsChunkComplete(group) && now.Sub(groupInfo.ModTime())>5*time.Minute{
+     // A dead ffmpeg left an incomplete segment group.
+     _=os.RemoveAll(group);continue
+    }
+    bytes:=hlsDirectoryBytes(group)
+    total+=bytes
+    if !busy && hlsChunkComplete(group){
+     completed=append(completed,entry{group,groupInfo.ModTime(),bytes,now.Sub(groupInfo.ModTime())<hlsViewerTTL})
+    }
+   }else if child.Type().IsRegular(){
+    if info,err:=child.Info();err==nil{total+=info.Size()}
+   }
+  }
  }
- sort.Slice(entries,func(i,j int)bool{
-  if entries[i].pinned!=entries[j].pinned{return !entries[i].pinned}
-  return entries[i].modified.Before(entries[j].modified)
+ // Evict completed segment groups rather than whole videos. This allows a
+ // multi-hour movie to remain seekable with a small fixed cache budget.
+ sort.Slice(completed,func(i,j int)bool{
+  if completed[i].recent!=completed[j].recent{return !completed[i].recent}
+  return completed[i].modified.Before(completed[j].modified)
  })
- for _,e:=range entries{
+ for _,group:=range completed{
   if total<=m.maxBytes{break}
-  if e.pinned{continue}
-  if os.RemoveAll(e.path)==nil{total-=e.bytes;delete(m.streams,e.id)}
+  if err:=os.RemoveAll(group.path);err==nil{total-=group.bytes}
  }
  if total>m.maxBytes {
-  for _,j:=range m.jobs{j.cancel()}
+  // Only in-flight, unfinished segments remain. Cancel instead of allowing
+  // the cache to grow without limit; direct playback still works.
+  for _,job:=range m.jobs{job.cancel()}
  }
 }
-
 func hlsDirectoryBytes(dir string)int64{
  var size int64
  _=filepath.WalkDir(dir,func(_ string,e os.DirEntry,err error)error{
