@@ -21,6 +21,7 @@ const (
 	maxConfigSizeMB              int64 = (1<<63 - 1) / (1 << 20)
 	maxDurationSeconds           int64 = (1<<63 - 1) / int64(time.Second)
 	maxDurationHours             int   = (1<<63 - 1) / int(time.Hour)
+	defaultHLSCacheMaxMB          int64 = 2048
 )
 
 // Load reads application configuration from the environment and optional .env file.
