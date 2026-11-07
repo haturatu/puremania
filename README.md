@@ -413,3 +413,7 @@ This project is licensed under the terms of the `LICENSE` file.
     </td>
   </tr>
 </table>
+
+### Docker image
+
+To use `ghcr.io/haturatu/puremania:latest` with Docker Compose, replace the local `build:` entry and `image: puremania:local` with `image: ghcr.io/haturatu/puremania:latest`. Configure storage mounts and runtime environment variables on the host.
