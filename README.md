@@ -414,8 +414,6 @@ This project is licensed under the terms of the `LICENSE` file.
   </tr>
 </table>
 
-### Public container image (GHCR)
+### Docker image
 
-On pushes to `main` or `v*` tags, GitHub Actions builds and publishes `ghcr.io/haturatu/puremania` using the repository `GITHUB_TOKEN`. No runtime configuration or secret is supplied at build time. Set the package visibility to **Public** in GitHub Packages after the first publish (package visibility is separate from repository visibility).
-
-To use the published image instead of building locally, replace the local Compose `build:` entry and `image: puremania:local` with `image: ghcr.io/haturatu/puremania:latest`. Keep host storage and runtime variables configured locally; never bake `.env` or media into the image.
+To use `ghcr.io/haturatu/puremania:latest` with Docker Compose, replace the local `build:` entry and `image: puremania:local` with `image: ghcr.io/haturatu/puremania:latest`. Configure storage mounts and runtime environment variables on the host.
