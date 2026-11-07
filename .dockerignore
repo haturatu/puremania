@@ -12,3 +12,19 @@ npm-debug.log
 
 puremania
 data
+# Local credentials and runtime data must never enter the build context.
+**/.env
+**/.env.*
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite-*
+**/*.sqlite3
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/id_rsa*
+**/id_ed25519*
+**/uploads
+**/secrets
