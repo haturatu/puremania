@@ -24,12 +24,14 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		MaxFileSize   int64    `json:"MaxFileSize"`
 		SpecificDirs  []string `json:"SpecificDirs"`
 		Aria2cEnabled bool     `json:"Aria2cEnabled"`
+		HLSEnabled    bool     `json:"HLSEnabled"`
 	}{
 		StorageDir:    h.config.StorageDir,
 		MountDirs:     h.config.MountDirs,
 		MaxFileSize:   h.config.MaxFileSize,
 		SpecificDirs:  h.config.SpecificDirs,
 		Aria2cEnabled: h.config.Aria2cEnabled,
+		HLSEnabled:    h.hls != nil,
 	}
 	h.respondSuccess(w, clientConfig)
 }

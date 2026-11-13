@@ -66,6 +66,7 @@ That’s enough of my rambling.
 - **ls --collor like output**: Color-coded file listings for better readability.
 - **No Database Required:** Pure Mania uses the filesystem directly, eliminating the need for a database.
 - **Media Preview**: Preview images and play audio/video files directly in the browser.
+- **On-demand HLS**: Optional 720p/480p low-bandwidth video playback with an automatic, quota-limited persistent cache (see [HLS configuration](docs/hls.md)).
 - **Web Editor**: Edit text files directly within the web interface.
 - **Aria2c Integration:** Start downloads via the search bar (`aria2c <URL>`) and monitor them on a dedicated page. The `aria2c` daemon is managed automatically by the application.
 - **Media Player**:
